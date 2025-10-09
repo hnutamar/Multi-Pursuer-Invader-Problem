@@ -4,8 +4,8 @@ import numpy as np
 WORLD_WIDTH = 20
 WORLD_HEIGHT = 20
 CAPTURE_RAD = 0.2
-PURSUER_NUM = 3
-INVADER_NUM = 1
+PURSUER_NUM = 4
+INVADER_NUM = 2
 
 fig, ax = plt.subplots(figsize=(8, 8))
 #space size
@@ -31,8 +31,16 @@ for _ in range(PURSUER_NUM):
     p_path, = ax.plot([], [], '--', color='#d62728', alpha=0.6, linewidth=1.5)
     p_paths.append(p_path)
 
-i_dot, = ax.plot([], [], 'o', color='#1f77b4', label='Invader', markersize=6)
-i_path, = ax.plot([], [], '--', color='#1f77b4', alpha=0.6, linewidth=1.5)
+i_dots = []
+i_paths = []
+for _ in range(INVADER_NUM):
+    i_dot, = ax.plot([], [], 'o', color='#1f77b4', label='Invader', markersize=6)
+    i_dots.append(i_dot)
+    i_path, = ax.plot([], [], '--', color='#1f77b4', alpha=0.6, linewidth=1.5)
+    i_paths.append(i_path)
+
+u_dot, = ax.plot([], [], 'o', color="#10ec22", label='Prime Unit', markersize=12)
+u_path, = ax.plot([], [], '--', color="#77cc70", alpha=0.6, linewidth=3.0)
 #legend
 leg = ax.legend(frameon=True)
 leg.get_frame().set_edgecolor('#aaa')

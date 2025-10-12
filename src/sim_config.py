@@ -4,8 +4,8 @@ import numpy as np
 WORLD_WIDTH = 20
 WORLD_HEIGHT = 20
 CAPTURE_RAD = 0.2
-PURSUER_NUM = 4
-INVADER_NUM = 2
+PURSUER_NUM = 15
+INVADER_NUM = 20
 
 fig, ax = plt.subplots(figsize=(8, 8))
 #space size

@@ -17,7 +17,7 @@ class Invader(Agent):
         return self.drone_dir
     
     def movement_random(self):
-        if self.num_iter % 10 == 0:
+        if self.num_iter % 30 == 0:
             new_dir = np.random.uniform(-1, 1, size=2)
             self.drone_dir = new_dir
         return

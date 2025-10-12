@@ -9,3 +9,6 @@ class Agent:
         if np.linalg.norm(direction) != 0:
             direction = direction / np.linalg.norm(direction)
             self.position += self.speed * direction * dt
+    #TODO
+    def clip_angle(self, direction):
+        return

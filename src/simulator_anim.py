@@ -10,25 +10,26 @@ import sim_config as sc
 
 x_border = sc.WORLD_WIDTH/6
 y_border = sc.WORLD_HEIGHT/6
+#prime unit init
+pos_u = [3.0, 3.0]
+prime_unit = Prime_unit(position=pos_u, speed=0.3, max_omega=1.0)
+positions_u = [pos_u]
+way_point = np.array([sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border])
 #random inital pos
-rnd_points = np.random.uniform(low=[-1 + x_border, -1 + y_border], high=[sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border], size=(sc.PURSUER_NUM + sc.INVADER_NUM, 2))
+rnd_points_purs = np.random.uniform(low=[-sc.PURSUER_NUM/2 + pos_u[0], -sc.PURSUER_NUM/2 + pos_u[1]], high=[sc.PURSUER_NUM/2 + pos_u[0], sc.PURSUER_NUM/2 + pos_u[1]], size=(sc.PURSUER_NUM, 2))
+rnd_points_inv = np.random.uniform(low=[-1 + x_border, -1 + y_border], high=[sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border], size=(sc.INVADER_NUM, 2))
 #pursuers init
 pursuers = []
 positions_p = [[] for _ in range(sc.PURSUER_NUM)]
 for i in range(sc.PURSUER_NUM):
-    pursuers.append(Pursuer(position=rnd_points[i], speed=0.6))
-    positions_p[i].append(rnd_points[i])
+    pursuers.append(Pursuer(position=rnd_points_purs[i], speed=0.8, max_omega=1.0))
+    positions_p[i].append(rnd_points_purs[i])
 #invaders init
 invaders = []
 positions_i = [[] for _ in range(sc.INVADER_NUM)]
 for i in range(sc.INVADER_NUM):
-    invaders.append(Invader(position=rnd_points[i + sc.PURSUER_NUM], speed=0.5))
-    positions_i[i].append(rnd_points[i + sc.PURSUER_NUM])
-#prime unit init
-pos_u = [7.0, 7.0]
-prime_unit = Prime_unit(position=pos_u, speed=0.3)
-positions_u = [pos_u]
-way_point = np.array([sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border])
+    invaders.append(Invader(position=rnd_points_inv[i], speed=0.5, max_omega=1.0))
+    positions_i[i].append(rnd_points_inv[i])
 #invader captures counter
 invader_captured = [0]
 
@@ -38,7 +39,7 @@ def update(frame):
     free_invaders = [inv for inv in invaders if not inv.captured]
     #pursuers_pos = np.array([pur.position for pur in pursuers])
     #new directions of all drones
-    dirs_i = [invader.evade(pursuers) for invader in invaders]
+    dirs_i = [invader.evade(pursuers, prime_unit) for invader in invaders]
     dirs_p = [pursuer.pursue(free_invaders, pursuers, prime_unit) for pursuer in pursuers]
     dir_u = prime_unit.fly(way_point)
     #making the move in that dir according to the time and speed
@@ -68,15 +69,29 @@ def update(frame):
         path.set_data(pos_arr[:,0], pos_arr[:,1])
     pos_arr = np.array(positions_u)
     sc.u_path.set_data(pos_arr[:,0], pos_arr[:,1])
-    #capture check (if pursuer is close enough to invader)
+    
     free_invaders = [inv for inv in invaders if not inv.captured]
     for pursuer in pursuers:
+        #capture check (if pursuer is close enough to invader)
         for invader in free_invaders:
             if np.sum((pursuer.position - invader.position)**2) < sc.CAPTURE_RAD**2 and invader.captured == False:
                 invader_captured[0] += 1
                 invader.captured = True
+        for purs in pursuers:
+            if not (purs is pursuer) and np.sum((pursuer.position - purs.position)**2) < sc.CRASH_RAD**2 and purs.crashed == False and pursuer.crashed == False:
+                pursuer.crashed = True
+                purs.crashed = True
+        #crash to prime_unit check
+        if np.sum((pursuer.position - prime_unit.position)**2) < sc.UNIT_DOWN_RAD**2 and pursuer.crashed == False:
+            prime_unit.took_down = True
+            break
+    #crash to prime_unit check        
+    for invader in invaders:
+        if np.sum((invader.position - prime_unit.position)**2) < sc.UNIT_DOWN_RAD**2 and invader.captured == False:
+            prime_unit.took_down = True
+            break
     #if all invaders are captured, the animation will end
-    if invader_captured[0] >= sc.INVADER_NUM and prime_unit.finished:
+    if (invader_captured[0] >= sc.INVADER_NUM and prime_unit.finished) or prime_unit.took_down:
         anim.event_source.stop()
     #returning paths and positions of all drones for animation
     return sc.p_dots + sc.i_dots + sc.p_paths + sc.i_paths + [sc.u_dot] + [sc.u_path]

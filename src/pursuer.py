@@ -4,23 +4,27 @@ from invader import Invader
 from prime_unit import Prime_unit
 
 class Pursuer(Agent):
-    def __init__(self, position, speed):
-        super().__init__(position, speed)
+    def __init__(self, position, speed, max_omega):
+        super().__init__(position, speed, max_omega)
         self.num_iter = 0
         self.attr = 0.5
         self.rep = 0.1
         self.prime_rep = 0.7
-        self.prime_coll_r = 2.5
-        self.collision_r = 1.0
+        self.prime_coll_r = 3.5
+        self.collision_r = 2.0
         self.target = None
-        #self.captured = False
-        #self.drone_dir = np.random.uniform(-1, 1, size=2)
+        self.crashed = False
         
     def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit):
+        self.rep = 0.1
         self.num_iter += 1
         #direction to the target
         tar_dir = np.array([0.0, 0.0])
-        target = self.strategy_closest_invader(targets)
+        if self.crashed:
+            return tar_dir
+        #target = self.strategy_closest_invader(targets)
+        #target = self.strategy_closest_to_prime_unit(targets, prime_unit)
+        target = self.strategy_combo_closest_unit_invader(targets, prime_unit)
         if target != -1:
             tar_dir = self.pursuit_constant_bearing(targets[target])
         #repulsive dirs to avoid collision
@@ -41,6 +45,25 @@ class Pursuer(Agent):
             self.target = targets[idx]
         return idx
     
+    def strategy_closest_to_prime_unit(self, targets: list[Invader], unit: Prime_unit):
+        #pick the invader closest to prime unit
+        poss_targs = np.array([inv.position for inv in targets])
+        idx = -1
+        if len(poss_targs) != 0:
+            idx = np.argmin(np.linalg.norm(poss_targs - unit.position, axis=1))
+            self.target = targets[idx]
+        return idx
+    
+    def strategy_combo_closest_unit_invader(self, targets: list[Invader], unit: Prime_unit):
+        ALPHA = 1.5
+        BETA = 0.1
+        poss_targs = np.array([inv.position for inv in targets])
+        idx = -1
+        if len(poss_targs) != 0:
+            idx = np.argmin(ALPHA * np.linalg.norm(poss_targs - unit.position, axis=1) + BETA * np.argmin(np.linalg.norm(poss_targs - self.position, axis=1)))
+            self.target = targets[idx]
+        return idx
+    
     def pursuit_pure_pursuit(self, target: Invader):
         return target.position - self.position
     
@@ -50,6 +73,8 @@ class Pursuer(Agent):
             dist = np.linalg.norm(self.position - drones[i].position)
             if dist < coll and not (drones[i] is self):
                 rep_dir += (1/dist - 1/drones[i].position) * (self.position - drones[i].position)/(dist)**2 
+                if dist < 1.0:
+                    self.rep = 0.6
         return rep_dir
         
     #TODO: deal with exceptions (e.g. a = 0)

@@ -3,9 +3,11 @@ import numpy as np
 #Constants
 WORLD_WIDTH = 20
 WORLD_HEIGHT = 20
-CAPTURE_RAD = 0.2
-PURSUER_NUM = 15
-INVADER_NUM = 20
+CAPTURE_RAD = 0.25
+CRASH_RAD = 0.25
+UNIT_DOWN_RAD = 0.4
+PURSUER_NUM = 5
+INVADER_NUM = 3
 
 fig, ax = plt.subplots(figsize=(8, 8))
 #space size
@@ -42,6 +44,6 @@ for _ in range(INVADER_NUM):
 u_dot, = ax.plot([], [], 'o', color="#10ec22", label='Prime Unit', markersize=12)
 u_path, = ax.plot([], [], '--', color="#77cc70", alpha=0.6, linewidth=3.0)
 #legend
-leg = ax.legend(frameon=True)
-leg.get_frame().set_edgecolor('#aaa')
-leg.get_frame().set_facecolor('#fafafa')
+#leg = ax.legend(frameon=True)
+#leg.get_frame().set_edgecolor('#aaa')
+#leg.get_frame().set_facecolor('#fafafa')

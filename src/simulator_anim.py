@@ -16,13 +16,13 @@ prime_unit = Prime_unit(position=pos_u, speed=0.3, max_omega=1.0)
 positions_u = [pos_u]
 way_point = np.array([sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border])
 #random inital pos
-rnd_points_purs = np.random.uniform(low=[-sc.PURSUER_NUM/2 + pos_u[0], -sc.PURSUER_NUM/2 + pos_u[1]], high=[sc.PURSUER_NUM/2 + pos_u[0], sc.PURSUER_NUM/2 + pos_u[1]], size=(sc.PURSUER_NUM, 2))
+rnd_points_purs = np.random.uniform(low=[-sc.PURSUER_NUM/2 - 2 + pos_u[0], -sc.PURSUER_NUM/2 - 2 + pos_u[1]], high=[sc.PURSUER_NUM/2 + 2 + pos_u[0], sc.PURSUER_NUM/2 + 2 + pos_u[1]], size=(sc.PURSUER_NUM, 2))
 rnd_points_inv = np.random.uniform(low=[-1 + x_border, -1 + y_border], high=[sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border], size=(sc.INVADER_NUM, 2))
 #pursuers init
 pursuers = []
 positions_p = [[] for _ in range(sc.PURSUER_NUM)]
 for i in range(sc.PURSUER_NUM):
-    pursuers.append(Pursuer(position=rnd_points_purs[i], speed=0.8, max_omega=1.0))
+    pursuers.append(Pursuer(position=rnd_points_purs[i], speed=0.8, max_omega=1.0, num=i))
     positions_p[i].append(rnd_points_purs[i])
 #invaders init
 invaders = []
@@ -37,10 +37,11 @@ invader_captured = [0]
 def update(frame):
     #makes np arrays of positions of still not captured invaders and all pursuers
     free_invaders = [inv for inv in invaders if not inv.captured]
+    not_crashed_pursuers = [pur for pur in pursuers if not pur.crashed]
     #pursuers_pos = np.array([pur.position for pur in pursuers])
     #new directions of all drones
-    dirs_i = [invader.evade(pursuers, prime_unit) for invader in invaders]
-    dirs_p = [pursuer.pursue(free_invaders, pursuers, prime_unit) for pursuer in pursuers]
+    dirs_i = [invader.evade(not_crashed_pursuers, prime_unit) for invader in invaders]
+    dirs_p = [pursuer.pursue(free_invaders, not_crashed_pursuers, prime_unit) for pursuer in pursuers]
     dir_u = prime_unit.fly(way_point)
     #making the move in that dir according to the time and speed
     for pursuer, dir in zip(pursuers, dirs_p):

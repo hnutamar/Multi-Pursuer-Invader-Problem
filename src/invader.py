@@ -17,8 +17,8 @@ class Invader(Agent):
             self.local_drone_dir = np.array([0, 0])
         else:
             pursuer = self.strategy_closest_pursuer(pursuers)
-            #self.local_drone_dir = self.cons_purs*(self.position - pursuers[pursuer].position) + self.cons_targ*self.pursuit_pure_pursuit(target)
-            if np.linalg.norm(self.position - pursuers[pursuer].position) <= 2.5:
+            self.local_drone_dir = self.cons_purs*(self.position - pursuers[pursuer].position) + self.cons_targ*self.pursuit_pure_pursuit(target)
+            if pursuer != -1 and np.linalg.norm(self.position - pursuers[pursuer].position) <= 2.5:
                 self.local_drone_dir = self.position - pursuers[pursuer].position
             else:
                 self.local_drone_dir = self.pursuit_pure_pursuit(target)

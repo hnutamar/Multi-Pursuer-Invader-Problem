@@ -6,8 +6,8 @@ WORLD_HEIGHT = 20
 CAPTURE_RAD = 0.25
 CRASH_RAD = 0.25
 UNIT_DOWN_RAD = 0.4
-PURSUER_NUM = 5
-INVADER_NUM = 3
+PURSUER_NUM = 4
+INVADER_NUM = 2
 
 fig, ax = plt.subplots(figsize=(8, 8))
 #space size

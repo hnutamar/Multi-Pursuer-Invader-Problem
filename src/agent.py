@@ -8,10 +8,17 @@ class Agent:
         self.max_omega = max_omega
 
     def move(self, direction, dt=0.1):
-        if np.linalg.norm(direction) != 0:
-            direction = direction / np.linalg.norm(direction)
-            final_dir = self.clip_angle(self.speed * direction * dt, dt)
-            self.position += final_dir
+        dist = np.linalg.norm(direction)
+        if dist != 0:
+            if dist < 1:
+                final_dir = direction * dt
+                final_dir = self.clip_angle(final_dir, dt)
+                self.position += final_dir
+            else:
+                direction = direction / dist
+                final_dir = self.speed * direction * dt
+                final_dir = self.clip_angle(final_dir, dt)
+                self.position += final_dir
 
     def clip_angle(self, dir, dt):
         theta = np.atan2(self.drone_dir[1], self.drone_dir[0])

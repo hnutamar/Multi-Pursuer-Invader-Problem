@@ -7,12 +7,27 @@ from invader import Invader
 from prime_unit import Prime_unit
 from matplotlib.animation import FuncAnimation
 import sim_config as sc
+from scipy.optimize import linear_sum_assignment
+
+def formation_calculator(purs: list[Pursuer], unit: Prime_unit):
+    formation_r = max(4*purs[0].dist_formation/(np.pi*2), purs[0].min_formation_r)
+    n = len(pursuers)
+    angle_piece = 2*np.pi/n
+    angles = np.arange(n)*angle_piece
+    cx, cy = unit.position
+    form_pos = np.stack([cx + formation_r * np.cos(angles), cy + formation_r * np.sin(angles)], axis=1)
+    pos_now = np.array([pur.position for pur in purs])
+    diff = pos_now[:, np.newaxis, :] - form_pos[np.newaxis, :, :]
+    D = np.linalg.norm(diff, axis=2)
+    row_idx, col_idx = linear_sum_assignment(D)
+    for i in range(n):
+        purs[i].num = col_idx[i]
 
 x_border = sc.WORLD_WIDTH/6
 y_border = sc.WORLD_HEIGHT/6
 #prime unit init
 pos_u = [3.0, 3.0]
-prime_unit = Prime_unit(position=pos_u, speed=0.3, max_omega=1.0)
+prime_unit = Prime_unit(position=pos_u, speed=0.08, max_omega=1.0)
 positions_u = [pos_u]
 way_point = np.array([sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border])
 #random inital pos
@@ -22,13 +37,14 @@ rnd_points_inv = np.random.uniform(low=[-1 + x_border, -1 + y_border], high=[sc.
 pursuers = []
 positions_p = [[] for _ in range(sc.PURSUER_NUM)]
 for i in range(sc.PURSUER_NUM):
-    pursuers.append(Pursuer(position=rnd_points_purs[i], speed=0.8, max_omega=1.0, num=i))
+    pursuers.append(Pursuer(position=rnd_points_purs[i], speed=0.3, max_omega=1.5, num=i))
     positions_p[i].append(rnd_points_purs[i])
+formation_calculator(pursuers, prime_unit)
 #invaders init
 invaders = []
 positions_i = [[] for _ in range(sc.INVADER_NUM)]
 for i in range(sc.INVADER_NUM):
-    invaders.append(Invader(position=rnd_points_inv[i], speed=0.5, max_omega=1.0))
+    invaders.append(Invader(position=rnd_points_inv[i], speed=0.2, max_omega=1.5))
     positions_i[i].append(rnd_points_inv[i])
 #invader captures counter
 invader_captured = [0]
@@ -92,7 +108,7 @@ def update(frame):
             prime_unit.took_down = True
             break
     #if all invaders are captured, the animation will end
-    if (invader_captured[0] >= sc.INVADER_NUM and prime_unit.finished) or prime_unit.took_down:
+    if (invader_captured[0] >= sc.INVADER_NUM and prime_unit.finished) or prime_unit.took_down or prime_unit.finished:
         anim.event_source.stop()
     #returning paths and positions of all drones for animation
     return sc.p_dots + sc.i_dots + sc.p_paths + sc.i_paths + [sc.u_dot] + [sc.u_path]

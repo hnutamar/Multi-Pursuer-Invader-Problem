@@ -1,13 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
 #Constants
-WORLD_WIDTH = 20
-WORLD_HEIGHT = 20
+WORLD_WIDTH = 30
+WORLD_HEIGHT = 30
 CAPTURE_RAD = 0.25
 CRASH_RAD = 0.25
 UNIT_DOWN_RAD = 0.4
-PURSUER_NUM = 4
-INVADER_NUM = 2
+PURSUER_NUM = 5
+INVADER_NUM = 3
 
 fig, ax = plt.subplots(figsize=(8, 8))
 #space size

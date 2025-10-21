@@ -2,49 +2,64 @@ import numpy as np
 from agent import Agent
 from invader import Invader
 from prime_unit import Prime_unit
+from pursuer_states import States
 
 class Pursuer(Agent):
     def __init__(self, position, speed, max_omega, num):
         super().__init__(position, speed, max_omega)
         self.num_iter = 0
+        #dir par
         self.purs = 1.2
         self.form = 0.9
         self.rep = 1.0
         self.prime_rep = 2.9
+        #radiuses
         self.prime_coll_r = 4.5
         self.collision_r = 2.0
-        self.target = None
-        self.crashed = False
-        self.num = num
         self.min_formation_r = 2.0
         self.dist_formation = np.pi
+        #other
+        self.target = None
+        self.num = num
+        self.state = States.FORM
+        #controler
+        self.KP = 10.0
+        self.KD = 0.1
         
     def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit):
-        #self.rep = 1.0
         self.num_iter += 1
-        #direction to the target
+        #init directions
         tar_dir = np.array([0.0, 0.0])
         form_dir = np.array([0.0, 0.0])
-        if self.crashed:
+        #if crashed, dont move, you are supposed to be dead
+        if self.state == States.CRASHED:
             return tar_dir
-        #target = self.strategy_closest_invader(targets)
-        #target = self.strategy_closest_to_prime_unit(targets, prime_unit)
-        #target = self.strategy_combo_closest_unit_invader(targets, prime_unit)
-        target = self.strategy_closest_to_self_and_unit(targets, prime_unit, pursuers)
-        if target != -1:
-            #tar_dir = self.pursuit_pure_pursuit(targets[target])
-            tar_dir = self.pursuit_constant_bearing(targets[target], prime_unit)
-        #formation direction
-        else:
+        #previous target captured, back to formation
+        if self.target != None and self.target.captured == True:
+            self.target = None
+            self.state = States.FORM
+        #pursuer having no target, finding target, if found, pursue it
+        if self.target == None:
+            target = self.strategy_closest_to_self_and_unit(targets, prime_unit, pursuers)
+            if target != -1:
+                #tar_dir = self.pursuit_pure_pursuit(self.target)
+                tar_dir = self.pursuit_constant_bearing(self.target, prime_unit)
+        #pursuer having target -> pursue it
+        elif self.target != None and self.target.captured == False:
+            #tar_dir = self.pursuit_pure_pursuit(self.target)
+            tar_dir = self.pursuit_constant_bearing(self.target, prime_unit)
+        #if target dir is zero, pursuer has no target -> keep the formation
+        if np.array_equal(tar_dir, form_dir):
+            self.target = None
+            self.state = States.FORM
             form_dir = self.attr_formation_force(prime_unit, pursuers)
-            #repulsive dirs to avoid collision
+        #repulsive dirs to avoid collision
         rep_dir = self.repulsive_force(pursuers, self.collision_r)
         prime_rep_dir = self.repulsive_force([prime_unit], self.prime_coll_r)
-        #print("TARGET-------------: ")
-        #print(tar_dir)
-        #print(form_dir)
         #returning sum of those
-        return self.purs*tar_dir + self.rep*rep_dir + self.prime_rep*prime_rep_dir + self.form*form_dir
+        v_dir = self.purs*tar_dir + self.rep*rep_dir + self.prime_rep*prime_rep_dir + self.form*form_dir
+        u_dir = self.KP * (v_dir - self.curr_speed) - self.KD * self.curr_speed
+        return u_dir
     
     def strategy_closest_invader(self, targets: list[Invader]):
         #pick the closest invader
@@ -78,27 +93,33 @@ class Pursuer(Agent):
         return idx
     
     def strategy_closest_to_self_and_unit(self, targets: list[Invader], unit: Prime_unit, purs: list[Agent]):
-        formation_r = max(len(purs)*self.dist_formation/(np.pi*2), self.min_formation_r)
-        poss_targs = np.array([inv.position for inv in targets])
-        poss_purs = np.array([pur.position for pur in purs])
-        my_id = 0
-        for i in range(len(purs)):
-            if purs[i] is self:
-                my_id = i
-                break
-        idx = -1
-        if len(poss_targs) != 0:
-            idxs = np.where(np.linalg.norm(poss_targs - unit.position, axis=1) < (formation_r*1.5))
-            #print(idxs)
-            poss_targs = poss_targs[idxs]
-            for targ, id in zip(poss_targs, idxs[0]):
-                all_purs = np.linalg.norm(poss_purs - targ, axis=1)
-                if np.argmin(all_purs) == my_id:
-                    idx = id
-                    #print(idx)
-                    self.target = targets[idx]
-                    break
-        return idx
+        t_idxs = [i for i, inv in enumerate(targets) if inv.pursuer is None or inv.pursuer.state == States.CRASHED]
+        if len(t_idxs) == 0:
+            return -1
+        t_pos = np.array([targets[i].position for i in t_idxs])
+        p_idxs = [i for i, p in enumerate(purs) if p.state == States.FORM]
+        p_pos = np.array([purs[i].position for i in p_idxs])
+        try:
+            my_id = p_idxs.index(purs.index(self))
+        except ValueError:
+            return -1
+        formation_r = max(len(purs)*self.dist_formation/(2*np.pi), self.min_formation_r)
+        near_unit = np.linalg.norm(t_pos - unit.position, axis=1) < (formation_r*10)
+        if not np.any(near_unit):
+            return -1
+        cand_t_idxs = [t_idxs[i] for i in np.nonzero(near_unit)[0]]
+        cand_t_pos = t_pos[near_unit]
+        for k, targ_pos in enumerate(cand_t_pos):
+            dists = np.linalg.norm(p_pos - targ_pos, axis=1)
+            nearest_p_idx = int(np.argmin(dists))
+            if nearest_p_idx == my_id:
+                fin_t_idx = cand_t_idxs[k]
+                self.target = targets[fin_t_idx]
+                self.target.pursuer = self
+                self.state = States.PURSUE
+                print("pursue")
+                return fin_t_idx
+        return -1
     
     def repulsive_force(self, drones: list[Agent], coll: float):
         rep_dir = np.array([0.0, 0.0])
@@ -106,14 +127,12 @@ class Pursuer(Agent):
             dist = np.linalg.norm(self.position - drones[i].position)
             if dist < coll and not (drones[i] is self):
                 rep_dir += (1/dist - 1/drones[i].position) * (self.position - drones[i].position)/(dist**2) 
-                #if dist < 1.0:
-                #    self.rep = 0.8
-        #if np.linalg.norm(rep_dir) != 0:
-        #    rep_dir = rep_dir / np.linalg.norm(rep_dir)
+        #u = self.KP * (rep_dir - self.curr_speed) - self.KD * self.curr_speed
         return rep_dir
     
-    def attr_formation_force(self, unit: Prime_unit, pursuers: list[Agent]):
-        n = len(pursuers)
+    def attr_formation_force(self, unit: Prime_unit, purs: list[Agent]):
+        form_ps = [p for p in purs if p.state == States.FORM]
+        n = len(form_ps)
         formation_r = max(n*self.dist_formation/(np.pi*2), self.min_formation_r)
         angle_piece = 2*np.pi / n
         angle = angle_piece * self.num
@@ -124,6 +143,7 @@ class Pursuer(Agent):
         if np.linalg.norm(direction) != 0:
             direction = direction / np.linalg.norm(direction)
         direction = direction * (np.linalg.norm(form_pos - self.position))
+        #u = self.KP * (direction - self.curr_speed) - self.KD * self.curr_speed
         return direction
         
     #TODO: deal with exceptions (e.g. a = 0)
@@ -160,6 +180,7 @@ class Pursuer(Agent):
             direc = direc / np.linalg.norm(direc)
         direc = direc/(((1 - np.exp(-np.linalg.norm(unit.position - target.position)))))
         return direc
+
     
     def pursuit_pure_pursuit(self, target: Invader):
         dir = target.position - self.position

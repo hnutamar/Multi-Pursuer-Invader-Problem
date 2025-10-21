@@ -12,24 +12,17 @@ class Agent:
 
     def move(self, dir_, dt=0.1):
         dirs = dir_
-        #print("dirs")
-        #print(dirs)
-        #print(np.linalg.norm(dir_))
+        #double integrator
         if np.linalg.norm(dir_) == 0:
             return
         if np.linalg.norm(dir_) > self.max_acc:
             dir_ = (dir_ / np.linalg.norm(dir_)) * self.max_acc
-        #dist = np.linalg.norm(dir_)
-        #print(dir_)
         v = dir_ - self.CD * np.linalg.norm(self.curr_speed) * self.curr_speed
-        #print(v)
         final_dir = self.curr_speed + v * dt
         final_dir = self.clip_angle(final_dir, dt)
-        #print(final_dir)
         self.position += final_dir * dt
         self.curr_speed = final_dir
-        #print("pos")
-        #print(self.position)
+        #single integrator
         #if dist != 0:
         #    if dist < 1:
         #        final_dir = direction * dt

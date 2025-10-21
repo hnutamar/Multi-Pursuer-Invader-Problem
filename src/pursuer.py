@@ -18,6 +18,9 @@ class Pursuer(Agent):
         self.collision_r = 2.0
         self.min_formation_r = 2.0
         self.dist_formation = np.pi
+        self.capture_r = 2.5
+        self.capture_max = 20.0
+        self.form_max = 8.0
         #other
         self.target = None
         self.num = num
@@ -46,8 +49,11 @@ class Pursuer(Agent):
                 tar_dir = self.pursuit_constant_bearing(self.target, prime_unit)
         #pursuer having target -> pursue it
         elif self.target != None and self.target.captured == False:
-            #tar_dir = self.pursuit_pure_pursuit(self.target)
-            tar_dir = self.pursuit_constant_bearing(self.target, prime_unit)
+            if np.linalg.norm(self.position - prime_unit.position) < self.capture_max:
+                #tar_dir = self.pursuit_pure_pursuit(self.target)
+                tar_dir = self.pursuit_constant_bearing(self.target, prime_unit)
+            else:
+                self.target.pursuer = None    
         #if target dir is zero, pursuer has no target -> keep the formation
         if np.array_equal(tar_dir, form_dir):
             self.target = None
@@ -104,7 +110,7 @@ class Pursuer(Agent):
         except ValueError:
             return -1
         formation_r = max(len(purs)*self.dist_formation/(2*np.pi), self.min_formation_r)
-        near_unit = np.linalg.norm(t_pos - unit.position, axis=1) < (formation_r*10)
+        near_unit = np.linalg.norm(t_pos - unit.position, axis=1) < (formation_r*self.capture_r)
         if not np.any(near_unit):
             return -1
         cand_t_idxs = [t_idxs[i] for i in np.nonzero(near_unit)[0]]
@@ -117,7 +123,6 @@ class Pursuer(Agent):
                 self.target = targets[fin_t_idx]
                 self.target.pursuer = self
                 self.state = States.PURSUE
-                print("pursue")
                 return fin_t_idx
         return -1
     
@@ -131,7 +136,7 @@ class Pursuer(Agent):
         return rep_dir
     
     def attr_formation_force(self, unit: Prime_unit, purs: list[Agent]):
-        form_ps = [p for p in purs if p.state == States.FORM]
+        form_ps = [p for p in purs if (p.state == States.FORM and np.linalg.norm(p.position - unit.position) < self.form_max)]
         n = len(form_ps)
         formation_r = max(n*self.dist_formation/(np.pi*2), self.min_formation_r)
         angle_piece = 2*np.pi / n
@@ -176,9 +181,9 @@ class Pursuer(Agent):
                 direc = direc2
         elif D < 0:
             direc = self.pursuit_pure_pursuit(target)
-        if np.linalg.norm(direc) != 0:
-            direc = direc / np.linalg.norm(direc)
-        direc = direc/(((1 - np.exp(-np.linalg.norm(unit.position - target.position)))))
+        #if np.linalg.norm(direc) != 0:
+        #    direc = direc / np.linalg.norm(direc)
+        #direc = direc/(((1 - np.exp(-np.linalg.norm(unit.position - target.position)))))
         return direc
 
     

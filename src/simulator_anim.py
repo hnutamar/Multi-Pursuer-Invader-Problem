@@ -10,8 +10,9 @@ import sim_config as sc
 from scipy.optimize import linear_sum_assignment
 from pursuer_states import States
 
-def formation_calculator(purs: list[Pursuer], unit: Prime_unit):
-    form_ps = [p for p in purs if p.state == States.FORM]
+def formation_calculator(purs: list[Pursuer], unit: Prime_unit, form_max: list[int]):
+    print("changing formation")
+    form_ps = [p for p in purs if (p.state == States.FORM and np.linalg.norm(p.position - prime_unit.position) < form_max[0])]
     n = len(form_ps)
     if n == 0:
         return
@@ -41,9 +42,10 @@ rnd_points_inv = np.random.uniform(low=[-1 + x_border, -1 + y_border], high=[sc.
 pursuers = []
 positions_p = [[] for _ in range(sc.PURSUER_NUM)]
 for i in range(sc.PURSUER_NUM):
-    pursuers.append(Pursuer(position=rnd_points_purs[i], speed=0.3, max_omega=1.5, num=i))
+    pursuers.append(Pursuer(position=rnd_points_purs[i], speed=0.4, max_omega=1.5, num=i))
     positions_p[i].append(rnd_points_purs[i])
-formation_calculator(pursuers, prime_unit)
+form_max = [pursuers[0].form_max]
+formation_calculator(pursuers, prime_unit, form_max)
 #invaders init
 invaders = []
 positions_i = [[] for _ in range(sc.INVADER_NUM)]
@@ -53,19 +55,20 @@ for i in range(sc.INVADER_NUM):
 #invader captures counter
 invader_captured = [0]
 #how many pursuers are pursuing
-form_count = [[pur for pur in pursuers if pur.state == States.FORM]]
+state = {"form_count": [pur for pur in pursuers if pur.state == States.FORM]}
 
 
 #animation
 def update(frame):
     #check pursuers states
-    forming = [pur for pur in pursuers if pur.state == States.FORM]
-    if len(form_count[0]) != len(forming):
-        form_count[0] = [pur for pur in pursuers if pur.state == States.FORM]
-        formation_calculator(pursuers, prime_unit)
-    elif not all(x is y for x, y in zip(form_count, forming)):
-        form_count[0] = [pur for pur in pursuers if pur.state == States.FORM]
-        formation_calculator(pursuers, prime_unit)
+    form_now = [pur for pur in pursuers if (pur.state == States.FORM and np.linalg.norm(pur.position - prime_unit.position) < form_max[0])]
+    if len(state["form_count"]) != len(form_now):
+        state["form_count"] = form_now
+        formation_calculator(pursuers, prime_unit, form_max)
+    elif not all(x is y for x, y in zip(state["form_count"], form_now)):
+        state["form_count"] = form_now
+        #print("1")
+        formation_calculator(pursuers, prime_unit, form_max)
     #makes np arrays of positions of still not captured invaders and all pursuers
     free_invaders = [inv for inv in invaders if not inv.captured]
     free_pursuers = [pur for pur in pursuers if pur.state != States.CRASHED]
@@ -75,22 +78,22 @@ def update(frame):
     dirs_p = [pursuer.pursue(free_invaders, free_pursuers, prime_unit) for pursuer in pursuers]
     dir_u = prime_unit.fly(way_point)
     #making the move in that dir according to the time and speed
-    for p, dir in zip(pursuers, dirs_p):
-        p.move(dir)
-    for i, dir in zip(invaders, dirs_i):
-        i.move(dir)
+    for p, p_dir in zip(pursuers, dirs_p):
+        p.move(p_dir)
+    for i, i_dir in zip(invaders, dirs_i):
+        i.move(i_dir)
     prime_unit.move(dir_u)
     #positions for animations
-    for p, pos in zip(pursuers, positions_p):
-        pos.append(p.position.copy())
-    for i, pos in zip(invaders, positions_i):
-        pos.append(i.position.copy())
+    for p, p_pos in zip(pursuers, positions_p):
+        p_pos.append(p.position.copy())
+    for i, i_pos in zip(invaders, positions_i):
+        i_pos.append(i.position.copy())
     positions_u.append(prime_unit.position.copy())
     #dots representing the current positions of drones
-    for dot, p in zip(sc.p_dots, pursuers):
-        dot.set_data([p.position[0]], [p.position[1]])
-    for dot, i in zip(sc.i_dots, invaders):
-        dot.set_data([i.position[0]], [i.position[1]])
+    for p_dot, p in zip(sc.p_dots, pursuers):
+        p_dot.set_data([p.position[0]], [p.position[1]])
+    for i_dot, i in zip(sc.i_dots, invaders):
+        i_dot.set_data([i.position[0]], [i.position[1]])
     sc.u_dot.set_data([prime_unit.position[0]], [prime_unit.position[1]])
     #the whole path of all the drones is needed for animation
     for p_path, pos in zip(sc.p_paths, positions_p):
@@ -103,7 +106,7 @@ def update(frame):
     sc.u_path.set_data(pos_arr[:,0], pos_arr[:,1])
     
     #free_invaders = [inv for inv in invaders if not inv.captured]
-    for p in pursuers:
+    for p in free_pursuers:
         #capture check (if pursuer is close enough to invader)
         for i in free_invaders:
             if np.sum((p.position - i.position)**2) < sc.CAPTURE_RAD**2 and i.captured == False:
@@ -112,11 +115,11 @@ def update(frame):
                 i.pursuer.target = None
         #crash to other pursuers check
         for other in pursuers:
-            if not (other is p) and other.state != States.CRASHED and p.state != States.CRASHED and np.sum((p.position - other.position)**2) < sc.CRASH_RAD**2:
+            if not (other is p) and np.sum((p.position - other.position)**2) < sc.CRASH_RAD**2: #and other.state != States.CRASHED and p.state != States.CRASHED:
                 p.state = States.CRASHED
                 other.state = States.CRASHED
         #crash to prime_unit check
-        if p.state != States.CRASHED and np.sum((p.position - prime_unit.position)**2) < sc.UNIT_DOWN_RAD**2:
+        if np.sum((p.position - prime_unit.position)**2) < sc.UNIT_DOWN_RAD**2: #p.state != States.CRASHED
             prime_unit.took_down = True
             break
     #crash to prime_unit check        
@@ -125,8 +128,8 @@ def update(frame):
             prime_unit.took_down = True
             break
     #if all invaders are captured, or prime unit was taken down or has finished, the animation will end
-    if (invader_captured[0] >= sc.INVADER_NUM and prime_unit.finished) or prime_unit.took_down or prime_unit.finished:
-        anim.event_source.stop()
+    #if (invader_captured[0] >= sc.INVADER_NUM and prime_unit.finished) or prime_unit.took_down or prime_unit.finished:
+    #    anim.event_source.stop()
     #returning paths and positions of all drones for animation
     return sc.p_dots + sc.i_dots + sc.p_paths + sc.i_paths + [sc.u_dot] + [sc.u_path]
 

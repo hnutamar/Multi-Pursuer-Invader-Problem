@@ -6,8 +6,8 @@ from pursuer import Pursuer
 from invader import Invader
 
 # Inicializace
-pursuer = Pursuer(position=[0, 0], speed=1.2)
-invader = Invader(position=[5, 5], speed=1.0)
+pursuer = Pursuer(position=[0, 0], max_acc=1.2)
+invader = Invader(position=[5, 5], max_acc=1.0)
 
 dt = 0.1
 positions_p = [pursuer.position.copy()]

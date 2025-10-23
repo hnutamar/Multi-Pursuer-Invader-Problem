@@ -10,91 +10,116 @@ import sim_config as sc
 from scipy.optimize import linear_sum_assignment
 from pursuer_states import States
 
-def formation_calculator(purs: list[Pursuer], unit: Prime_unit, form_max: list[int]):
-    print("changing formation")
-    form_ps = [p for p in purs if (p.state == States.FORM and np.linalg.norm(p.position - prime_unit.position) < form_max[0])]
+def minimize_max_fast(cost):
+    vals = np.unique(cost)
+    lo, hi = 0, len(vals) - 1
+    best_T = None
+    best_assign = None
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        T = vals[mid]
+        masked = np.where(cost <= T, cost, 1e9)
+        row_ind, col_ind = linear_sum_assignment(masked)
+        if (cost[row_ind, col_ind] <= T).all():
+            best_T = T
+            best_assign = list(col_ind)
+            hi = mid - 1
+        else:
+            lo = mid + 1
+    return best_assign
+
+def formation_calculator(purs: list[Pursuer], unit: Prime_unit, form_max: float):
+    #pursuers in state FORM and close to prime unit
+    form_ps = [p for p in purs if (p.state == States.FORM and np.linalg.norm(p.position - state["prime"].position) < form_max)]
     n = len(form_ps)
     if n == 0:
         return
+    #radius and angles of the formation
     formation_r = max(n*form_ps[0].dist_formation/(np.pi*2), form_ps[0].min_formation_r)
     angle_piece = 2*np.pi/n
     angles = np.arange(n)*angle_piece
+    #calculation of distance from every pos in formation to every drone
     cx, cy = unit.position
     form_pos = np.stack([cx + formation_r * np.cos(angles), cy + formation_r * np.sin(angles)], axis=1)
     pos_now = np.array([pur.position for pur in form_ps])
     diff = pos_now[:, np.newaxis, :] - form_pos[np.newaxis, :, :]
     D = np.linalg.norm(diff, axis=2)
-    row_idx, col_idx = linear_sum_assignment(D)
+    #minimax solver - that is finding the minimal maximal distance drone has to fly
+    col_idx = minimize_max_fast(D)
     for i in range(n):
         form_ps[i].num = col_idx[i]
+    return
 
+
+#state of the drones
+state = {"form_count": [],
+         "pursuers": [],
+         "invaders": [],
+         "prime": None,
+         "inv_captured": 0}
 x_border = sc.WORLD_WIDTH/6
 y_border = sc.WORLD_HEIGHT/6
 #prime unit init
 pos_u = [3.0, 3.0]
-prime_unit = Prime_unit(position=pos_u, speed=0.08, max_omega=1.0)
+state["prime"] = Prime_unit(position=pos_u, max_acc=0.08, max_omega=1.0)
 positions_u = [pos_u]
 way_point = np.array([sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border])
 #random inital pos
 rnd_points_purs = np.random.uniform(low=[-sc.PURSUER_NUM/2 - 2 + pos_u[0], -sc.PURSUER_NUM/2 - 2 + pos_u[1]], high=[sc.PURSUER_NUM/2 + 2 + pos_u[0], sc.PURSUER_NUM/2 + 2 + pos_u[1]], size=(sc.PURSUER_NUM, 2))
 rnd_points_inv = np.random.uniform(low=[-1 + x_border, -1 + y_border], high=[sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border], size=(sc.INVADER_NUM, 2))
 #pursuers init
-pursuers = []
+state["pursuers"] = []
 positions_p = [[] for _ in range(sc.PURSUER_NUM)]
 for i in range(sc.PURSUER_NUM):
-    pursuers.append(Pursuer(position=rnd_points_purs[i], speed=0.4, max_omega=1.5, num=i))
+    state["pursuers"].append(Pursuer(position=rnd_points_purs[i], max_acc=0.4, max_omega=1.5, num=i, purs_num=sc.PURSUER_NUM))
     positions_p[i].append(rnd_points_purs[i])
-form_max = [pursuers[0].form_max]
-formation_calculator(pursuers, prime_unit, form_max)
 #invaders init
-invaders = []
+state["invaders"] = []
 positions_i = [[] for _ in range(sc.INVADER_NUM)]
 for i in range(sc.INVADER_NUM):
-    invaders.append(Invader(position=rnd_points_inv[i], speed=0.4, max_omega=1.5))
+    state["invaders"].append(Invader(position=rnd_points_inv[i], max_acc=0.4, max_omega=1.5))
     positions_i[i].append(rnd_points_inv[i])
-#invader captures counter
-invader_captured = [0]
-#how many pursuers are pursuing
-state = {"form_count": [pur for pur in pursuers if pur.state == States.FORM]}
-
+#how many pursuers are in formation
+state["form_count"] = [pur for pur in state["pursuers"] if pur.state == States.FORM]
 
 #animation
 def update(frame):
     #check pursuers states
-    form_now = [pur for pur in pursuers if (pur.state == States.FORM and np.linalg.norm(pur.position - prime_unit.position) < form_max[0])]
+    form_max = state["pursuers"][0].form_max[0]
+    form_now = [pur for pur in state["pursuers"] if (pur.state == States.FORM and np.linalg.norm(pur.position - state["prime"].position) < form_max)]
     if len(state["form_count"]) != len(form_now):
         state["form_count"] = form_now
-        formation_calculator(pursuers, prime_unit, form_max)
+        formation_calculator(state["pursuers"], state["prime"], form_max)
     elif not all(x is y for x, y in zip(state["form_count"], form_now)):
         state["form_count"] = form_now
         #print("1")
-        formation_calculator(pursuers, prime_unit, form_max)
+        formation_calculator(state["pursuers"], state["prime"], form_max)
     #makes np arrays of positions of still not captured invaders and all pursuers
-    free_invaders = [inv for inv in invaders if not inv.captured]
-    free_pursuers = [pur for pur in pursuers if pur.state != States.CRASHED]
+    free_inv = [inv for inv in state["invaders"] if not inv.captured]
+    free_purs = [pur for pur in state["pursuers"] if pur.state != States.CRASHED]
     #pursuers_pos = np.array([pur.position for pur in pursuers])
     #new directions of all drones
-    dirs_i = [invader.evade(free_pursuers, prime_unit) for invader in invaders]
-    dirs_p = [pursuer.pursue(free_invaders, free_pursuers, prime_unit) for pursuer in pursuers]
-    dir_u = prime_unit.fly(way_point)
+    dirs_i = [invader.evade(free_purs, state["prime"]) for invader in state["invaders"]]
+    dirs_p = [pursuer.pursue(free_inv, free_purs, state["prime"]) for pursuer in state["pursuers"]]
+    dir_u = state["prime"].fly(way_point)
     #making the move in that dir according to the time and speed
-    for p, p_dir in zip(pursuers, dirs_p):
+    for p, p_dir in zip(state["pursuers"], dirs_p):
         p.move(p_dir)
-    for i, i_dir in zip(invaders, dirs_i):
+    for i, i_dir in zip(state["invaders"], dirs_i):
         i.move(i_dir)
-    prime_unit.move(dir_u)
+    state["prime"].move(dir_u)
     #positions for animations
-    for p, p_pos in zip(pursuers, positions_p):
+    for p, p_pos in zip(state["pursuers"], positions_p):
         p_pos.append(p.position.copy())
-    for i, i_pos in zip(invaders, positions_i):
+    for i, i_pos in zip(state["invaders"], positions_i):
         i_pos.append(i.position.copy())
-    positions_u.append(prime_unit.position.copy())
+    positions_u.append(state["prime"].position.copy())
     #dots representing the current positions of drones
-    for p_dot, p in zip(sc.p_dots, pursuers):
+    for p_dot, p in zip(sc.p_dots, state["pursuers"]):
         p_dot.set_data([p.position[0]], [p.position[1]])
-    for i_dot, i in zip(sc.i_dots, invaders):
+    for i_dot, i in zip(sc.i_dots, state["invaders"]):
         i_dot.set_data([i.position[0]], [i.position[1]])
-    sc.u_dot.set_data([prime_unit.position[0]], [prime_unit.position[1]])
+    sc.u_dot.set_data([state["prime"].position[0]], [state["prime"].position[1]])
     #the whole path of all the drones is needed for animation
     for p_path, pos in zip(sc.p_paths, positions_p):
         pos_arr = np.array(pos)
@@ -104,31 +129,31 @@ def update(frame):
         i_path.set_data(pos_arr[:,0], pos_arr[:,1])
     pos_arr = np.array(positions_u)
     sc.u_path.set_data(pos_arr[:,0], pos_arr[:,1])
-    
-    #free_invaders = [inv for inv in invaders if not inv.captured]
-    for p in free_pursuers:
+    #colision check
+    for p in free_purs:
         #capture check (if pursuer is close enough to invader)
-        for i in free_invaders:
+        for i in free_inv:
             if np.sum((p.position - i.position)**2) < sc.CAPTURE_RAD**2 and i.captured == False:
-                invader_captured[0] += 1
+                state["inv_captured"] += 1
                 i.captured = True
-                i.pursuer.target = None
+                if i.pursuer is not None:
+                    i.pursuer.target = None
         #crash to other pursuers check
-        for other in pursuers:
+        for other in state["pursuers"]:
             if not (other is p) and np.sum((p.position - other.position)**2) < sc.CRASH_RAD**2: #and other.state != States.CRASHED and p.state != States.CRASHED:
                 p.state = States.CRASHED
                 other.state = States.CRASHED
         #crash to prime_unit check
-        if np.sum((p.position - prime_unit.position)**2) < sc.UNIT_DOWN_RAD**2: #p.state != States.CRASHED
-            prime_unit.took_down = True
+        if np.sum((p.position - state["prime"].position)**2) < sc.UNIT_DOWN_RAD**2: #p.state != States.CRASHED
+            state["prime"].took_down = True
             break
     #crash to prime_unit check        
-    for i in invaders:
-        if i.captured == False and np.sum((i.position - prime_unit.position)**2) < sc.UNIT_DOWN_RAD**2:
-            prime_unit.took_down = True
+    for i in state["invaders"]:
+        if i.captured == False and np.sum((i.position - state["prime"].position)**2) < sc.UNIT_DOWN_RAD**2:
+            state["prime"].took_down = True
             break
     #if all invaders are captured, or prime unit was taken down or has finished, the animation will end
-    #if (invader_captured[0] >= sc.INVADER_NUM and prime_unit.finished) or prime_unit.took_down or prime_unit.finished:
+    #if (state["inv_captured"] >= sc.INVADER_NUM and prime_unit.finished) or prime_unit.took_down or prime_unit.finished:
     #    anim.event_source.stop()
     #returning paths and positions of all drones for animation
     return sc.p_dots + sc.i_dots + sc.p_paths + sc.i_paths + [sc.u_dot] + [sc.u_path]

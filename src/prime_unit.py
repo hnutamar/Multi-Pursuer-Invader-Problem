@@ -2,8 +2,8 @@ import numpy as np
 from agent import Agent
 
 class Prime_unit(Agent):
-    def __init__(self, position, speed, max_omega):
-        super().__init__(position, speed, max_omega)
+    def __init__(self, position, max_acc, max_omega):
+        super().__init__(position, max_acc, max_omega)
         self.finished = False
         self.took_down = False
         #controler

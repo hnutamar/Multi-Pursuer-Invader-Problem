@@ -1,9 +1,9 @@
 import numpy as np
 
 class Agent:
-    def __init__(self, position, speed, max_omega):
+    def __init__(self, position, max_acc, max_omega):
         self.position = np.array(position, dtype=float)
-        self.max_acc = speed
+        self.max_acc = max_acc
         self.curr_speed = np.random.uniform(0.1, 0.3, size=2)
         self.drone_dir = np.random.uniform(-1, 1, size=2)
         self.max_omega = max_omega

@@ -5,23 +5,25 @@ class Agent:
         self.position = np.array(position, dtype=float)
         self.max_acc = max_acc
         self.curr_speed = np.random.uniform(0.1, 0.3, size=2)
+        self.curr_acc = np.array([0.0, 0.0])
         self.drone_dir = np.random.uniform(-1, 1, size=2)
         self.max_omega = max_omega
         self.CD = 0.3
         self.max_speed = self.max_acc / self.CD
 
-    def move(self, dir_, dt=0.1):
-        dirs = dir_
+    def move(self, acc, dt=0.1):
+        dirs = acc
         #double integrator
-        if np.linalg.norm(dir_) == 0:
+        if np.linalg.norm(acc) == 0:
             return
-        if np.linalg.norm(dir_) > self.max_acc:
-            dir_ = (dir_ / np.linalg.norm(dir_)) * self.max_acc
-        v = dir_ - self.CD * np.linalg.norm(self.curr_speed) * self.curr_speed
-        final_dir = self.curr_speed + v * dt
-        final_dir = self.clip_angle(final_dir, dt)
-        self.position += final_dir * dt
-        self.curr_speed = final_dir
+        if np.linalg.norm(acc) > self.max_acc:
+            acc = (acc / np.linalg.norm(acc)) * self.max_acc
+        v = acc - self.CD * np.linalg.norm(self.curr_speed) * self.curr_speed
+        final_v = self.curr_speed + v * dt
+        final_v = self.clip_angle(final_v, dt)
+        self.curr_acc = (final_v - self.curr_speed) / dt
+        self.position += final_v * dt
+        self.curr_speed = final_v
         #single integrator
         #if dist != 0:
         #    if dist < 1:

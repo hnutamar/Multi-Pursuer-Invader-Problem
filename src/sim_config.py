@@ -7,7 +7,7 @@ CAPTURE_RAD = 0.5
 CRASH_RAD = 0.25
 UNIT_DOWN_RAD = 0.4
 PURSUER_NUM = 12
-INVADER_NUM = 7
+INVADER_NUM = 9
 
 fig, ax = plt.subplots(figsize=(8, 8))
 #space size

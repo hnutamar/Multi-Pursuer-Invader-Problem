@@ -10,8 +10,9 @@ class Agent:
         self.max_omega = max_omega
         self.CD = 0.3
         self.max_speed = self.max_acc / self.CD
+        self.dt = 0.1
 
-    def move(self, acc, dt=0.1):
+    def move(self, acc):
         dirs = acc
         #double integrator
         if np.linalg.norm(acc) == 0:
@@ -19,10 +20,10 @@ class Agent:
         if np.linalg.norm(acc) > self.max_acc:
             acc = (acc / np.linalg.norm(acc)) * self.max_acc
         v = acc - self.CD * np.linalg.norm(self.curr_speed) * self.curr_speed
-        final_v = self.curr_speed + v * dt
-        final_v = self.clip_angle(final_v, dt)
-        self.curr_acc = (final_v - self.curr_speed) / dt
-        self.position += final_v * dt
+        final_v = self.curr_speed + v * self.dt
+        final_v = self.clip_angle(final_v, self.dt)
+        self.curr_acc = (final_v - self.curr_speed) / self.dt
+        self.position += final_v * self.dt
         self.curr_speed = final_v
         #single integrator
         #if dist != 0:

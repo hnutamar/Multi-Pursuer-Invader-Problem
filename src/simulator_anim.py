@@ -52,7 +52,7 @@ def formation_calculator(purs: list[Pursuer], unit: Prime_unit, form_max: float)
 
 
 #state of the drones
-state = {"form_count": [],
+state = {"form_count": [],#not used right now
          "pursuers": [],
          "invaders": [],
          "prime": None,
@@ -67,6 +67,7 @@ way_point = np.array([sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border])
 #random inital pos
 rnd_points_purs = np.random.uniform(low=[-sc.PURSUER_NUM/2 - 2 + pos_u[0], -sc.PURSUER_NUM/2 - 2 + pos_u[1]], high=[sc.PURSUER_NUM/2 + 2 + pos_u[0], sc.PURSUER_NUM/2 + 2 + pos_u[1]], size=(sc.PURSUER_NUM, 2))
 rnd_points_inv = np.random.uniform(low=[-1 + x_border, -1 + y_border], high=[sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border], size=(sc.INVADER_NUM, 2))
+rnd_acc_inv = np.random.uniform(low=0.1, high=0.5, size=(sc.INVADER_NUM,))
 #pursuers init
 state["pursuers"] = []
 positions_p = [[] for _ in range(sc.PURSUER_NUM)]
@@ -77,23 +78,23 @@ for i in range(sc.PURSUER_NUM):
 state["invaders"] = []
 positions_i = [[] for _ in range(sc.INVADER_NUM)]
 for i in range(sc.INVADER_NUM):
-    state["invaders"].append(Invader(position=rnd_points_inv[i], max_acc=0.4, max_omega=1.5))
+    state["invaders"].append(Invader(position=rnd_points_inv[i], max_acc=rnd_acc_inv[i], max_omega=1.5))
     positions_i[i].append(rnd_points_inv[i])
 #how many pursuers are in formation
-state["form_count"] = [pur for pur in state["pursuers"] if pur.state == States.FORM]
+#state["form_count"] = [pur for pur in state["pursuers"] if pur.state == States.FORM]
 
 #animation
 def update(frame):
     #check pursuers states
-    form_max = state["pursuers"][0].form_max[0]
-    form_now = [pur for pur in state["pursuers"] if (pur.state == States.FORM and np.linalg.norm(pur.position - state["prime"].position) < form_max)]
-    if len(state["form_count"]) != len(form_now):
-        state["form_count"] = form_now
-        formation_calculator(state["pursuers"], state["prime"], form_max)
-    elif not all(x is y for x, y in zip(state["form_count"], form_now)):
-        state["form_count"] = form_now
-        #print("1")
-        formation_calculator(state["pursuers"], state["prime"], form_max)
+    # form_max = state["pursuers"][0].form_max[0]
+    # form_now = [pur for pur in state["pursuers"] if (pur.state == States.FORM and np.linalg.norm(pur.position - state["prime"].position) < form_max)]
+    # if len(state["form_count"]) != len(form_now):
+    #     state["form_count"] = form_now
+    #     formation_calculator(state["pursuers"], state["prime"], form_max)
+    # elif not all(x is y for x, y in zip(state["form_count"], form_now)):
+    #     state["form_count"] = form_now
+    #     #print("1")
+    #     formation_calculator(state["pursuers"], state["prime"], form_max)
     #makes np arrays of positions of still not captured invaders and all pursuers
     free_inv = [inv for inv in state["invaders"] if not inv.captured]
     free_purs = [pur for pur in state["pursuers"] if pur.state != States.CRASHED]
@@ -139,7 +140,7 @@ def update(frame):
                 if i.pursuer is not None:
                     i.pursuer.target = None
         #crash to other pursuers check
-        for other in state["pursuers"]:
+        for other in free_purs:
             if not (other is p) and np.sum((p.position - other.position)**2) < sc.CRASH_RAD**2: #and other.state != States.CRASHED and p.state != States.CRASHED:
                 p.state = States.CRASHED
                 other.state = States.CRASHED

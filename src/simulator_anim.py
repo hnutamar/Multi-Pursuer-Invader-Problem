@@ -66,7 +66,7 @@ positions_u = [pos_u]
 way_point = np.array([sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border])
 #random inital pos
 rnd_points_purs = np.random.uniform(low=[-sc.PURSUER_NUM/2 - 2 + pos_u[0], -sc.PURSUER_NUM/2 - 2 + pos_u[1]], high=[sc.PURSUER_NUM/2 + 2 + pos_u[0], sc.PURSUER_NUM/2 + 2 + pos_u[1]], size=(sc.PURSUER_NUM, 2))
-rnd_points_inv = np.random.uniform(low=[-1 + x_border, -1 + y_border], high=[sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border], size=(sc.INVADER_NUM, 2))
+rnd_points_inv = np.random.uniform(low=[sc.WORLD_WIDTH - x_border, -1 + y_border], high=[sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border], size=(sc.INVADER_NUM, 2))
 rnd_acc_inv = np.random.uniform(low=0.1, high=0.5, size=(sc.INVADER_NUM,))
 #pursuers init
 state["pursuers"] = []
@@ -78,7 +78,7 @@ for i in range(sc.PURSUER_NUM):
 state["invaders"] = []
 positions_i = [[] for _ in range(sc.INVADER_NUM)]
 for i in range(sc.INVADER_NUM):
-    state["invaders"].append(Invader(position=rnd_points_inv[i], max_acc=rnd_acc_inv[i], max_omega=1.5))
+    state["invaders"].append(Invader(position=rnd_points_inv[i], max_acc=0.1, max_omega=1.5))
     positions_i[i].append(rnd_points_inv[i])
 #how many pursuers are in formation
 #state["form_count"] = [pur for pur in state["pursuers"] if pur.state == States.FORM]

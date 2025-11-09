@@ -63,11 +63,12 @@ y_border = sc.WORLD_HEIGHT/6
 pos_u = [3.0, 3.0]
 state["prime"] = Prime_unit(position=pos_u, max_acc=0.08, max_omega=1.0)
 positions_u = [pos_u]
+#way_point = np.array([3.0, 3.0])
 way_point = np.array([sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border])
 #random inital pos
 rnd_points_purs = np.random.uniform(low=[-sc.PURSUER_NUM/2 - 2 + pos_u[0], -sc.PURSUER_NUM/2 - 2 + pos_u[1]], high=[sc.PURSUER_NUM/2 + 2 + pos_u[0], sc.PURSUER_NUM/2 + 2 + pos_u[1]], size=(sc.PURSUER_NUM, 2))
-rnd_points_inv = np.random.uniform(low=[sc.WORLD_WIDTH - x_border, -1 + y_border], high=[sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border], size=(sc.INVADER_NUM, 2))
-rnd_acc_inv = np.random.uniform(low=0.1, high=0.5, size=(sc.INVADER_NUM,))
+rnd_points_inv = np.random.uniform(low=[sc.PURSUER_NUM/2 + 2 + pos_u[0], sc.PURSUER_NUM/2 + 2 + pos_u[1]], high=[sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border], size=(sc.INVADER_NUM, 2))
+rnd_acc_inv = np.random.uniform(low=0.1, high=0.6, size=(sc.INVADER_NUM,))
 #pursuers init
 state["pursuers"] = []
 positions_p = [[] for _ in range(sc.PURSUER_NUM)]
@@ -102,7 +103,7 @@ def update(frame):
     #new directions of all drones
     dirs_i = [invader.evade(free_purs, state["prime"]) for invader in state["invaders"]]
     dirs_p = [pursuer.pursue(free_inv, free_purs, state["prime"]) for pursuer in state["pursuers"]]
-    dir_u = state["prime"].fly(way_point)
+    dir_u = state["prime"].fly(way_point, free_inv, free_purs)
     #making the move in that dir according to the time and speed
     for p, p_dir in zip(state["pursuers"], dirs_p):
         p.move(p_dir)
@@ -118,6 +119,10 @@ def update(frame):
     #dots representing the current positions of drones
     for p_dot, p in zip(sc.p_dots, state["pursuers"]):
         p_dot.set_data([p.position[0]], [p.position[1]])
+        if p.state == States.PURSUE:
+            p_dot.set_color("#631616")
+        else:
+            p_dot.set_color('#d62728')
     for i_dot, i in zip(sc.i_dots, state["invaders"]):
         i_dot.set_data([i.position[0]], [i.position[1]])
     sc.u_dot.set_data([state["prime"].position[0]], [state["prime"].position[1]])
@@ -154,8 +159,8 @@ def update(frame):
             state["prime"].took_down = True
             break
     #if all invaders are captured, or prime unit was taken down or has finished, the animation will end
-    #if (state["inv_captured"] >= sc.INVADER_NUM and prime_unit.finished) or prime_unit.took_down or prime_unit.finished:
-    #    anim.event_source.stop()
+    if (state["inv_captured"] >= sc.INVADER_NUM and state["prime"].finished) or state["prime"].took_down: # or state["prime"].finished:
+        anim.event_source.stop()
     #returning paths and positions of all drones for animation
     return sc.p_dots + sc.i_dots + sc.p_paths + sc.i_paths + [sc.u_dot] + [sc.u_path]
 

@@ -9,12 +9,12 @@ from pursuer_states import States
 class Pursuer(Agent):
     def __init__(self, position, max_acc, max_omega, num, purs_num):
         super().__init__(position, max_acc, max_omega)
-        self.num_iter = 0
-        self.purs_num = 9
+        self.num_iter = np.longdouble(0.0)
+        self.purs_num = purs_num
         #dir par
         self.purs = 1.2
         self.form = 0.9
-        self.rep_in_form = 2.0
+        self.rep_in_form = 10.0
         self.rep_in_purs = 7.0
         self.prime_rep_in_form = 0.0
         self.prime_rep_in_purs = 2.9
@@ -22,12 +22,12 @@ class Pursuer(Agent):
         self.prime_coll_r = 4.5
         self.collision_r = 2.0
         self.min_formation_r = 2.0
-        self.dist_formation = np.pi
+        self.dist_formation = np.pi/1.8
         #self.formation_r = max(self.purs_num*self.dist_formation/(2*np.pi), self.min_formation_r)
-        self.formation_r = 20.0
+        self.formation_r = 2.5
         #print(self.formation_r)
-        self.capture_r = 5.0
-        self.capture_max = 15.0
+        self.capture_r = 10.0
+        self.capture_max = 20.0
         self.form_max = np.array([self.formation_r + 3.0])
         #radiuses for target circling
         self.target_r = 1.5
@@ -35,7 +35,7 @@ class Pursuer(Agent):
         self.target = None
         self.num = num
         self.state = States.FORM
-        self.capture_angle = np.pi/3
+        #self.capture_angle = np.array([np.pi/2, ])
         #controler
         self.KP = 10.0
         self.KD = 0.1
@@ -48,13 +48,14 @@ class Pursuer(Agent):
         self.purs_types = {"circling": 1,
                            "const_bear": 2,
                            "pure_pursuit": 3}
+        self.capture_cooldown = 100
         
     def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit):
         #calculation of the formation
         #self.form_p = [p for p in pursuers if (p.state == States.FORM and np.linalg.norm(p.position - prime_unit.position) < self.form_max[0])]
         #self.formation_r = max(len(self.form_p)*self.dist_formation/(2*np.pi), self.min_formation_r)
         #self.form_max[0] = self.formation_r + 3.0
-        #self.num_iter += 1
+        self.num_iter += self.dt
         #init directions
         tar_vel = np.array([0.0, 0.0])
         form_vel = np.array([0.0, 0.0])
@@ -67,21 +68,21 @@ class Pursuer(Agent):
             self.state = States.FORM
         #pursuer having no target, finding target, if found, pursue it
         if self.target == None:
-            if self.strategy_capture_cone(targets, prime_unit):
+            if self.strategy_capture_cone(targets, prime_unit, self.num_iter, cooldown=self.capture_cooldown*self.dt):
                 #tar_dir = self.pursuit_pure_pursuit(self.target)
                 #tar_vel = self.pursuit_constant_bearing(self.target, prime_unit)
-                tar_vel = self.pursuit_circling(self.target)
+                tar_vel = self.pursue_target(self.target, pursuers)
                 #tar_dir = self.pursuit_augmented_PN(self.target, debug=False)
         #pursuer having target -> pursue it
         elif self.target != None and self.target[0].captured == False:
             #form_count = len(self.form_p)
-            if np.linalg.norm(self.position - prime_unit.position) < self.capture_max: #min(self.capture_max, form_count * 3):
+            if not (self.target[1] != self.purs_types["circling"] and np.linalg.norm(self.position - prime_unit.position) > self.capture_max): #min(self.capture_max, form_count * 3):
                 #tar_dir = self.pursuit_pure_pursuit(self.target)
                 #tar_vel = self.pursuit_constant_bearing(self.target, prime_unit)
-                tar_vel = self.pursuit_circling(self.target)
+                tar_vel = self.pursue_target(self.target, pursuers)
                 #tar_dir = self.pursuit_augmented_PN(self.target, debug=False)
-            else:
-                self.target[0].pursuer = None    
+            #else:
+            #    self.target[0].pursuer = None    
         #if target dir is zero, pursuer has no target -> keep the formation
         if np.array_equal(tar_vel, form_vel):
             self.target = None
@@ -145,7 +146,7 @@ class Pursuer(Agent):
         except ValueError:
             return False
         #mask of those possible targets that are close to unit
-        near_unit = np.linalg.norm(t_pos - unit.position, axis=1) < (self.formation_r + self.capture_r)
+        near_unit = np.linalg.norm(t_pos - unit.position, axis=1) < self.capture_r
         #if none, return
         if not np.any(near_unit):
             return False
@@ -166,53 +167,70 @@ class Pursuer(Agent):
         #no target is closest to self
         return False
     
-    
-    def strategy_capture_cone(self, targets: list[Invader], unit: Prime_unit, cooldown=1.0):
+    def strategy_capture_cone(self, targets: list[Invader], unit: Prime_unit, sim_time: float, cooldown: float = 10.0):
         if not targets:
             return False
-        #pos of invaders and those close enough to unit
+        if not hasattr(self, "ignored_targs"):
+            self.ignored_targs = {}
+        #invader pos
         t_pos = np.atleast_2d(np.array([i.position for i in targets]))
-        near_unit = np.linalg.norm(t_pos - unit.position, axis=1) < (self.formation_r + self.capture_r)
-        now = time.time()
-        #updating targets list -> removing those that are too far and cooldown is over
+        #those invaders, that are close enough to unit
+        near_mask = np.linalg.norm(t_pos - unit.position, axis=1) < self.capture_r
+        #those invaders, that are forward to pursuer
+        forward_mask = np.dot(t_pos - self.position, self.curr_speed) > 0.0
+        #combo of both, choosing from these targets
+        near_and_forward = np.logical_and(near_mask, forward_mask)
+        #removing invaders with after cooldown
         to_remove = []
         for inv, t_last in list(self.ignored_targs.items()):
             if inv not in targets:
                 to_remove.append(inv)
             else:
-                dist = np.linalg.norm(inv.position - unit.position)
-                if dist >= (self.formation_r + self.capture_r) and (now - t_last) > cooldown:
+                #dist = np.linalg.norm(inv.position - unit.position)
+                if (sim_time - t_last) > cooldown: #and dist >= (self.formation_r + self.capture_r):
                     to_remove.append(inv)
         for inv in to_remove:
             del self.ignored_targs[inv]
         #candidates for pursuing
         cand_t_idxs = [
             i for i, inv in enumerate(targets)
-            if near_unit[i] and inv not in self.ignored_targs
+            if near_and_forward[i] and inv not in self.ignored_targs
         ]
+        #those behind go to ignore list, if not already there
+        behind_idxs = [
+            i for i, inv in enumerate(targets)
+            if near_mask[i] and not forward_mask[i]
+        ]
+        for i in behind_idxs:
+            if not targets[i] in self.ignored_targs:
+                self.ignored_targs[targets[i]] = sim_time
+        #no candidate -> return
         if not cand_t_idxs:
             return False
-        #choosing best candidate according to the angle
+        #choosing best candidate
         cand_t_pos = t_pos[cand_t_idxs]
         unit_vec = unit.position - self.position
-        unit_dist = np.linalg.norm(unit_vec)
+        unit_dist = np.linalg.norm(unit_vec) + 1e-9
         angles = np.dot(cand_t_pos - self.position, unit_vec) / (
             np.linalg.norm(cand_t_pos - self.position, axis=1) * unit_dist
         )
-        best_local_idx = np.argmin(angles)
-        best_idx = cand_t_idxs[best_local_idx]
-        #angle must be in the capture cone
-        if angles[best_local_idx] < -np.cos(self.capture_angle):
+        #best angles between 80 and 130
+        mask = (angles >= np.cos(13*np.pi/18)) & (angles <= np.cos(4*np.pi/9))
+        if np.any(mask):
+            #the one closest to 120 is the best -> pursue him
+            masked_angles = np.copy(angles)
+            masked_angles[~mask] = np.inf
+            best_local_idx = np.argmin(masked_angles)
+            best_idx = cand_t_idxs[best_local_idx]
             self.target = [targets[best_idx], self.purs_types['circling']]
             self.state = States.PURSUE
-            #others go to the ignore list
-            for i in cand_t_idxs:
-                if i != best_idx:
-                    self.ignored_targs[targets[i]] = now
+            #clearing ignore list, not needed now, because pursuer has target
+            self.ignored_targs.clear()
             return True
-        #no target in cone, ignore everyone
+        #no target choosed, everyone go to ignore list, if not already there
         for i in cand_t_idxs:
-            self.ignored_targs[targets[i]] = now
+            if not targets[i] in self.ignored_targs:
+                self.ignored_targs[targets[i]] = sim_time
         return False
     
     def repulsive_force(self, drones: list[Agent], coll: float):
@@ -227,10 +245,16 @@ class Pursuer(Agent):
     
     def form_vortex_field(self, unit: Prime_unit):
         #the center of the vortex field shifted in the current unit speed vector, because unit is moving
-        rel_pos = self.position - (unit.position) #+ unit.curr_speed * self.dt * self.pred_time)
-        rho = (1 - (rel_pos[0]**2 + rel_pos[1]**2))/self.formation_r**2
+        rel_pos = self.position - (unit.position + unit.curr_speed * self.dt * self.pred_time)
+        rho = 1 - (rel_pos[0]**2/self.formation_r**2) - (rel_pos[1]**2/self.formation_r**2)
+        #inside of circle
+        if rho > 0:
+            alpha = 7.0
+        #outside of circle
+        else:
+            alpha = 1.0
         #circle around center
-        purs_vel = np.array([self.circle_dir*rel_pos[1] + 20*rel_pos[0]*rho, -self.circle_dir*rel_pos[0] + 20*rel_pos[1]*rho])
+        purs_vel = np.array([self.circle_dir*rel_pos[1] + alpha*rel_pos[0]*rho, -self.circle_dir*rel_pos[0] + alpha*rel_pos[1]*rho])
         #norming it to maximal speed
         # purs_speed = np.linalg.norm(purs_vel)
         # if purs_speed < 1e-12:
@@ -296,17 +320,36 @@ class Pursuer(Agent):
             v_new = v_new / speed * self.max_speed
         return v_new
     
-    def pursuit_circling(self, target: list[Invader, int]):
-        #target is too fast for circling
-        if np.linalg.norm(target[0].curr_speed) >= self.max_speed/2 or target[1] != self.purs_types['circling']:
+    def pursue_target(self, target: list[Invader, int], purs: list[Agent]):
+        #if target is faster then pursuer, just pure pursue him
+        if np.linalg.norm(target[0].curr_speed) >= self.max_speed: #or target[1] != self.purs_types['circling']:
+            return self.pursuit_pure_pursuit(target)
+        #still too fast for encriclement, CB him
+        elif np.linalg.norm(target[0].curr_speed) >= self.max_speed/2:
             return self.pursuit_constant_bearing(target)
+        #if more then one is chasing him, circle him
+        for p in purs:
+            if p is not self and p.target != None and p.target[0] is target[0]:
+                #print(p)
+                return self.pursuit_circling(target)
+        #no one else is chasing him, catch him
+        return self.pursuit_constant_bearing(target)
+    
+    def pursuit_circling(self, target: list[Invader, int]):
+        target[1] = self.purs_types['circling']
         #strong repulsive force is needed
         self.rep_in_purs = 7.0
         self.prime_rep_in_purs = 2.9
         #the center of the vortex field is not shifted
         rel_pos = self.position - (target[0].position + target[0].curr_speed * self.dt * self.pred_time)
-        rho = (1 - (rel_pos[0]**2 + rel_pos[1]**2))/self.target_r**2
-        purs_vel = np.array([self.circle_dir*rel_pos[1] + 1*rel_pos[0]*rho, -self.circle_dir*rel_pos[0] + 1*rel_pos[1]*rho])
+        rho = 1 - (rel_pos[0]**2/self.target_r**2) - (rel_pos[1]**2/self.target_r**2)
+        #inside of circle
+        if rho > 0:
+            alpha = 7.0
+        #outside of circle
+        else:
+            alpha = 1.0
+        purs_vel = np.array([-self.circle_dir*rel_pos[1] + alpha*rel_pos[0]*rho, self.circle_dir*rel_pos[0] + alpha*rel_pos[1]*rho])
         # vel_norm = np.linalg.norm(purs_vel)
         # if vel_norm > 1e-8:
         #     purs_vel = purs_vel/vel_norm
@@ -314,9 +357,6 @@ class Pursuer(Agent):
         
     #TODO: deal with exceptions (e.g. a = 0)
     def pursuit_constant_bearing(self, target: list[Invader, int]):
-        #velocity vector of the target, if too fast, pure pursuit
-        if np.linalg.norm(target[0].curr_speed) >= self.max_speed or target[1] == self.purs_types['pure_pursuit']:
-            return self.pursuit_pure_pursuit(target)
         #target is quite fast, circling is not possible
         target[1] = self.purs_types['const_bear']
         self.rep_in_purs = 1.0

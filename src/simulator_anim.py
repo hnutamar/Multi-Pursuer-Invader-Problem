@@ -10,45 +10,45 @@ import sim_config as sc
 from scipy.optimize import linear_sum_assignment
 from pursuer_states import States
 
-def minimize_max_fast(cost):
-    vals = np.unique(cost)
-    lo, hi = 0, len(vals) - 1
-    best_T = None
-    best_assign = None
-    while lo <= hi:
-        mid = (lo + hi) // 2
-        T = vals[mid]
-        masked = np.where(cost <= T, cost, 1e9)
-        row_ind, col_ind = linear_sum_assignment(masked)
-        if (cost[row_ind, col_ind] <= T).all():
-            best_T = T
-            best_assign = list(col_ind)
-            hi = mid - 1
-        else:
-            lo = mid + 1
-    return best_assign
+# def minimize_max_fast(cost):
+#     vals = np.unique(cost)
+#     lo, hi = 0, len(vals) - 1
+#     best_T = None
+#     best_assign = None
+#     while lo <= hi:
+#         mid = (lo + hi) // 2
+#         T = vals[mid]
+#         masked = np.where(cost <= T, cost, 1e9)
+#         row_ind, col_ind = linear_sum_assignment(masked)
+#         if (cost[row_ind, col_ind] <= T).all():
+#             best_T = T
+#             best_assign = list(col_ind)
+#             hi = mid - 1
+#         else:
+#             lo = mid + 1
+#     return best_assign
 
-def formation_calculator(purs: list[Pursuer], unit: Prime_unit, form_max: float):
-    #pursuers in state FORM and close to prime unit
-    form_ps = [p for p in purs if (p.state == States.FORM and np.linalg.norm(p.position - state["prime"].position) < form_max)]
-    n = len(form_ps)
-    if n == 0:
-        return
-    #radius and angles of the formation
-    formation_r = max(n*form_ps[0].dist_formation/(np.pi*2), form_ps[0].min_formation_r)
-    angle_piece = 2*np.pi/n
-    angles = np.arange(n)*angle_piece
-    #calculation of distance from every pos in formation to every drone
-    cx, cy = unit.position
-    form_pos = np.stack([cx + formation_r * np.cos(angles), cy + formation_r * np.sin(angles)], axis=1)
-    pos_now = np.array([pur.position for pur in form_ps])
-    diff = pos_now[:, np.newaxis, :] - form_pos[np.newaxis, :, :]
-    D = np.linalg.norm(diff, axis=2)
-    #minimax solver - that is finding the minimal maximal distance drone has to fly
-    col_idx = minimize_max_fast(D)
-    for i in range(n):
-        form_ps[i].num = col_idx[i]
-    return
+# def formation_calculator(purs: list[Pursuer], unit: Prime_unit, form_max: float):
+#     #pursuers in state FORM and close to prime unit
+#     form_ps = [p for p in purs if (p.state == States.FORM and np.linalg.norm(p.position - state["prime"].position) < form_max)]
+#     n = len(form_ps)
+#     if n == 0:
+#         return
+#     #radius and angles of the formation
+#     formation_r = max(n*form_ps[0].dist_formation/(np.pi*2), form_ps[0].min_formation_r)
+#     angle_piece = 2*np.pi/n
+#     angles = np.arange(n)*angle_piece
+#     #calculation of distance from every pos in formation to every drone
+#     cx, cy = unit.position
+#     form_pos = np.stack([cx + formation_r * np.cos(angles), cy + formation_r * np.sin(angles)], axis=1)
+#     pos_now = np.array([pur.position for pur in form_ps])
+#     diff = pos_now[:, np.newaxis, :] - form_pos[np.newaxis, :, :]
+#     D = np.linalg.norm(diff, axis=2)
+#     #minimax solver - that is finding the minimal maximal distance drone has to fly
+#     col_idx = minimize_max_fast(D)
+#     for i in range(n):
+#         form_ps[i].num = col_idx[i]
+#     return
 
 
 #state of the drones
@@ -63,7 +63,7 @@ y_border = sc.WORLD_HEIGHT/6
 pos_u = [3.0, 3.0]
 state["prime"] = Prime_unit(position=pos_u, max_acc=0.08, max_omega=1.0)
 positions_u = [pos_u]
-#way_point = np.array([3.0, 3.0])
+#way_point = np.array([10.0, 10.0])
 way_point = np.array([sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border])
 #random inital pos
 rnd_points_purs = np.random.uniform(low=[-sc.PURSUER_NUM/2 - 2 + pos_u[0], -sc.PURSUER_NUM/2 - 2 + pos_u[1]], high=[sc.PURSUER_NUM/2 + 2 + pos_u[0], sc.PURSUER_NUM/2 + 2 + pos_u[1]], size=(sc.PURSUER_NUM, 2))
@@ -79,7 +79,7 @@ for i in range(sc.PURSUER_NUM):
 state["invaders"] = []
 positions_i = [[] for _ in range(sc.INVADER_NUM)]
 for i in range(sc.INVADER_NUM):
-    state["invaders"].append(Invader(position=rnd_points_inv[i], max_acc=0.1, max_omega=1.5))
+    state["invaders"].append(Invader(position=rnd_points_inv[i], max_acc=rnd_acc_inv[i], max_omega=1.5))
     positions_i[i].append(rnd_points_inv[i])
 #how many pursuers are in formation
 #state["form_count"] = [pur for pur in state["pursuers"] if pur.state == States.FORM]
@@ -102,7 +102,11 @@ def update(frame):
     #pursuers_pos = np.array([pur.position for pur in pursuers])
     #new directions of all drones
     dirs_i = [invader.evade(free_purs, state["prime"]) for invader in state["invaders"]]
-    dirs_p = [pursuer.pursue(free_inv, free_purs, state["prime"]) for pursuer in state["pursuers"]]
+    dirs_p = []
+    for purs in state["pursuers"]:
+        close_purs = [p for p in free_purs if np.linalg.norm(p.position - purs.position) <= purs.vis_r]
+        dirs_p.append(purs.pursue(free_inv, close_purs, state["prime"]))
+    #dirs_p = [pursuer.pursue(free_inv, free_purs, state["prime"]) for pursuer in state["pursuers"]]
     dir_u = state["prime"].fly(way_point, free_inv, free_purs)
     #making the move in that dir according to the time and speed
     for p, p_dir in zip(state["pursuers"], dirs_p):

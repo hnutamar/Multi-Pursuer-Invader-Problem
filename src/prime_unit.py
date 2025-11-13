@@ -25,8 +25,8 @@ class Prime_unit(Agent):
             self.finished = True
         rep_vel_i = self.repulsive_force(invaders, 3.0)
         rep_vel_p = self.repulsive_force(pursuers, 1.0)
-        goal_vel = self.vortex_circle(way_point)
-        #goal_vel = self.goal_force(way_point)
+        #goal_vel = self.vortex_circle(way_point)
+        goal_vel = self.goal_force(way_point)
         sum_vel = goal_vel + rep_vel_i + rep_vel_p
         sum_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
         return sum_acc

@@ -207,7 +207,7 @@ class Pursuer(Agent):
             alpha = 7.0
         #outside of circle
         else:
-            alpha = 4.0
+            alpha = 3.0
         #circle around center
         loc_fdwrd = np.array([(-axis_a/axis_b)*rel_pos[1], (axis_b/axis_a)*rel_pos[0]])
         fdwrd = self.rotate(loc_fdwrd, rot_angle)

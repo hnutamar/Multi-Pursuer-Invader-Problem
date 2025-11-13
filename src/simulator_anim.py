@@ -9,6 +9,7 @@ from matplotlib.animation import FuncAnimation
 import sim_config as sc
 from scipy.optimize import linear_sum_assignment
 from pursuer_states import States
+from matplotlib.patches import Ellipse
 
 # def minimize_max_fast(cost):
 #     vals = np.unique(cost)
@@ -50,6 +51,13 @@ from pursuer_states import States
 #         form_ps[i].num = col_idx[i]
 #     return
 
+def ellipse_change(ellipse, unit):
+    ellipse.center = unit.center
+    ellipse.width = unit.axis_a*2
+    ellipse.height = unit.axis_b*2
+    ellipse.angle = unit.rot_angle*(180/np.pi)
+    return
+
 
 #state of the drones
 state = {"form_count": [],#not used right now
@@ -60,20 +68,20 @@ state = {"form_count": [],#not used right now
 x_border = sc.WORLD_WIDTH/6
 y_border = sc.WORLD_HEIGHT/6
 #prime unit init
-pos_u = [3.0, 3.0]
-state["prime"] = Prime_unit(position=pos_u, max_acc=0.08, max_omega=1.0)
+pos_u = [7.0, 7.0]
+state["prime"] = Prime_unit(position=pos_u, max_acc=0.7, max_omega=1.0)
 positions_u = [pos_u]
-#way_point = np.array([10.0, 10.0])
-way_point = np.array([sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border])
+way_point = np.array([sc.WORLD_WIDTH/2, sc.WORLD_HEIGHT/2])
+#way_point = np.array([sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border])
 #random inital pos
 rnd_points_purs = np.random.uniform(low=[-sc.PURSUER_NUM/2 - 2 + pos_u[0], -sc.PURSUER_NUM/2 - 2 + pos_u[1]], high=[sc.PURSUER_NUM/2 + 2 + pos_u[0], sc.PURSUER_NUM/2 + 2 + pos_u[1]], size=(sc.PURSUER_NUM, 2))
 rnd_points_inv = np.random.uniform(low=[sc.PURSUER_NUM/2 + 2 + pos_u[0], sc.PURSUER_NUM/2 + 2 + pos_u[1]], high=[sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border], size=(sc.INVADER_NUM, 2))
-rnd_acc_inv = np.random.uniform(low=0.1, high=0.6, size=(sc.INVADER_NUM,))
+rnd_acc_inv = np.random.uniform(low=1.5, high=3.0, size=(sc.INVADER_NUM,))
 #pursuers init
 state["pursuers"] = []
 positions_p = [[] for _ in range(sc.PURSUER_NUM)]
 for i in range(sc.PURSUER_NUM):
-    state["pursuers"].append(Pursuer(position=rnd_points_purs[i], max_acc=0.4, max_omega=1.5, num=i, purs_num=sc.PURSUER_NUM))
+    state["pursuers"].append(Pursuer(position=rnd_points_purs[i], max_acc=2.3, max_omega=1.5, num=i, purs_num=sc.PURSUER_NUM))
     positions_p[i].append(rnd_points_purs[i])
 #invaders init
 state["invaders"] = []
@@ -83,6 +91,10 @@ for i in range(sc.INVADER_NUM):
     positions_i[i].append(rnd_points_inv[i])
 #how many pursuers are in formation
 #state["form_count"] = [pur for pur in state["pursuers"] if pur.state == States.FORM]
+
+ellipse = Ellipse(state["prime"].center, state["prime"].axis_a*2, state["prime"].axis_b*2, angle=state["prime"].rot_angle*(180/np.pi),
+                  edgecolor='blue', facecolor='none', lw=0.5, linestyle='--')
+sc.ax.add_patch(ellipse)
 
 #animation
 def update(frame):
@@ -162,11 +174,13 @@ def update(frame):
         if i.captured == False and np.sum((i.position - state["prime"].position)**2) < sc.UNIT_DOWN_RAD**2:
             state["prime"].took_down = True
             break
+    
+    ellipse_change(ellipse, state["prime"])
     #if all invaders are captured, or prime unit was taken down or has finished, the animation will end
-    if (state["inv_captured"] >= sc.INVADER_NUM and state["prime"].finished) or state["prime"].took_down: # or state["prime"].finished:
-        anim.event_source.stop()
+    #if (state["inv_captured"] >= sc.INVADER_NUM and state["prime"].finished) or state["prime"].took_down: # or state["prime"].finished:
+    #    anim.event_source.stop()
     #returning paths and positions of all drones for animation
-    return sc.p_dots + sc.i_dots + sc.p_paths + sc.i_paths + [sc.u_dot] + [sc.u_path]
+    return sc.p_dots + sc.i_dots + sc.p_paths + sc.i_paths + [sc.u_dot] + [sc.u_path] + [ellipse]
 
 anim = FuncAnimation(sc.fig, update, frames=200, interval=50, blit=True)
 plt.show()

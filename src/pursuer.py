@@ -115,7 +115,7 @@ class Pursuer(Agent):
                 to_remove.append(inv)
             else:
                 dist = np.linalg.norm(inv.position - unit.position)
-                if (sim_time - t_last) > cooldown and dist >= (self.formation_r + self.capture_r):
+                if (sim_time - t_last) > cooldown and dist >= self.capture_r:
                     to_remove.append(inv)
         for inv in to_remove:
             del self.ignored_targs[inv]
@@ -188,18 +188,20 @@ class Pursuer(Agent):
 
     def form_vortex_field(self, unit: Prime_unit):
         rot_angle = np.arctan2(unit.curr_speed[1], unit.curr_speed[0])
-        axis_a = max(2.5*np.linalg.norm(unit.curr_speed), self.formation_r)
-        axis_b = max(1.1*np.linalg.norm(unit.curr_speed), self.formation_r)
+        axis_a = max(2.0*np.linalg.norm(unit.curr_speed), self.formation_r)
+        axis_b = max(1.3*np.linalg.norm(unit.curr_speed), self.formation_r)
         if np.linalg.norm(unit.curr_speed) <= 0.1:
             rel_center = np.array([0, 0])
         else:
-            rel_center = np.array([-0.4*axis_a, 0])
+            rel_center = np.array([-0.7*axis_a, 0])
         center = unit.position - self.rotate(rel_center, rot_angle)
         #the center of the vortex field shifted in the current unit speed vector, because unit is moving
-        #rel_pos = self.position - (unit.position + unit.curr_speed * self.dt * self.pred_time)
+        # rel_pos = self.position - (unit.position + unit.curr_speed * self.dt * self.pred_time)
+        # rho = 1 - (rel_pos[0]**2/self.formation_r**2) - (rel_pos[1]**2/self.formation_r**2)
         rel_pos = self.rotate(self.position - center, -rot_angle)
+        rel_norm_pos = self.rotate(self.position - unit.position, -rot_angle)
         rho = 1 - (rel_pos[0]**2/axis_a**2) - (rel_pos[1]**2/axis_b**2)
-        loc_norm = np.array([2*rel_pos[0]/axis_a**2, 2*rel_pos[1]/axis_b**2])
+        loc_norm = np.array([2*rel_norm_pos[0]/axis_a**2, 2*rel_norm_pos[1]/axis_b**2])
         norm = self.rotate(loc_norm, rot_angle)
         normalized = norm/np.linalg.norm(norm)
         #inside of circle
@@ -207,13 +209,13 @@ class Pursuer(Agent):
             alpha = 7.0
         #outside of circle
         else:
-            alpha = 3.0
+            alpha = 1.0
         #circle around center
         loc_fdwrd = np.array([(-axis_a/axis_b)*rel_pos[1], (axis_b/axis_a)*rel_pos[0]])
         fdwrd = self.rotate(loc_fdwrd, rot_angle)
         fdbck = np.array([alpha*normalized[0]*rho, alpha*normalized[1]*rho])
         form_vel = self.circle_dir*fdwrd + fdbck
-        #purs_vel = np.array([self.circle_dir*rel_pos[1] + alpha*rel_pos[0]*rho, -self.circle_dir*rel_pos[0] + alpha*rel_pos[1]*rho])
+        #form_vel = np.array([self.circle_dir*rel_pos[1] + alpha*rel_pos[0]*rho, -self.circle_dir*rel_pos[0] + alpha*rel_pos[1]*rho])
         return form_vel
     
     def pursue_target(self, target: list[Invader, int], purs: list[Agent], unit: Prime_unit):

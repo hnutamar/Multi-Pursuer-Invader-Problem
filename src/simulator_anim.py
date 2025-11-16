@@ -58,7 +58,6 @@ def ellipse_change(ellipse, unit):
     ellipse.angle = unit.rot_angle*(180/np.pi)
     return
 
-
 #state of the drones
 state = {"form_count": [],#not used right now
          "pursuers": [],
@@ -69,19 +68,19 @@ x_border = sc.WORLD_WIDTH/6
 y_border = sc.WORLD_HEIGHT/6
 #prime unit init
 pos_u = [3.0, 3.0]
-state["prime"] = Prime_unit(position=pos_u, max_acc=0.1, max_omega=1.0)
+state["prime"] = Prime_unit(position=pos_u, max_acc=0.7, max_omega=1.0)
 positions_u = [pos_u]
 #way_point = np.array([sc.WORLD_WIDTH/2, sc.WORLD_HEIGHT/2])
 way_point = np.array([sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border])
 #random inital pos
 rnd_points_purs = np.random.uniform(low=[-sc.PURSUER_NUM/2 - 2 + pos_u[0], -sc.PURSUER_NUM/2 - 2 + pos_u[1]], high=[sc.PURSUER_NUM/2 + 2 + pos_u[0], sc.PURSUER_NUM/2 + 2 + pos_u[1]], size=(sc.PURSUER_NUM, 2))
 rnd_points_inv = np.random.uniform(low=[sc.PURSUER_NUM/2 + 2 + pos_u[0], sc.PURSUER_NUM/2 + 2 + pos_u[1]], high=[sc.WORLD_WIDTH - x_border, sc.WORLD_HEIGHT - y_border], size=(sc.INVADER_NUM, 2))
-rnd_acc_inv = np.random.uniform(low=0.1, high=0.7, size=(sc.INVADER_NUM,))
+rnd_acc_inv = np.random.uniform(low=0.9, high=1.7, size=(sc.INVADER_NUM,))
 #pursuers init
 state["pursuers"] = []
 positions_p = [[] for _ in range(sc.PURSUER_NUM)]
 for i in range(sc.PURSUER_NUM):
-    state["pursuers"].append(Pursuer(position=rnd_points_purs[i], max_acc=0.5, max_omega=1.5, num=i, purs_num=sc.PURSUER_NUM))
+    state["pursuers"].append(Pursuer(position=rnd_points_purs[i], max_acc=2.5, max_omega=1.5, num=i, purs_num=sc.PURSUER_NUM))
     positions_p[i].append(rnd_points_purs[i])
 #invaders init
 state["invaders"] = []
@@ -177,8 +176,8 @@ def update(frame):
     
     ellipse_change(ellipse, state["prime"])
     #if all invaders are captured, or prime unit was taken down or has finished, the animation will end
-    if (state["inv_captured"] >= sc.INVADER_NUM and state["prime"].finished) or state["prime"].took_down: # or state["prime"].finished:
-        anim.event_source.stop()
+    #if (state["inv_captured"] >= sc.INVADER_NUM and state["prime"].finished) or state["prime"].took_down: # or state["prime"].finished:
+    #    anim.event_source.stop()
     #returning paths and positions of all drones for animation
     return sc.p_dots + sc.i_dots + sc.p_paths + sc.i_paths + [sc.u_dot] + [sc.u_path] + [ellipse]
 

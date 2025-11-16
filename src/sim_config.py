@@ -1,13 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
 #Constants
-WORLD_WIDTH = 30
-WORLD_HEIGHT = 30
+WORLD_WIDTH = 50
+WORLD_HEIGHT = 50
 CAPTURE_RAD = 0.3
 CRASH_RAD = 0.3
 UNIT_DOWN_RAD = 0.6
 PURSUER_NUM = 20
-INVADER_NUM = 10
+INVADER_NUM = 0
 
 DRONE_RAD = 0.3
 UNIT_RAD = 0.6

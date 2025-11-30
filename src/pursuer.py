@@ -60,8 +60,8 @@ class Pursuer(Agent):
         #self.form_max[0] = self.formation_r + 3.0
         self.num_iter += self.dt
         #init directions
-        tar_vel = np.array([0.0, 0.0])
-        form_vel = np.array([0.0, 0.0])
+        tar_vel = np.zeros_like(self.position)
+        form_vel = np.zeros_like(self.position)
         #if crashed, dont move, you are supposed to be dead
         if self.state == States.CRASHED:
             return tar_vel
@@ -84,11 +84,15 @@ class Pursuer(Agent):
             self.target = None
             self.state = States.FORM
             form_vel = self.form_vortex_field(prime_unit)
+        if form_vel.size != self.position.size:
+            form_vel = np.append(form_vel, 0)
+        if tar_vel.size != self.position.size:
+            tar_vel = np.append(tar_vel, 0)
         #repulsive dirs to avoid collision
         rep_vel = self.repulsive_force(pursuers, self.collision_r)
         #returning sum of those
         if not np.array_equal(form_vel, np.zeros_like(form_vel)):
-            sum_vel = self.rep_in_form*rep_vel + self.form*form_vel #+ self.prime_rep_in_form*prime_rep_vel
+            sum_vel = self.rep_in_form*rep_vel + self.form*form_vel
         else:
             prime_rep_vel = self.repulsive_force([prime_unit], self.prime_coll_r)
             sum_vel = self.purs*tar_vel + self.rep_in_purs*rep_vel + self.prime_rep_in_purs*prime_rep_vel
@@ -172,7 +176,7 @@ class Pursuer(Agent):
         return False    
     
     def repulsive_force(self, drones: list[Agent], coll: float):
-        rep_dir = np.array([0.0, 0.0])
+        rep_dir = np.zeros_like(self.position)
         #for every drone, compute the distance from self and if close enough, compute the repulsive force
         for drone in drones:
             dist = np.linalg.norm(self.position - drone.position)
@@ -187,19 +191,26 @@ class Pursuer(Agent):
         return R @ v
 
     def form_vortex_field(self, unit: Prime_unit):
-        rot_angle = np.arctan2(unit.curr_speed[1], unit.curr_speed[0])
-        axis_a = max(2.0*np.linalg.norm(unit.curr_speed), self.formation_r)
-        axis_b = max(1.3*np.linalg.norm(unit.curr_speed), self.formation_r)
-        if np.linalg.norm(unit.curr_speed) <= 0.1:
+        my_pos = self.position
+        unit_pos = unit.position
+        unit_vel = unit.curr_speed
+        if self.position.size == 3:
+            my_pos = np.delete(my_pos, -1)
+            unit_pos = np.delete(unit_pos, -1)
+            unit_vel = np.delete(unit_vel, -1)
+        rot_angle = np.arctan2(unit_vel[1], unit_vel[0])
+        axis_a = max(2.0*np.linalg.norm(unit_vel), self.formation_r)
+        axis_b = max(1.3*np.linalg.norm(unit_vel), self.formation_r)
+        if np.linalg.norm(unit_vel) <= 0.1:
             rel_center = np.array([0, 0])
         else:
             rel_center = np.array([-0.7*axis_a, 0])
-        center = unit.position - self.rotate(rel_center, rot_angle)
+        center = unit_pos - self.rotate(rel_center, rot_angle)
         #the center of the vortex field shifted in the current unit speed vector, because unit is moving
-        # rel_pos = self.position - (unit.position + unit.curr_speed * self.dt * self.pred_time)
+        # rel_pos = my_pos - (unit_pos + unit_vel * self.dt * self.pred_time)
         # rho = 1 - (rel_pos[0]**2/self.formation_r**2) - (rel_pos[1]**2/self.formation_r**2)
-        rel_pos = self.rotate(self.position - center, -rot_angle)
-        rel_norm_pos = self.rotate(self.position - unit.position, -rot_angle)
+        rel_pos = self.rotate(my_pos - center, -rot_angle)
+        rel_norm_pos = self.rotate(my_pos - unit_pos, -rot_angle)
         rho = 1 - (rel_pos[0]**2/axis_a**2) - (rel_pos[1]**2/axis_b**2)
         loc_norm = np.array([2*rel_norm_pos[0]/axis_a**2, 2*rel_norm_pos[1]/axis_b**2])
         norm = self.rotate(loc_norm, rot_angle)
@@ -267,7 +278,7 @@ class Pursuer(Agent):
         c = np.dot(v_tar, v_tar) - self.max_speed**2
         #discriminant
         D = b**2 - 4*a*c
-        CB_dir = np.array([0.0, 0.0])
+        CB_dir = np.zeros_like(self.position)
         #positive D
         if D >= 1e-6:
             lambda1 = (-b + np.sqrt(D))/(2*a)

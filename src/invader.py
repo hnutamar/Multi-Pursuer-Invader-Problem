@@ -16,7 +16,7 @@ class Invader(Agent):
         
     def evade(self, pursuers, target):
         self.num_iter += 1
-        v_dir = np.array([0, 0])
+        v_dir = np.zeros_like(self.position)
         if self.captured:
             return v_dir
         else:
@@ -26,6 +26,7 @@ class Invader(Agent):
                 v_dir = self.strategy_run_away(pursuers, p_idx)
             else:
                 v_dir = self.pursuit_pure_pursuit(target)
+        #print(v_dir)
         u_dir = self.KP*(v_dir - self.curr_speed) - self.KD*self.curr_speed
         return u_dir
     

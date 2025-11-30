@@ -20,7 +20,8 @@ class Prime_unit(Agent):
         self.t_circle = 7.0
         
     def fly(self, way_point, invaders, pursuers):
-        self.form_vortex_field()
+        if self.position.size == 2:
+            self.form_vortex_field()
         if np.sum((self.position - way_point)**2) < 0.25:
             self.finished = True
         rep_vel_i = self.repulsive_force(invaders, 3.0)
@@ -45,7 +46,7 @@ class Prime_unit(Agent):
         return goal_vel
     
     def repulsive_force(self, drones: list[Agent], coll: float):
-        rep_dir = np.array([0.0, 0.0])
+        rep_dir = np.zeros_like(self.position)
         #for every drone, compute the distance from self and if close enough, compute the repulsive force
         for i in range(0, len(drones)):
             dist = np.linalg.norm(self.position - drones[i].position)

@@ -47,7 +47,7 @@ class Pursuer(Agent):
         #list of targets
         self.ignored_targs = {}
         self.circle_dir = 1
-        self.pred_time = 20
+        self.pred_time = 10
         self.purs_types = {"circling": 1,
                            "const_bear": 2,
                            "pure_pursuit": 3}
@@ -83,11 +83,11 @@ class Pursuer(Agent):
         if np.array_equal(tar_vel, form_vel):
             self.target = None
             self.state = States.FORM
-            form_vel = self.form_vortex_field(prime_unit)
+            form_vel = self.form_vortex_field_ellipse(prime_unit)
         if form_vel.size != self.position.size:
-            form_vel = np.append(form_vel, 0)
-        if tar_vel.size != self.position.size:
-            tar_vel = np.append(tar_vel, 0)
+            form_vel = np.append(form_vel, prime_unit.position[2] - self.position[2])
+        if tar_vel.size != self.position.size and self.target != None:
+            tar_vel = np.append(tar_vel, self.target[0].position[2] - self.position[2])
         #repulsive dirs to avoid collision
         rep_vel = self.repulsive_force(pursuers, self.collision_r)
         #returning sum of those
@@ -190,7 +190,7 @@ class Pursuer(Agent):
                     [s,  c]])
         return R @ v
 
-    def form_vortex_field(self, unit: Prime_unit):
+    def form_vortex_field_ellipse(self, unit: Prime_unit):
         my_pos = self.position
         unit_pos = unit.position
         unit_vel = unit.curr_speed
@@ -199,20 +199,19 @@ class Pursuer(Agent):
             unit_pos = np.delete(unit_pos, -1)
             unit_vel = np.delete(unit_vel, -1)
         rot_angle = np.arctan2(unit_vel[1], unit_vel[0])
-        axis_a = max(2.0*np.linalg.norm(unit_vel), self.formation_r)
-        axis_b = max(1.3*np.linalg.norm(unit_vel), self.formation_r)
-        if np.linalg.norm(unit_vel) <= 0.1:
+        rel_speed = np.linalg.norm(unit_vel) #/self.max_speed
+        axis_a = max(2.0*rel_speed, self.formation_r)
+        axis_b = max(1.3*rel_speed, self.formation_r)
+        if rel_speed <= 0.1:
             rel_center = np.array([0, 0])
         else:
             rel_center = np.array([-0.7*axis_a, 0])
         center = unit_pos - self.rotate(rel_center, rot_angle)
         #the center of the vortex field shifted in the current unit speed vector, because unit is moving
-        # rel_pos = my_pos - (unit_pos + unit_vel * self.dt * self.pred_time)
-        # rho = 1 - (rel_pos[0]**2/self.formation_r**2) - (rel_pos[1]**2/self.formation_r**2)
         rel_pos = self.rotate(my_pos - center, -rot_angle)
-        rel_norm_pos = self.rotate(my_pos - unit_pos, -rot_angle)
+        #rel_norm_pos = self.rotate(my_pos - unit_pos, -rot_angle)
         rho = 1 - (rel_pos[0]**2/axis_a**2) - (rel_pos[1]**2/axis_b**2)
-        loc_norm = np.array([2*rel_norm_pos[0]/axis_a**2, 2*rel_norm_pos[1]/axis_b**2])
+        loc_norm = np.array([2*rel_pos[0]/axis_a**2, 2*rel_pos[1]/axis_b**2])
         norm = self.rotate(loc_norm, rot_angle)
         normalized = norm/np.linalg.norm(norm)
         #inside of circle
@@ -226,7 +225,48 @@ class Pursuer(Agent):
         fdwrd = self.rotate(loc_fdwrd, rot_angle)
         fdbck = np.array([alpha*normalized[0]*rho, alpha*normalized[1]*rho])
         form_vel = self.circle_dir*fdwrd + fdbck
-        #form_vel = np.array([self.circle_dir*rel_pos[1] + alpha*rel_pos[0]*rho, -self.circle_dir*rel_pos[0] + alpha*rel_pos[1]*rho])
+        #safety measure
+        # diff_vec = my_pos - unit_pos
+        # dist = np.linalg.norm(diff_vec)
+        # safe_radius = 0.5
+        # avoidance_vel = np.zeros_like(form_vel)
+        # if dist < safe_radius and dist > 0.001:
+        #     push_dir = diff_vec / dist
+        #     repulsion_strength = 5.0 * (safe_radius - dist) / safe_radius 
+        #     avoidance_vel = push_dir * repulsion_strength
+        # final_vel = form_vel + avoidance_vel
+        return form_vel
+    
+    def form_vortex_field_circle(self, unit: Prime_unit):
+        my_pos = self.position
+        unit_pos = unit.position
+        unit_vel = unit.curr_speed
+        if self.position.size == 3:
+            my_pos = np.delete(my_pos, -1)
+            unit_pos = np.delete(unit_pos, -1)
+            unit_vel = np.delete(unit_vel, -1)
+        #the center of the vortex field shifted in the current unit speed vector, because unit is moving
+        rel_pos = my_pos - (unit_pos + unit_vel * self.dt * self.pred_time)
+        #rel_unit_pos = my_pos - unit_pos
+        rho = 1 - (rel_pos[0]**2/self.formation_r**2) - (rel_pos[1]**2/self.formation_r**2)
+        #inside of circle
+        if rho > 0:
+            alpha = 7.0
+        #outside of circle
+        else:
+            alpha = 1.0
+        #circle around center
+        form_vel = np.array([-self.circle_dir*rel_pos[1] + alpha*rel_pos[0]*rho, self.circle_dir*rel_pos[0] + alpha*rel_pos[1]*rho])
+        #safety measure
+        # diff_vec = my_pos - unit_pos
+        # dist = np.linalg.norm(diff_vec)
+        # safe_radius = 0.5
+        # avoidance_vel = np.zeros_like(form_vel)
+        # if dist < safe_radius and dist > 0.001:
+        #     push_dir = diff_vec / dist
+        #     repulsion_strength = 5.0 * (safe_radius - dist) / safe_radius 
+        #     avoidance_vel = push_dir * repulsion_strength * self.max_speed
+        # final_vel = form_vel + avoidance_vel
         return form_vel
     
     def pursue_target(self, target: list[Invader, int], purs: list[Agent], unit: Prime_unit):

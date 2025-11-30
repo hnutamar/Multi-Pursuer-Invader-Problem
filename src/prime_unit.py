@@ -64,9 +64,10 @@ class Prime_unit(Agent):
 
     def form_vortex_field(self):
         self.rot_angle = np.arctan2(self.curr_speed[1], self.curr_speed[0])
-        self.axis_a = max(2.0*np.linalg.norm(self.curr_speed), 2.5)
-        self.axis_b = max(1.3*np.linalg.norm(self.curr_speed), 2.5)
-        if np.linalg.norm(self.curr_speed) <= 0.1:
+        rel_speed = np.linalg.norm(self.curr_speed)/self.max_speed
+        self.axis_a = max(2.0*rel_speed, 2.5)
+        self.axis_b = max(1.3*rel_speed, 2.5)
+        if rel_speed <= 0.1:
             rel_center = np.array([0, 0])
         else:
             rel_center = np.array([-0.7*self.axis_a, 0])

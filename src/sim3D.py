@@ -7,7 +7,6 @@ from invader import Invader
 from prime_unit import Prime_unit
 from matplotlib.animation import FuncAnimation
 import sim_config3D as sc
-from scipy.optimize import linear_sum_assignment
 from pursuer_states import States
 from matplotlib.patches import Ellipse
 from mpl_toolkits.mplot3d import Axes3D

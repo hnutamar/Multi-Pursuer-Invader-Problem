@@ -200,6 +200,7 @@ class Pursuer(Agent):
             unit_vel = np.delete(unit_vel, -1)
         rot_angle = np.arctan2(unit_vel[1], unit_vel[0])
         rel_speed = np.linalg.norm(unit_vel) #/self.max_speed
+        #scaling axes
         axis_a = max(2.0*rel_speed, self.formation_r)
         axis_b = max(1.3*rel_speed, self.formation_r)
         if rel_speed <= 0.1:
@@ -210,7 +211,7 @@ class Pursuer(Agent):
         #the center of the vortex field shifted in the current unit speed vector, because unit is moving
         rel_pos = self.rotate(my_pos - center, -rot_angle)
         #rel_norm_pos = self.rotate(my_pos - unit_pos, -rot_angle)
-        rho = 1 - (rel_pos[0]**2/axis_a**2) - (rel_pos[1]**2/axis_b**2)
+        rho = 1 - (rel_pos[0]/axis_a)**2 - (rel_pos[1]/axis_b)**2
         loc_norm = np.array([2*rel_pos[0]/axis_a**2, 2*rel_pos[1]/axis_b**2])
         norm = self.rotate(loc_norm, rot_angle)
         normalized = norm/np.linalg.norm(norm)
@@ -241,6 +242,7 @@ class Pursuer(Agent):
         my_pos = self.position
         unit_pos = unit.position
         unit_vel = unit.curr_speed
+        #TODO: 3D circle
         if self.position.size == 3:
             my_pos = np.delete(my_pos, -1)
             unit_pos = np.delete(unit_pos, -1)
@@ -248,7 +250,7 @@ class Pursuer(Agent):
         #the center of the vortex field shifted in the current unit speed vector, because unit is moving
         rel_pos = my_pos - (unit_pos + unit_vel * self.dt * self.pred_time)
         #rel_unit_pos = my_pos - unit_pos
-        rho = 1 - (rel_pos[0]**2/self.formation_r**2) - (rel_pos[1]**2/self.formation_r**2)
+        rho = 1 - (rel_pos[0]/self.formation_r)**2 - (rel_pos[1]/self.formation_r)**2
         #inside of circle
         if rho > 0:
             alpha = 7.0
@@ -291,13 +293,14 @@ class Pursuer(Agent):
         self.prime_rep_in_purs = 2.9
         #the center of the vortex field is not shifted
         rel_pos = self.position - (target[0].position) #+ target[0].curr_speed * self.dt * self.pred_time)
-        rho = 1 - (rel_pos[0]**2/self.t_circle**2) - (rel_pos[1]**2/self.t_circle**2)
+        rho = 1 - (rel_pos[0]/self.t_circle)**2 - (rel_pos[1]/self.t_circle)**2
         #inside of circle
         if rho > 0:
-            alpha = 7.0
+            alpha = 4.0
         #outside of circle
         else:
             alpha = 1.0
+        #circling in opposite direction to defensive formation circle
         purs_vel = np.array([self.circle_dir*rel_pos[1] + alpha*rel_pos[0]*rho, -self.circle_dir*rel_pos[0] + alpha*rel_pos[1]*rho])
         # vel_norm = np.linalg.norm(purs_vel)
         # if vel_norm > 1e-8:
@@ -351,6 +354,8 @@ class Pursuer(Agent):
         PP_dir = PP_dir / np.linalg.norm(PP_dir)
         PP_dir = PP_dir * self.max_speed
         return PP_dir
+    
+# =============== CURRENTLY UNUSED CODE ======================
     
     # def attr_formation_force(self, unit: Prime_unit, purs: list[Agent]):
     #     form_ps = [p for p in purs if (p.state == States.FORM and np.linalg.norm(p.position - unit.position) < self.form_max[0])]

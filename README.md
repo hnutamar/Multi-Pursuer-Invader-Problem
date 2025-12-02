@@ -7,9 +7,13 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
-To use the simulator, run:
+To use 2D simulator, run:
 ```
 cd src/
-python sim2D.py #2D simulator
-python sim3D.py #3D simulator
+python sim2D.py
+```
+To use 3D simulator, run:
+```
+cd src/
+python sim3D.py
 ```

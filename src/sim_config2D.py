@@ -3,18 +3,19 @@ import numpy as np
 
 class Sim2DConfig:
     def __init__(self):
-        self.WORLD_WIDTH = 30
-        self.WORLD_HEIGHT = 30
+        self.WORLD_WIDTH = 20
+        self.WORLD_HEIGHT = 20
         
         self.CAPTURE_RAD = 0.3
         self.CRASH_RAD = 0.3
         self.UNIT_DOWN_RAD = 0.6
         
-        self.PURSUER_NUM = 10
-        self.INVADER_NUM = 5
+        self.PURSUER_NUM = 20
+        self.INVADER_NUM = 0
         
         self.DRONE_RAD = 0.3
         self.UNIT_RAD = 0.6
+        self.PURS_VIS = 3.0
         
         self.p_dots = []
         self.p_paths = []

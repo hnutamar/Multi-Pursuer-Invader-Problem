@@ -53,6 +53,7 @@ from matplotlib.patches import Ellipse
 class DroneSimulation:
     def __init__(self, sc_config, _3d=False):
         self._3d = _3d
+        self.anim = None
         #figure and plots init
         self.sc = sc_config
         self.ax = sc_config.ax
@@ -120,7 +121,7 @@ class DroneSimulation:
 
         #pursuer init
         for i in range(self.sc.PURSUER_NUM):
-            p = Pursuer(position=rnd_points_purs[i], max_acc=0.8, max_omega=1.5, num=i, purs_num=self.sc.PURSUER_NUM)
+            p = Pursuer(position=rnd_points_purs[i], max_acc=1.4, max_omega=1.5, num=i, purs_num=self.sc.PURSUER_NUM)
             self.pursuers.append(p)
             self.hist_pursuers[i].append(rnd_points_purs[i])
 
@@ -160,7 +161,7 @@ class DroneSimulation:
         
         dirs_p = []
         for purs in self.pursuers:
-            close_purs = [p for p in free_purs if np.linalg.norm(p.position - purs.position) <= purs.vis_r]
+            close_purs = [p for p in free_purs if np.linalg.norm(p.position - purs.position) <= self.sc.PURS_VIS]
             dirs_p.append(purs.pursue(free_inv, close_purs, self.prime))
 
         dir_u = self.prime.fly(self.way_point, free_inv, free_purs)
@@ -228,7 +229,7 @@ class DroneSimulation:
         #prime dots, paths
         self.sc.u_dot.set_data([self.prime.position[0]], [self.prime.position[1]])
         if self._3d:
-            self.sc.u_dot.set_3d_properties([p.position[2]])  
+            self.sc.u_dot.set_3d_properties([self.prime.position[2]])  
         pos_arr_u = np.array(self.hist_prime)
         self.sc.u_path.set_data(pos_arr_u[:, 0], pos_arr_u[:, 1])
         if self._3d:
@@ -237,8 +238,9 @@ class DroneSimulation:
         if not self._3d:
             self._update_ellipse()
         #if all invaders are captured, or prime unit was taken down or has finished, the animation will end
-        # if (self.captured_count >= sc.INVADER_NUM and self.prime.finished) or self.prime.took_down: # or state["prime"].finished:
-        #     self.anim.event_source.stop()
+        # if (self.captured_count >= self.sc.INVADER_NUM and self.prime.finished) or self.prime.took_down: # or state["prime"].finished:
+        #     if self.anim is not None:
+        #         self.anim.event_source.stop()
         if self._3d:
             return self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths + \
                 [self.sc.u_dot, self.sc.u_path]

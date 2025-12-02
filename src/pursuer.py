@@ -21,11 +21,12 @@ class Pursuer(Agent):
         #radiuses
         self.prime_coll_r = 4.5
         self.collision_r = 2.0
-        self.vis_r = 3.0
+        #self.vis_r = 3.0
         #self.min_formation_r = 2.0
         #self.dist_formation = np.pi/1.8
         #self.formation_r = max(self.purs_num*self.dist_formation/(2*np.pi), self.min_formation_r)
         self.formation_r = 2.5
+        self.formation_r_min = 1.5
         #print(self.formation_r)
         self.capture_r = 10.0
         self.capture_max = 20.0
@@ -47,7 +48,7 @@ class Pursuer(Agent):
         #list of targets
         self.ignored_targs = {}
         self.circle_dir = 1
-        self.pred_time = 10
+        self.pred_time = 20
         self.purs_types = {"circling": 1,
                            "const_bear": 2,
                            "pure_pursuit": 3}
@@ -83,7 +84,7 @@ class Pursuer(Agent):
         if np.array_equal(tar_vel, form_vel):
             self.target = None
             self.state = States.FORM
-            form_vel = self.form_vortex_field_ellipse(prime_unit)
+            form_vel = self.form_vortex_field_circle(prime_unit)
         if form_vel.size != self.position.size:
             form_vel = np.append(form_vel, prime_unit.position[2] - self.position[2])
         if tar_vel.size != self.position.size and self.target != None:
@@ -238,6 +239,10 @@ class Pursuer(Agent):
         # final_vel = form_vel + avoidance_vel
         return form_vel
     
+    def sigmoid(self, x):
+        #sigmoid function
+        return 1 / (1 + np.exp(-x))
+    
     def form_vortex_field_circle(self, unit: Prime_unit):
         my_pos = self.position
         unit_pos = unit.position
@@ -249,8 +254,14 @@ class Pursuer(Agent):
             unit_vel = np.delete(unit_vel, -1)
         #the center of the vortex field shifted in the current unit speed vector, because unit is moving
         rel_pos = my_pos - (unit_pos + unit_vel * self.dt * self.pred_time)
-        #rel_unit_pos = my_pos - unit_pos
-        rho = 1 - (rel_pos[0]/self.formation_r)**2 - (rel_pos[1]/self.formation_r)**2
+        rel_unit_pos = my_pos - unit_pos
+        sigm = self.sigmoid(np.dot(unit_vel, rel_unit_pos))
+        form_r = sigm * self.formation_r + (1 - sigm) * self.formation_r
+        # if np.dot(unit_vel, rel_unit_pos) >= 0:
+        #     form_r = self.formation_r
+        # else:
+        #     form_r = self.formation_r_min
+        rho = 1 - (rel_unit_pos[0]/form_r)**2 - (rel_unit_pos[1]/form_r)**2
         #inside of circle
         if rho > 0:
             alpha = 7.0
@@ -258,7 +269,7 @@ class Pursuer(Agent):
         else:
             alpha = 1.0
         #circle around center
-        form_vel = np.array([-self.circle_dir*rel_pos[1] + alpha*rel_pos[0]*rho, self.circle_dir*rel_pos[0] + alpha*rel_pos[1]*rho])
+        form_vel = np.array([-self.circle_dir*rel_pos[1] + alpha*rel_unit_pos[0]*rho, self.circle_dir*rel_pos[0] + alpha*rel_unit_pos[1]*rho])
         #safety measure
         # diff_vec = my_pos - unit_pos
         # dist = np.linalg.norm(diff_vec)
@@ -268,7 +279,7 @@ class Pursuer(Agent):
         #     push_dir = diff_vec / dist
         #     repulsion_strength = 5.0 * (safe_radius - dist) / safe_radius 
         #     avoidance_vel = push_dir * repulsion_strength * self.max_speed
-        # final_vel = form_vel + avoidance_vel
+        # form_vel = form_vel + avoidance_vel
         return form_vel
     
     def pursue_target(self, target: list[Invader, int], purs: list[Agent], unit: Prime_unit):

@@ -2,3 +2,4 @@ numpy
 matplotlib
 scipy
 PyQt5
+ipykernel

@@ -52,7 +52,7 @@ from mpl_toolkits.mplot3d import Axes3D
 #     return
 
 class DroneSimulation:
-    def __init__(self, sc_config, _3d=False):
+    def __init__(self, sc_config, _3d=False, purs_acc=None, prime_acc=None, inv_acc=None):
         self._3d = _3d
         self.anim = None
         #figure and plots init
@@ -72,12 +72,12 @@ class DroneSimulation:
         self.hist_invaders = [[] for _ in range(self.sc.INVADER_NUM)]
         
         #init of agents
-        self._init_agents()
+        self._init_agents(purs_acc, prime_acc, inv_acc)
         
         #init of graphics
         self._init_graphics()
 
-    def _init_agents(self):
+    def _init_agents(self, purs_acc, prime_acc, inv_acc):
         #borders and waypoint for prime unit
         x_border = self.sc.WORLD_WIDTH / 6
         y_border = self.sc.WORLD_HEIGHT / 6
@@ -86,13 +86,15 @@ class DroneSimulation:
             self.way_point = np.array([self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border, self.sc.WORLD_Z - z_border])
         else:
             self.way_point = np.array([self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border])
+            #self.way_point = np.array([15.0, 15.0])
         
         #prime unit init
+        acc_prime = prime_acc or 0.1
         if self._3d:
             pos_u = [3.0, 3.0, 3.0]
         else:
             pos_u = [3.0, 3.0]
-        self.prime = Prime_unit(position=pos_u, max_acc=0.1, max_omega=1.0)
+        self.prime = Prime_unit(position=pos_u, max_acc=acc_prime, max_omega=1.0)
         self.hist_prime.append(pos_u)
 
         #init positions and acceleration of agents (random)
@@ -118,11 +120,11 @@ class DroneSimulation:
                 high=[self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border], 
                 size=(self.sc.INVADER_NUM, 2)
             )
-        rnd_acc_inv = np.random.uniform(low=0.6, high=1.2, size=(self.sc.INVADER_NUM,))
-
+        rnd_acc_inv = np.full(self.sc.INVADER_NUM, inv_acc) if inv_acc is not None else np.random.uniform(low=0.6, high=1.0, size=(self.sc.INVADER_NUM,))
+        acc_purs = purs_acc or 1.0
         #pursuer init
         for i in range(self.sc.PURSUER_NUM):
-            p = Pursuer(position=rnd_points_purs[i], max_acc=1.0, max_omega=1.5, num=i, purs_num=self.sc.PURSUER_NUM)
+            p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, num=i, purs_num=self.sc.PURSUER_NUM)
             self.pursuers.append(p)
             self.hist_pursuers[i].append(rnd_points_purs[i])
 
@@ -299,9 +301,9 @@ class DroneSimulation:
         if frame % 5 == 0 and self._3d:
             self._update_vector_field_3D()
         #if all invaders are captured, or prime unit was taken down or has finished, the animation will end
-        if (self.captured_count >= self.sc.INVADER_NUM and self.prime.finished) or self.prime.took_down: # or state["prime"].finished:
-            if self.anim is not None:
-                self.anim.event_source.stop()
+        # if (self.captured_count >= self.sc.INVADER_NUM and self.prime.finished) or self.prime.took_down: # or state["prime"].finished:
+        #     if self.anim is not None:
+        #         self.anim.event_source.stop()
         if self._3d:
             return self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths + \
                 [self.sc.u_dot, self.sc.u_path, self.sc.quiver]

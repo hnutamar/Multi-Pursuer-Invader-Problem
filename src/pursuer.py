@@ -53,6 +53,7 @@ class Pursuer(Agent):
                            "const_bear": 2,
                            "pure_pursuit": 3}
         self.capture_cooldown = 100
+        self.ema_acc = np.zeros(3)
         
     def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit):
         #calculation of the formation
@@ -260,10 +261,6 @@ class Pursuer(Agent):
         rel_unit_pos = my_pos - unit_pos
         sigm = self.sigmoid(np.dot(unit_vel, rel_unit_pos))
         form_r = sigm * self.formation_r + (1 - sigm) * self.formation_r_min
-        # if np.dot(unit_vel, rel_unit_pos) >= 0:
-        #     form_r = self.formation_r
-        # else:
-        #     form_r = self.formation_r_min
         rho = 1 - (rel_unit_pos[0]/form_r)**2 - (rel_unit_pos[1]/form_r)**2
         #inside of circle
         if rho > 0:
@@ -276,11 +273,13 @@ class Pursuer(Agent):
         return form_vel
     
     def pursue_target(self, target: list[Invader, int], purs: list[Agent], unit: Prime_unit):
+        tar_speed = np.linalg.norm(target[0].curr_speed)
+        my_speed = self.max_speed
         #if target is faster then pursuer, just pure pursue him
-        if np.linalg.norm(target[0].curr_speed) >= self.max_speed: #or target[1] != self.purs_types['circling']:
+        if tar_speed >= my_speed: #or target[1] != self.purs_types['circling']:
             return self.pursuit_pure_pursuit(target)
         #still too fast for encirclement, CB him
-        elif np.linalg.norm(target[0].curr_speed) >= self.max_speed/2:
+        elif tar_speed >= my_speed/2:
             return self.pursuit_constant_bearing(target)
         #if more then one is chasing him and he is further from unit, circle him
         if np.linalg.norm(unit.position - target[0].position) >= self.safe_circle_r:
@@ -381,37 +380,31 @@ class Pursuer(Agent):
     #     #u = self.KP * (direction - self.curr_speed) - self.KD * self.curr_speed
     #     return att_dir
     
-    # def pursuit_augmented_PN(self, target: Invader, dt=0.1, N=3.0, debug=False):
-    #     _ema_target_acc = np.zeros_like(target.curr_acc)
-    #     #geometry
+    # def pursuit_augmented_PN(self, target, dt=0.1, N=3.0, debug=False):
+    #     if self.ema_acc.shape != target.curr_acc.shape:
+    #         self.ema_acc = np.zeros_like(target.curr_acc)
     #     r = target.position - self.position
     #     r_norm = np.linalg.norm(r)
-    #     if r_norm < 1e-8:
+    #     if r_norm < 1e-4:
     #         return self.curr_speed.copy()
     #     r_hat = r / r_norm
     #     v_rel = target.curr_speed - self.curr_speed
     #     V_c = -np.dot(v_rel, r_hat)
-    #     LOS_der = (v_rel - np.dot(v_rel, r_hat) * r_hat) / (r_norm + 1e-12)
-    #     #EMA filter
+    #     LOS_der = (v_rel - np.dot(v_rel, r_hat) * r_hat) / r_norm
     #     alpha = 0.2
-    #     _ema_target_acc = alpha * target.curr_acc + (1.0 - alpha) * _ema_target_acc
-    #     a_T = _ema_target_acc
+    #     self.ema_acc = alpha * target.curr_acc + (1.0 - alpha) * self.ema_acc
+    #     a_T = self.ema_acc
     #     a_T_perp = a_T - np.dot(a_T, r_hat) * r_hat
-    #     #PN term
-    #     V_c_eff = V_c / (1 + np.exp(-20 * V_c))  #sigmoid
-    #     pn_term = N * V_c_eff * LOS_der
-    #     #debug
+    #     closing_speed_for_gain = max(V_c, 1.0)
+    #     pn_term = N * closing_speed_for_gain * LOS_der
+    #     apn_term = (N / 2) * a_T_perp
+    #     acc_cmd = pn_term + apn_term
+    #     # DEBUG
     #     if debug:
-    #         pn_n = np.linalg.norm(pn_term)
-    #         at_n = np.linalg.norm(a_T_perp)
-    #         dot = np.dot(pn_term, a_T_perp)
-    #         angle = np.degrees(np.arccos(np.clip(dot / (pn_n*at_n + 1e-12), -1, 1)))
-    #         print(f"pn_term={pn_term}, |pn|={pn_n:.6f}; a_T_perp={a_T_perp}, |aTperp|={at_n:.6f}; angle={angle:.2f} deg; V_c={V_c:.3f}, |LOS'|={np.linalg.norm(LOS_der):.6f}")
-    #     APN_u = pn_term + 0.3*a_T_perp
-    #     acc_norm = np.linalg.norm(APN_u)
-    #     if acc_norm > self.max_acc:
-    #         APN_u = APN_u / acc_norm * self.max_acc
-    #     v_new = self.curr_speed + APN_u * dt
+    #         print(f"PN_force: {np.linalg.norm(pn_term):.2f}, APN_force: {np.linalg.norm(apn_term):.2f}")
+    #     if np.linalg.norm(acc_cmd) > self.max_acc:
+    #         acc_cmd = acc_cmd / np.linalg.norm(acc_cmd) * self.max_acc
+    #     v_new = self.curr_speed + acc_cmd * dt
     #     speed = np.linalg.norm(v_new)
     #     if speed > self.max_speed:
     #         v_new = v_new / speed * self.max_speed

@@ -9,6 +9,7 @@ from matplotlib.animation import FuncAnimation
 #from scipy.optimize import linear_sum_assignment
 from pursuer_states import States
 from matplotlib.patches import Ellipse
+from mpl_toolkits.mplot3d import Axes3D
 
 # def minimize_max_fast(cost):
 #     vals = np.unique(cost)
@@ -117,11 +118,11 @@ class DroneSimulation:
                 high=[self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border], 
                 size=(self.sc.INVADER_NUM, 2)
             )
-        rnd_acc_inv = np.random.uniform(low=0.9, high=1.7, size=(self.sc.INVADER_NUM,))
+        rnd_acc_inv = np.random.uniform(low=0.6, high=1.2, size=(self.sc.INVADER_NUM,))
 
         #pursuer init
         for i in range(self.sc.PURSUER_NUM):
-            p = Pursuer(position=rnd_points_purs[i], max_acc=1.4, max_omega=1.5, num=i, purs_num=self.sc.PURSUER_NUM)
+            p = Pursuer(position=rnd_points_purs[i], max_acc=1.0, max_omega=1.5, num=i, purs_num=self.sc.PURSUER_NUM)
             self.pursuers.append(p)
             self.hist_pursuers[i].append(rnd_points_purs[i])
 
@@ -150,6 +151,64 @@ class DroneSimulation:
         self.ellipse_patch.width = self.prime.axis_a * 2
         self.ellipse_patch.height = self.prime.axis_b * 2
         self.ellipse_patch.angle = self.prime.rot_angle * (180 / np.pi)
+        
+    def _update_vector_field_3D(self):
+            unit = self.prime
+            center = unit.position
+            span = np.linspace(-self.sc.FIELD_SIZE, self.sc.FIELD_SIZE, self.sc.FIELD_RES)
+            dx, dy = np.meshgrid(span, span)
+            grid_x = center[0] + dx
+            grid_y = center[1] + dy
+            grid_z = np.full_like(grid_x, center[2])
+            u_arrows = []
+            v_arrows = []
+            w_arrows = []
+            if not self.pursuers:
+                return
+            ref_pursuer = self.pursuers[0] 
+            rows, cols = grid_x.shape
+            for r in range(rows):
+                for c in range(cols):
+                    test_pos = np.array([grid_x[r, c], grid_y[r, c], center[2]])
+                    force_vec = ref_pursuer.form_vortex_field_circle(unit, mock_position=test_pos)
+                    norm = np.linalg.norm(force_vec)
+                    if norm > 0:
+                        force_vec = force_vec / norm * 0.8
+                    u_arrows.append(force_vec[0])
+                    v_arrows.append(force_vec[1])
+                    w_arrows.append(0)
+            if self.sc.quiver is not None:
+                self.sc.quiver.remove()
+            self.sc.quiver = self.ax.quiver(
+                grid_x.flatten(), grid_y.flatten(), grid_z.flatten(),
+                u_arrows, v_arrows, w_arrows,
+                normalize=False, color='#6fa840', alpha=0.7, 
+                arrow_length_ratio=0.3, linewidths=1.5, zorder=10
+            )
+        
+    def _update_vector_field(self):
+            unit = self.prime
+            center = unit.position
+            grid_x = self.sc.grid_x_base + center[0]
+            grid_y = self.sc.grid_y_base + center[1]
+            u_arrows = []
+            v_arrows = []
+            if not self.pursuers:
+                return
+            ref_pursuer = self.pursuers[0]
+            flat_x = grid_x.flatten()
+            flat_y = grid_y.flatten()
+            for x, y in zip(flat_x, flat_y):
+                test_pos = np.array([x, y])
+                force_vec = ref_pursuer.form_vortex_field_circle(unit, mock_position=test_pos)
+                norm = np.linalg.norm(force_vec)
+                if norm > 0:
+                    force_vec = force_vec / norm
+                u_arrows.append(force_vec[0])
+                v_arrows.append(force_vec[1])
+            new_offsets = np.column_stack((flat_x, flat_y))
+            self.sc.quiver.set_offsets(new_offsets)
+            self.sc.quiver.set_UVC(u_arrows, v_arrows)
 
     def update(self, frame):
         #lists of not crashed drones
@@ -234,21 +293,26 @@ class DroneSimulation:
         self.sc.u_path.set_data(pos_arr_u[:, 0], pos_arr_u[:, 1])
         if self._3d:
             self.sc.u_path.set_3d_properties(pos_arr_u[:,2])
-        #ellipse
+        #vortex field
         if not self._3d:
-            self._update_ellipse()
+            self._update_vector_field()
+        if frame % 5 == 0 and self._3d:
+            self._update_vector_field_3D()
         #if all invaders are captured, or prime unit was taken down or has finished, the animation will end
-        # if (self.captured_count >= self.sc.INVADER_NUM and self.prime.finished) or self.prime.took_down: # or state["prime"].finished:
-        #     if self.anim is not None:
-        #         self.anim.event_source.stop()
+        if (self.captured_count >= self.sc.INVADER_NUM and self.prime.finished) or self.prime.took_down: # or state["prime"].finished:
+            if self.anim is not None:
+                self.anim.event_source.stop()
         if self._3d:
             return self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths + \
-                [self.sc.u_dot, self.sc.u_path]
+                [self.sc.u_dot, self.sc.u_path, self.sc.quiver]
         else:
             return self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths + \
-                [self.sc.u_dot, self.sc.u_path, self.ellipse_patch]
+                [self.sc.u_dot, self.sc.u_path, self.sc.quiver]
 
     def run(self):
         #running the animation
-        self.anim = FuncAnimation(self.fig, self.update, frames=200, interval=50, blit=True)
+        if self._3d:
+            self.anim = FuncAnimation(self.fig, self.update, frames=200, interval=50, blit=False)
+        else:
+            self.anim = FuncAnimation(self.fig, self.update, frames=200, interval=50, blit=True)
         plt.show()

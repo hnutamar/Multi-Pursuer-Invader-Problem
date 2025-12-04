@@ -243,8 +243,11 @@ class Pursuer(Agent):
         #sigmoid function
         return 1 / (1 + np.exp(-x))
     
-    def form_vortex_field_circle(self, unit: Prime_unit):
-        my_pos = self.position
+    def form_vortex_field_circle(self, unit: Prime_unit, mock_position=None):
+        if mock_position is not None:
+            my_pos = mock_position
+        else:
+            my_pos = self.position
         unit_pos = unit.position
         unit_vel = unit.curr_speed
         #TODO: 3D circle
@@ -253,10 +256,10 @@ class Pursuer(Agent):
             unit_pos = np.delete(unit_pos, -1)
             unit_vel = np.delete(unit_vel, -1)
         #the center of the vortex field shifted in the current unit speed vector, because unit is moving
-        rel_pos = my_pos - (unit_pos + unit_vel * self.dt * self.pred_time)
+        #rel_pos = my_pos - (unit_pos + unit_vel * self.dt * self.pred_time)
         rel_unit_pos = my_pos - unit_pos
         sigm = self.sigmoid(np.dot(unit_vel, rel_unit_pos))
-        form_r = sigm * self.formation_r + (1 - sigm) * self.formation_r
+        form_r = sigm * self.formation_r + (1 - sigm) * self.formation_r_min
         # if np.dot(unit_vel, rel_unit_pos) >= 0:
         #     form_r = self.formation_r
         # else:
@@ -267,19 +270,9 @@ class Pursuer(Agent):
             alpha = 7.0
         #outside of circle
         else:
-            alpha = 1.0
+            alpha = 0.5
         #circle around center
-        form_vel = np.array([-self.circle_dir*rel_pos[1] + alpha*rel_unit_pos[0]*rho, self.circle_dir*rel_pos[0] + alpha*rel_unit_pos[1]*rho])
-        #safety measure
-        # diff_vec = my_pos - unit_pos
-        # dist = np.linalg.norm(diff_vec)
-        # safe_radius = 0.5
-        # avoidance_vel = np.zeros_like(form_vel)
-        # if dist < safe_radius and dist > 0.001:
-        #     push_dir = diff_vec / dist
-        #     repulsion_strength = 5.0 * (safe_radius - dist) / safe_radius 
-        #     avoidance_vel = push_dir * repulsion_strength * self.max_speed
-        # form_vel = form_vel + avoidance_vel
+        form_vel = np.array([-self.circle_dir*rel_unit_pos[1] + alpha*rel_unit_pos[0]*rho, self.circle_dir*rel_unit_pos[0] + alpha*rel_unit_pos[1]*rho])
         return form_vel
     
     def pursue_target(self, target: list[Invader, int], purs: list[Agent], unit: Prime_unit):

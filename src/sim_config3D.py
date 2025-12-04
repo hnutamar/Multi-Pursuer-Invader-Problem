@@ -26,8 +26,13 @@ class Sim3DConfig:
         self.i_paths = []
         self.u_dot = None
         self.u_path = None
+        
+        self.FIELD_RES = 15
+        self.FIELD_SIZE = 4
 
         self._init_plot()
+        
+        self.quiver = None
         
     def _init_plot(self):
         self.fig = plt.figure(figsize=(8, 8))

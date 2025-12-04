@@ -3,15 +3,15 @@ import numpy as np
 
 class Sim2DConfig:
     def __init__(self):
-        self.WORLD_WIDTH = 20
-        self.WORLD_HEIGHT = 20
+        self.WORLD_WIDTH = 30
+        self.WORLD_HEIGHT = 30
         
         self.CAPTURE_RAD = 0.3
         self.CRASH_RAD = 0.3
         self.UNIT_DOWN_RAD = 0.6
         
-        self.PURSUER_NUM = 20
-        self.INVADER_NUM = 0
+        self.PURSUER_NUM = 10
+        self.INVADER_NUM = 2
         
         self.DRONE_RAD = 0.3
         self.UNIT_RAD = 0.6
@@ -23,6 +23,9 @@ class Sim2DConfig:
         self.i_paths = []
         self.u_dot = None
         self.u_path = None
+        
+        self.FIELD_RES = 15
+        self.FIELD_SIZE = 4
 
         self._init_plot()
 
@@ -66,3 +69,13 @@ class Sim2DConfig:
         #prime
         self.u_dot, = self.ax.plot([], [], 'o', color="#10ec22", label='Prime Unit', markersize=self.prime_in_pixels)
         self.u_path, = self.ax.plot([], [], '--', color="#77cc70", alpha=0.6, linewidth=3.0)
+        
+        #visual for vortex field
+        x = np.linspace(-self.FIELD_SIZE, self.FIELD_SIZE, self.FIELD_RES)
+        y = np.linspace(-self.FIELD_SIZE, self.FIELD_SIZE, self.FIELD_RES)
+        self.grid_x_base, self.grid_y_base = np.meshgrid(x, y)
+        self.quiver = self.ax.quiver(
+            self.grid_x_base, self.grid_y_base, 
+            np.zeros_like(self.grid_x_base), np.zeros_like(self.grid_y_base),
+            color="#6fa840", alpha=0.7, pivot='mid', scale=20, width=0.003
+        )

@@ -11,48 +11,8 @@ from pursuer_states import States
 from matplotlib.patches import Ellipse
 from mpl_toolkits.mplot3d import Axes3D
 
-# def minimize_max_fast(cost):
-#     vals = np.unique(cost)
-#     lo, hi = 0, len(vals) - 1
-#     best_T = None
-#     best_assign = None
-#     while lo <= hi:
-#         mid = (lo + hi) // 2
-#         T = vals[mid]
-#         masked = np.where(cost <= T, cost, 1e9)
-#         row_ind, col_ind = linear_sum_assignment(masked)
-#         if (cost[row_ind, col_ind] <= T).all():
-#             best_T = T
-#             best_assign = list(col_ind)
-#             hi = mid - 1
-#         else:
-#             lo = mid + 1
-#     return best_assign
-
-# def formation_calculator(purs: list[Pursuer], unit: Prime_unit, form_max: float):
-#     #pursuers in state FORM and close to prime unit
-#     form_ps = [p for p in purs if (p.state == States.FORM and np.linalg.norm(p.position - state["prime"].position) < form_max)]
-#     n = len(form_ps)
-#     if n == 0:
-#         return
-#     #radius and angles of the formation
-#     formation_r = max(n*form_ps[0].dist_formation/(np.pi*2), form_ps[0].min_formation_r)
-#     angle_piece = 2*np.pi/n
-#     angles = np.arange(n)*angle_piece
-#     #calculation of distance from every pos in formation to every drone
-#     cx, cy = unit.position
-#     form_pos = np.stack([cx + formation_r * np.cos(angles), cy + formation_r * np.sin(angles)], axis=1)
-#     pos_now = np.array([pur.position for pur in form_ps])
-#     diff = pos_now[:, np.newaxis, :] - form_pos[np.newaxis, :, :]
-#     D = np.linalg.norm(diff, axis=2)
-#     #minimax solver - that is finding the minimal maximal distance drone has to fly
-#     col_idx = minimize_max_fast(D)
-#     for i in range(n):
-#         form_ps[i].num = col_idx[i]
-#     return
-
 class DroneSimulation:
-    def __init__(self, sc_config, _3d=False, purs_acc=None, prime_acc=None, inv_acc=None):
+    def __init__(self, sc_config, _3d=False, purs_acc=None, prime_acc=None, inv_acc=None, inv_control=False):
         self._3d = _3d
         self.anim = None
         #figure and plots init
@@ -73,9 +33,19 @@ class DroneSimulation:
         
         #init of agents
         self._init_agents(purs_acc, prime_acc, inv_acc)
+        self.crash_enabled = 100
+        self.purs_crash = False
         
         #init of graphics
-        self._init_graphics()
+        #self._init_graphics()
+        
+        #manual control
+        self.manual_control = inv_control
+        if self.manual_control:
+            self.manual_vel = np.zeros(3) if self._3d else np.zeros(2)
+            #connecting key events
+            self.fig.canvas.mpl_connect('key_press_event', self._on_key_press)
+            self.fig.canvas.mpl_connect('key_release_event', self._on_key_release)
 
     def _init_agents(self, purs_acc, prime_acc, inv_acc):
         #borders and waypoint for prime unit
@@ -120,7 +90,7 @@ class DroneSimulation:
                 high=[self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border], 
                 size=(self.sc.INVADER_NUM, 2)
             )
-        rnd_acc_inv = np.full(self.sc.INVADER_NUM, inv_acc) if inv_acc is not None else np.random.uniform(low=0.6, high=1.0, size=(self.sc.INVADER_NUM,))
+        rnd_acc_inv = np.full(self.sc.INVADER_NUM, inv_acc) if inv_acc is not None else np.random.uniform(low=0.3, high=0.5, size=(self.sc.INVADER_NUM,))
         acc_purs = purs_acc or 1.0
         #pursuer init
         for i in range(self.sc.PURSUER_NUM):
@@ -155,70 +125,116 @@ class DroneSimulation:
         self.ellipse_patch.angle = self.prime.rot_angle * (180 / np.pi)
         
     def _update_vector_field_3D(self):
-            unit = self.prime
-            center = unit.position
-            span = np.linspace(-self.sc.FIELD_SIZE, self.sc.FIELD_SIZE, self.sc.FIELD_RES)
-            dx, dy = np.meshgrid(span, span)
-            grid_x = center[0] + dx
-            grid_y = center[1] + dy
-            grid_z = np.full_like(grid_x, center[2])
-            u_arrows = []
-            v_arrows = []
-            w_arrows = []
-            if not self.pursuers:
-                return
-            ref_pursuer = self.pursuers[0] 
-            rows, cols = grid_x.shape
-            for r in range(rows):
-                for c in range(cols):
-                    test_pos = np.array([grid_x[r, c], grid_y[r, c], center[2]])
-                    force_vec = ref_pursuer.form_vortex_field_circle(unit, mock_position=test_pos)
-                    norm = np.linalg.norm(force_vec)
-                    if norm > 0:
-                        force_vec = force_vec / norm * 0.8
-                    u_arrows.append(force_vec[0])
-                    v_arrows.append(force_vec[1])
-                    w_arrows.append(0)
-            if self.sc.quiver is not None:
-                self.sc.quiver.remove()
-            self.sc.quiver = self.ax.quiver(
-                grid_x.flatten(), grid_y.flatten(), grid_z.flatten(),
-                u_arrows, v_arrows, w_arrows,
-                normalize=False, color='#6fa840', alpha=0.7, 
-                arrow_length_ratio=0.3, linewidths=1.5, zorder=10
-            )
-        
-    def _update_vector_field(self):
-            unit = self.prime
-            center = unit.position
-            grid_x = self.sc.grid_x_base + center[0]
-            grid_y = self.sc.grid_y_base + center[1]
-            u_arrows = []
-            v_arrows = []
-            if not self.pursuers:
-                return
-            ref_pursuer = self.pursuers[0]
-            flat_x = grid_x.flatten()
-            flat_y = grid_y.flatten()
-            for x, y in zip(flat_x, flat_y):
-                test_pos = np.array([x, y])
+        #making quiver graph, visualizing vortex field in 3D
+        unit = self.prime
+        center = unit.position
+        span = np.linspace(-self.sc.FIELD_SIZE, self.sc.FIELD_SIZE, self.sc.FIELD_RES)
+        dx, dy = np.meshgrid(span, span)
+        grid_x = center[0] + dx
+        grid_y = center[1] + dy
+        grid_z = np.full_like(grid_x, center[2])
+        u_arrows = []
+        v_arrows = []
+        w_arrows = []
+        if not self.pursuers:
+            return
+        ref_pursuer = self.pursuers[0] 
+        rows, cols = grid_x.shape
+        for r in range(rows):
+            for c in range(cols):
+                test_pos = np.array([grid_x[r, c], grid_y[r, c], center[2]])
                 force_vec = ref_pursuer.form_vortex_field_circle(unit, mock_position=test_pos)
                 norm = np.linalg.norm(force_vec)
                 if norm > 0:
-                    force_vec = force_vec / norm
+                    force_vec = force_vec / norm * 0.8
                 u_arrows.append(force_vec[0])
                 v_arrows.append(force_vec[1])
-            new_offsets = np.column_stack((flat_x, flat_y))
-            self.sc.quiver.set_offsets(new_offsets)
-            self.sc.quiver.set_UVC(u_arrows, v_arrows)
+                w_arrows.append(0)
+        if self.sc.quiver is not None:
+            self.sc.quiver.remove()
+        self.sc.quiver = self.ax.quiver(
+            grid_x.flatten(), grid_y.flatten(), grid_z.flatten(),
+            u_arrows, v_arrows, w_arrows,
+            normalize=False, color='#6fa840', alpha=0.7, 
+            arrow_length_ratio=0.3, linewidths=1.5, zorder=10
+        )
+        
+    def _update_vector_field(self):
+        #making quiver graph, visualizing vortex field
+        unit = self.prime
+        center = unit.position
+        grid_x = self.sc.grid_x_base + center[0]
+        grid_y = self.sc.grid_y_base + center[1]
+        u_arrows = []
+        v_arrows = []
+        if not self.pursuers:
+            return
+        ref_pursuer = self.pursuers[0]
+        flat_x = grid_x.flatten()
+        flat_y = grid_y.flatten()
+        for x, y in zip(flat_x, flat_y):
+            test_pos = np.array([x, y])
+            force_vec = ref_pursuer.form_vortex_field_circle(unit, mock_position=test_pos)
+            norm = np.linalg.norm(force_vec)
+            if norm > 0:
+                force_vec = force_vec / norm
+            u_arrows.append(force_vec[0])
+            v_arrows.append(force_vec[1])
+        new_offsets = np.column_stack((flat_x, flat_y))
+        self.sc.quiver.set_offsets(new_offsets)
+        self.sc.quiver.set_UVC(u_arrows, v_arrows)
+            
+    def _on_key_press(self, event):
+        # controls on arrows
+        if event.key == 'up':
+            self.manual_vel[1] = 1.0
+        elif event.key == 'down':
+            self.manual_vel[1] = -1.0
+        elif event.key == 'left':
+            self.manual_vel[0] = -1.0
+        elif event.key == 'right':
+            self.manual_vel[0] = 1.0
+        
+        #for 3D up and down with w and s
+        if self._3d:
+            if event.key == 'w':
+                self.manual_vel[2] = 1.0
+            elif event.key == 's':
+                self.manual_vel[2] = -1.0
+
+    def _on_key_release(self, event):
+        #on key release, velocity is zero
+        if event.key in ['up', 'down']:
+            self.manual_vel[1] = 0.0
+        elif event.key in ['left', 'right']:
+            self.manual_vel[0] = 0.0
+        
+        if self._3d and event.key in ['w', 's']:
+            self.manual_vel[2] = 0.0
 
     def update(self, frame):
         #lists of not crashed drones
-        free_inv = [inv for inv in self.invaders if not inv.captured]
-        free_purs = [pur for pur in self.pursuers if pur.state != States.CRASHED]
+        free_inv = [inv for inv in self.invaders if not inv.crashed]
+        free_purs = [pur for pur in self.pursuers if not pur.crashed]
 
-        #AI path decision
-        dirs_i = [inv.evade(free_purs, self.prime) for inv in self.invaders]
+        #AI path decision + manual
+        dirs_i = []
+        for idx, inv in enumerate(self.invaders):
+            #if first invader is not captured and is manually controlled
+            if idx == 0 and not inv.crashed and self.manual_control:
+                #getting vector from keyboard
+                input_acc = self.manual_vel.copy()
+                acc_size = np.linalg.norm(input_acc)
+                if acc_size > 0:
+                    #giving max acc
+                    inv_acc = (input_acc / acc_size) * inv.max_acc 
+                else:
+                    #no keys are pressed, zero acc
+                    inv_acc = np.zeros_like(input_acc)
+                dirs_i.append(inv_acc)
+            #normal AI
+            else:
+                dirs_i.append(inv.evade(free_purs, self.prime))
         
         dirs_p = []
         for purs in self.pursuers:
@@ -245,23 +261,25 @@ class DroneSimulation:
         for p in free_purs:
             #capture check
             for i in free_inv:
-                if np.sum((p.position - i.position)**2) < self.sc.CAPTURE_RAD**2 and not i.captured:
+                if np.sum((p.position - i.position)**2) < self.sc.CAPTURE_RAD**2 and not i.crashed:
                     self.captured_count += 1
-                    i.captured = True
+                    i.crashed = True
                     if i.pursuer is not None:
                         i.pursuer.target = None
             #crash (pursuer and pursuer)
-            for other in free_purs:
-                if (other is not p) and np.sum((p.position - other.position)**2) < self.sc.CRASH_RAD**2:
-                    p.state = States.CRASHED
-                    other.state = States.CRASHED
+            if frame > self.crash_enabled or self.purs_crash:
+                self.purs_crash = True
+                for other in free_purs:
+                    if (other is not p) and np.sum((p.position - other.position)**2) < self.sc.CRASH_RAD**2:
+                        p.crashed = True
+                        other.crashed = True
             #crash (pursuer and prime)
             if np.sum((p.position - self.prime.position)**2) < self.sc.UNIT_DOWN_RAD**2:
-                self.prime.took_down = True
+                self.prime.crashed = True
         #crash (invader and prime)
         for i in self.invaders:
-            if not i.captured and np.sum((i.position - self.prime.position)**2) < self.sc.UNIT_DOWN_RAD**2:
-                self.prime.took_down = True
+            if not i.crashed and np.sum((i.position - self.prime.position)**2) < self.sc.UNIT_DOWN_RAD**2:
+                self.prime.crashed = True
 
         #updating graphics
         #pursuers dots, paths
@@ -298,15 +316,18 @@ class DroneSimulation:
         #vortex field
         if not self._3d:
             self._update_vector_field()
-        if frame % 5 == 0 and self._3d:
-            self._update_vector_field_3D()
+        #if frame % 5 == 0 and self._3d:
+        #    self._update_vector_field_3D()
         #if all invaders are captured, or prime unit was taken down or has finished, the animation will end
-        # if (self.captured_count >= self.sc.INVADER_NUM and self.prime.finished) or self.prime.took_down: # or state["prime"].finished:
+        # if (self.captured_count >= self.sc.INVADER_NUM and self.prime.finished) or self.prime.crashed: # or state["prime"].finished:
         #     if self.anim is not None:
         #         self.anim.event_source.stop()
+        
+        if frame == self.crash_enabled and not self.purs_crash:
+            print("crash enabled!")
         if self._3d:
             return self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths + \
-                [self.sc.u_dot, self.sc.u_path, self.sc.quiver]
+                [self.sc.u_dot, self.sc.u_path], #self.sc.quiver]
         else:
             return self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths + \
                 [self.sc.u_dot, self.sc.u_path, self.sc.quiver]
@@ -318,3 +339,45 @@ class DroneSimulation:
         else:
             self.anim = FuncAnimation(self.fig, self.update, frames=200, interval=50, blit=True)
         plt.show()
+
+
+# =============== CURRENTLY UNUSED CODE ======================
+# def minimize_max_fast(cost):
+#     vals = np.unique(cost)
+#     lo, hi = 0, len(vals) - 1
+#     best_T = None
+#     best_assign = None
+#     while lo <= hi:
+#         mid = (lo + hi) // 2
+#         T = vals[mid]
+#         masked = np.where(cost <= T, cost, 1e9)
+#         row_ind, col_ind = linear_sum_assignment(masked)
+#         if (cost[row_ind, col_ind] <= T).all():
+#             best_T = T
+#             best_assign = list(col_ind)
+#             hi = mid - 1
+#         else:
+#             lo = mid + 1
+#     return best_assign
+
+# def formation_calculator(purs: list[Pursuer], unit: Prime_unit, form_max: float):
+#     #pursuers in state FORM and close to prime unit
+#     form_ps = [p for p in purs if (p.state == States.FORM and np.linalg.norm(p.position - state["prime"].position) < form_max)]
+#     n = len(form_ps)
+#     if n == 0:
+#         return
+#     #radius and angles of the formation
+#     formation_r = max(n*form_ps[0].dist_formation/(np.pi*2), form_ps[0].min_formation_r)
+#     angle_piece = 2*np.pi/n
+#     angles = np.arange(n)*angle_piece
+#     #calculation of distance from every pos in formation to every drone
+#     cx, cy = unit.position
+#     form_pos = np.stack([cx + formation_r * np.cos(angles), cy + formation_r * np.sin(angles)], axis=1)
+#     pos_now = np.array([pur.position for pur in form_ps])
+#     diff = pos_now[:, np.newaxis, :] - form_pos[np.newaxis, :, :]
+#     D = np.linalg.norm(diff, axis=2)
+#     #minimax solver - that is finding the minimal maximal distance drone has to fly
+#     col_idx = minimize_max_fast(D)
+#     for i in range(n):
+#         form_ps[i].num = col_idx[i]
+#     return

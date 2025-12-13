@@ -65,10 +65,10 @@ class Pursuer(Agent):
         tar_vel = np.zeros_like(self.position)
         form_vel = np.zeros_like(self.position)
         #if crashed, dont move, you are supposed to be dead
-        if self.state == States.CRASHED:
+        if self.crashed:
             return tar_vel
         #previous target captured, back to formation
-        if self.target != None and self.target[0].captured == True:
+        if self.target != None and self.target[0].crashed == True:
             self.target = None
             self.state = States.FORM
         #pursuer having no target, finding target, if found, pursue it
@@ -78,7 +78,7 @@ class Pursuer(Agent):
             elif self.strategy_target_close(targets):
                 tar_vel = self.pursue_target(self.target, pursuers, prime_unit)
         #pursuer having target -> pursue it
-        elif self.target != None and self.target[0].captured == False:
+        elif self.target != None and self.target[0].crashed == False:
             if not (self.target[1] != self.purs_types["circling"] and np.linalg.norm(self.position - prime_unit.position) > self.capture_max): #min(self.capture_max, form_count * 3):
                 tar_vel = self.pursue_target(self.target, pursuers, prime_unit) 
         #if target dir is zero, pursuer has no target -> keep the formation
@@ -267,7 +267,7 @@ class Pursuer(Agent):
             alpha = 7.0
         #outside of circle
         else:
-            alpha = 0.5
+            alpha = 1.0
         #circle around center
         form_vel = np.array([-self.circle_dir*rel_unit_pos[1] + alpha*rel_unit_pos[0]*rho, self.circle_dir*rel_unit_pos[0] + alpha*rel_unit_pos[1]*rho])
         return form_vel

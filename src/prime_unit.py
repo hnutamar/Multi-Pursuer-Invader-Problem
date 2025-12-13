@@ -5,7 +5,6 @@ class Prime_unit(Agent):
     def __init__(self, position, max_acc, max_omega):
         super().__init__(position, max_acc, max_omega)
         self.finished = False
-        self.took_down = False
         #controler
         self.KP = 10.0
         self.KD = 0.1
@@ -20,13 +19,19 @@ class Prime_unit(Agent):
         self.t_circle = 7.0
         
     def fly(self, way_point, invaders, pursuers):
+        #finished, stay on this point
         if np.sum((self.position - way_point)**2) < 0.25:
             self.finished = True
+            return np.zeros_like(way_point)
+        #repulsive force against all drones
         rep_vel_i = self.repulsive_force(invaders, 3.0)
         rep_vel_p = self.repulsive_force(pursuers, 1.0)
+        #direction of the goal
         #goal_vel = self.vortex_circle(way_point)
         goal_vel = self.goal_force(way_point)
+        #summing all the velocities
         sum_vel = goal_vel + rep_vel_i + rep_vel_p
+        #making acceleration out of it
         sum_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
         return sum_acc
     

@@ -10,8 +10,8 @@ class Sim2DConfig:
         self.CRASH_RAD = 0.3
         self.UNIT_DOWN_RAD = 0.6
         
-        self.PURSUER_NUM = purs_num or 5
-        self.INVADER_NUM = inv_num or 0
+        self.PURSUER_NUM = purs_num or 15
+        self.INVADER_NUM = inv_num or 5
         
         self.DRONE_RAD = 0.3
         self.UNIT_RAD = 0.6

@@ -12,9 +12,12 @@ class Agent:
         self.max_speed = self.max_acc / self.CD
         self.dt = 0.1
         self.crashed = False
+        #only for prime
+        self.finished = False
 
     def move(self, acc):
-        if self.crashed:
+        if self.crashed or self.finished:
+            print("finished")
             return
         #safety
         if acc is None:

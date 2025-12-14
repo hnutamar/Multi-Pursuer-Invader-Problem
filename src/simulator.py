@@ -12,7 +12,8 @@ from matplotlib.patches import Ellipse
 from mpl_toolkits.mplot3d import Axes3D
 
 class DroneSimulation:
-    def __init__(self, sc_config, _3d=False, purs_acc=None, prime_acc=None, inv_acc=None, inv_control=False):
+    def __init__(self, sc_config, _3d=False, purs_acc=None, prime_acc=None, inv_acc=None, inv_control=False, 
+                 prime_pos=None, inv_pos=None, purs_pos=None, crash_enabled=100):
         self._3d = _3d
         self.anim = None
         #figure and plots init
@@ -32,8 +33,8 @@ class DroneSimulation:
         self.hist_invaders = [[] for _ in range(self.sc.INVADER_NUM)]
         
         #init of agents
-        self._init_agents(purs_acc, prime_acc, inv_acc)
-        self.crash_enabled = 100
+        self._init_agents(purs_acc, prime_acc, inv_acc, prime_pos, inv_pos, purs_pos)
+        self.crash_enabled = crash_enabled
         self.purs_crash = False
         
         #init of graphics
@@ -47,7 +48,7 @@ class DroneSimulation:
             self.fig.canvas.mpl_connect('key_press_event', self._on_key_press)
             self.fig.canvas.mpl_connect('key_release_event', self._on_key_release)
 
-    def _init_agents(self, purs_acc, prime_acc, inv_acc):
+    def _init_agents(self, purs_acc, prime_acc, inv_acc, prime_pos, inv_pos, purs_pos):
         #borders and waypoint for prime unit
         x_border = self.sc.WORLD_WIDTH / 6
         y_border = self.sc.WORLD_HEIGHT / 6
@@ -61,31 +62,31 @@ class DroneSimulation:
         #prime unit init
         acc_prime = prime_acc or 0.1
         if self._3d:
-            pos_u = [3.0, 3.0, 3.0]
+            pos_u = prime_pos if prime_pos is not None else np.array([3.0, 3.0, 3.0])
         else:
-            pos_u = [3.0, 3.0]
+            pos_u = prime_pos if prime_pos is not None else np.array([3.0, 3.0])
         self.prime = Prime_unit(position=pos_u, max_acc=acc_prime, max_omega=1.0)
         self.hist_prime.append(pos_u)
 
         #init positions and acceleration of agents (random)
         if self._3d:
-            rnd_points_purs = np.random.uniform(
+            rnd_points_purs = purs_pos if purs_pos is not None else np.random.uniform(
                 low=[-self.sc.PURSUER_NUM/2 - 2 + pos_u[0], -self.sc.PURSUER_NUM/2 - 2 + pos_u[1], pos_u[2]], 
                 high=[self.sc.PURSUER_NUM/2 + 2 + pos_u[0], self.sc.PURSUER_NUM/2 + 2 + pos_u[1], pos_u[2]], 
                 size=(self.sc.PURSUER_NUM, 3)
             )
-            rnd_points_inv = np.random.uniform(
+            rnd_points_inv = inv_pos if inv_pos is not None else np.random.uniform(
                 low=[self.sc.PURSUER_NUM/2 + 2 + pos_u[0], self.sc.PURSUER_NUM/2 + 2 + pos_u[1], pos_u[2]], 
                 high=[self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border, pos_u[2]], 
                 size=(self.sc.INVADER_NUM, 3)
             )
         else:
-            rnd_points_purs = np.random.uniform(
+            rnd_points_purs = purs_pos if purs_pos is not None else np.random.uniform(
                 low=[-self.sc.PURSUER_NUM/2 - 2 + pos_u[0], -self.sc.PURSUER_NUM/2 - 2 + pos_u[1]], 
                 high=[self.sc.PURSUER_NUM/2 + 2 + pos_u[0], self.sc.PURSUER_NUM/2 + 2 + pos_u[1]], 
                 size=(self.sc.PURSUER_NUM, 2)
             )
-            rnd_points_inv = np.random.uniform(
+            rnd_points_inv = inv_pos if inv_pos is not None else np.random.uniform(
                 low=[self.sc.PURSUER_NUM/2 + 2 + pos_u[0], self.sc.PURSUER_NUM/2 + 2 + pos_u[1]], 
                 high=[self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border], 
                 size=(self.sc.INVADER_NUM, 2)
@@ -319,7 +320,7 @@ class DroneSimulation:
         #if frame % 5 == 0 and self._3d:
         #    self._update_vector_field_3D()
         #if all invaders are captured, or prime unit was taken down or has finished, the animation will end
-        # if (self.captured_count >= self.sc.INVADER_NUM and self.prime.finished) or self.prime.crashed: # or state["prime"].finished:
+        # if (self.captured_count >= self.sc.INVADER_NUM and self.prime.finished) or self.prime.crashed:
         #     if self.anim is not None:
         #         self.anim.event_source.stop()
         

@@ -2,16 +2,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 class Sim2DConfig:
-    def __init__(self, purs_num=None, inv_num=None):
-        self.WORLD_WIDTH = 30
-        self.WORLD_HEIGHT = 30
+    def __init__(self, purs_num=15, inv_num=5, world_width=30, world_height=30):
+        self.WORLD_WIDTH = world_width
+        self.WORLD_HEIGHT = world_height
         
         self.CAPTURE_RAD = 0.3
         self.CRASH_RAD = 0.3
         self.UNIT_DOWN_RAD = 0.6
         
-        self.PURSUER_NUM = purs_num or 15
-        self.INVADER_NUM = inv_num or 5
+        self.PURSUER_NUM = purs_num
+        self.INVADER_NUM = inv_num
         
         self.DRONE_RAD = 0.3
         self.UNIT_RAD = 0.6

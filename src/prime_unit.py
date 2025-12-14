@@ -4,7 +4,6 @@ from agent import Agent
 class Prime_unit(Agent):
     def __init__(self, position, max_acc, max_omega):
         super().__init__(position, max_acc, max_omega)
-        self.finished = False
         #controler
         self.KP = 10.0
         self.KD = 0.1
@@ -20,7 +19,7 @@ class Prime_unit(Agent):
         
     def fly(self, way_point, invaders, pursuers):
         #finished, stay on this point
-        if np.sum((self.position - way_point)**2) < 0.25:
+        if np.sum((self.position - way_point)**2) < 0.25 or self.finished:
             self.finished = True
             return np.zeros_like(way_point)
         #repulsive force against all drones

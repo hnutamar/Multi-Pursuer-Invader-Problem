@@ -1,5 +1,6 @@
 import numpy as np
 from agent import Agent
+from prime_mode import Modes
 
 class Prime_unit(Agent):
     def __init__(self, position, max_acc, max_omega):
@@ -17,7 +18,7 @@ class Prime_unit(Agent):
         
         self.t_circle = 7.0
         
-    def fly(self, way_point, invaders, pursuers):
+    def fly(self, way_point, invaders, pursuers, mode):
         #finished, stay on this point
         if np.sum((self.position - way_point)**2) < 0.25 or self.finished:
             self.finished = True
@@ -26,8 +27,10 @@ class Prime_unit(Agent):
         rep_vel_i = self.repulsive_force(invaders, 3.0)
         rep_vel_p = self.repulsive_force(pursuers, 1.0)
         #direction of the goal
-        #goal_vel = self.vortex_circle(way_point)
-        goal_vel = self.goal_force(way_point)
+        if mode == Modes.CIRCLE:
+            goal_vel = self.vortex_circle(way_point)
+        elif mode == Modes.LINE:
+            goal_vel = self.goal_force(way_point)
         #summing all the velocities
         sum_vel = goal_vel + rep_vel_i + rep_vel_p
         #making acceleration out of it
@@ -46,13 +49,19 @@ class Prime_unit(Agent):
         if goal_speed > self.max_speed:
             goal_vel = (goal_vel / goal_speed) * self.max_speed
         return goal_vel
-    
+
     def repulsive_force(self, drones: list[Agent], coll: float):
         rep_dir = np.zeros_like(self.position)
         #for every drone, compute the distance from self and if close enough, compute the repulsive force
-        for i in range(0, len(drones)):
-            dist = np.linalg.norm(self.position - drones[i].position)
-            if dist < coll and not (drones[i] is self):
-                rep_dir += (1/dist - 1/drones[i].position) * (self.position - drones[i].position)/(dist**2) 
-        #u = self.KP * (rep_dir - self.curr_speed) - self.KD * self.curr_speed
-        return rep_dir
+        for drone in drones:
+            if drone is self:
+                continue
+            diff = self.position - drone.position
+            dist = np.linalg.norm(diff)
+            if dist < coll and dist > 0.001:
+                push_dir = diff / dist
+                #hyperbolic repulsive
+                magnitude = (1.0 / dist - 1.0 / coll) 
+                # magnitude = (coll - dist) / coll
+                rep_dir += push_dir * magnitude
+        return rep_dir 

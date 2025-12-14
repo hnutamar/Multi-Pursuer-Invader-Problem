@@ -10,10 +10,11 @@ from matplotlib.animation import FuncAnimation
 from pursuer_states import States
 from matplotlib.patches import Ellipse
 from mpl_toolkits.mplot3d import Axes3D
+from prime_mode import Modes
 
 class DroneSimulation:
     def __init__(self, sc_config, _3d=False, purs_acc=None, prime_acc=None, inv_acc=None, inv_control=False, 
-                 prime_pos=None, inv_pos=None, purs_pos=None, crash_enabled=100):
+                 prime_pos=None, inv_pos=None, purs_pos=None, crash_enabled=100, formation_delay=100, prime_mode=Modes.LINE):
         self._3d = _3d
         self.anim = None
         #figure and plots init
@@ -23,6 +24,7 @@ class DroneSimulation:
         
         #init of agents
         self.prime = None
+        self.prime_mode = prime_mode
         self.pursuers = []
         self.invaders = []
         self.captured_count = 0
@@ -36,6 +38,8 @@ class DroneSimulation:
         self._init_agents(purs_acc, prime_acc, inv_acc, prime_pos, inv_pos, purs_pos)
         self.crash_enabled = crash_enabled
         self.purs_crash = False
+        self.formation_delay = formation_delay
+        self.start_anim = False
         
         #init of graphics
         #self._init_graphics()
@@ -56,8 +60,10 @@ class DroneSimulation:
             z_border = self.sc.WORLD_Z/6
             self.way_point = np.array([self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border, self.sc.WORLD_Z - z_border])
         else:
-            self.way_point = np.array([self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border])
-            #self.way_point = np.array([15.0, 15.0])
+            if self.prime_mode == Modes.CIRCLE:
+                self.way_point = np.array([15.0, 15.0])
+            elif self.prime_mode == Modes.LINE:
+                self.way_point = np.array([self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border])
         
         #prime unit init
         acc_prime = prime_acc or 0.1
@@ -91,7 +97,7 @@ class DroneSimulation:
                 high=[self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border], 
                 size=(self.sc.INVADER_NUM, 2)
             )
-        rnd_acc_inv = np.full(self.sc.INVADER_NUM, inv_acc) if inv_acc is not None else np.random.uniform(low=0.3, high=0.5, size=(self.sc.INVADER_NUM,))
+        rnd_acc_inv = np.full(self.sc.INVADER_NUM, inv_acc) if inv_acc is not None else np.random.uniform(low=1.3, high=1.5, size=(self.sc.INVADER_NUM,))
         acc_purs = purs_acc or 1.0
         #pursuer init
         for i in range(self.sc.PURSUER_NUM):
@@ -242,14 +248,16 @@ class DroneSimulation:
             close_purs = [p for p in free_purs if np.linalg.norm(p.position - purs.position) <= self.sc.PURS_VIS]
             dirs_p.append(purs.pursue(free_inv, close_purs, self.prime))
 
-        dir_u = self.prime.fly(self.way_point, free_inv, free_purs)
+        dir_u = self.prime.fly(self.way_point, free_inv, free_purs, self.prime_mode)
 
         #moving the drones
         for p, p_dir in zip(self.pursuers, dirs_p):
             p.move(p_dir)
-        for i, i_dir in zip(self.invaders, dirs_i):
-            i.move(i_dir)
-        self.prime.move(dir_u)
+        if frame > self.formation_delay or self.start_anim:
+            self.start_anim = True
+            for i, i_dir in zip(self.invaders, dirs_i):
+                i.move(i_dir)
+            self.prime.move(dir_u)
 
         #appending current position to their history
         for i, p in enumerate(self.pursuers):
@@ -326,6 +334,8 @@ class DroneSimulation:
         
         if frame == self.crash_enabled and not self.purs_crash:
             print("crash enabled!")
+        if frame == self.formation_delay and not self.start_anim:
+            print("anim_starts!")
         if self._3d:
             return self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths + \
                 [self.sc.u_dot, self.sc.u_path], #self.sc.quiver]

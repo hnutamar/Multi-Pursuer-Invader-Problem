@@ -16,8 +16,11 @@ class Agent:
         self.finished = False
 
     def move(self, acc):
-        if self.crashed or self.finished:
-            print("finished")
+        if self.crashed:
+            return
+        if self.finished:
+            self.curr_speed[:] = 0.0
+            self.curr_acc[:] = 0.0
             return
         #safety
         if acc is None:

@@ -93,7 +93,8 @@ class DroneSimulation:
                 size=(self.sc.PURSUER_NUM, 2)
             )
             rnd_points_inv = inv_pos if inv_pos is not None else np.random.uniform(
-                low=[self.sc.PURSUER_NUM/2 + 2 + pos_u[0], self.sc.PURSUER_NUM/2 + 2 + pos_u[1]], 
+                #low=[self.sc.PURSUER_NUM/2 + 2 + pos_u[0], self.sc.PURSUER_NUM/2 + 2 + pos_u[1]],  
+                low=[0.0, self.sc.PURSUER_NUM/2 + 2 + pos_u[1]],  
                 high=[self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border], 
                 size=(self.sc.INVADER_NUM, 2)
             )

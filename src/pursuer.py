@@ -19,7 +19,7 @@ class Pursuer(Agent):
         #self.prime_rep_in_form = 0.0
         self.prime_rep_in_purs = 2.9
         #radiuses
-        self.prime_coll_r = 4.5
+        self.prime_coll_r = 10.5
         self.collision_r = 2.0
         #self.vis_r = 3.0
         #self.min_formation_r = 2.0
@@ -28,8 +28,8 @@ class Pursuer(Agent):
         self.formation_r = 2.5
         self.formation_r_min = 1.5
         #print(self.formation_r)
-        self.capture_r = 10.0
-        self.capture_max = 20.0
+        self.capture_r = 20.0
+        self.capture_max = 30.0
         #self.form_max = np.array([self.formation_r + 3.0])
         #radiuses for target circling
         self.t_circle = 1.0
@@ -75,7 +75,7 @@ class Pursuer(Agent):
         if self.target == None:
             if self.strategy_capture_cone(targets, prime_unit, self.num_iter, cooldown=self.capture_cooldown*self.dt):
                 tar_vel = self.pursue_target(self.target, pursuers, prime_unit)
-            elif self.strategy_target_close(targets):
+            elif self.strategy_target_close(targets, pursuers):
                 tar_vel = self.pursue_target(self.target, pursuers, prime_unit)
         #pursuer having target -> pursue it
         elif self.target != None and self.target[0].crashed == False:
@@ -98,6 +98,11 @@ class Pursuer(Agent):
         else:
             prime_rep_vel = self.repulsive_force([prime_unit], self.prime_coll_r)
             sum_vel = self.purs*tar_vel + self.rep_in_purs*rep_vel + self.prime_rep_in_purs*prime_rep_vel
+            #repulsive force against the target
+            if np.linalg.norm(prime_unit.position - self.target[0].position) > self.safe_circle_r and self.target[1] == self.purs_types["circling"]:
+                safe_dist = self.t_circle * 0.8
+                target_rep_vel = self.repulsive_force([self.target[0]], safe_dist)
+                sum_vel += target_rep_vel * 15.0
         new_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
         return new_acc
     
@@ -167,9 +172,13 @@ class Pursuer(Agent):
             self.ignored_targs[targets[i]] = sim_time
         return False
     
-    def strategy_target_close(self, targets: list[Invader]):
+    def strategy_target_close(self, targets: list[Invader], purs):
         for t in targets:
-            if np.linalg.norm(t.position - self.position) < self.target_close:
+            purs_num = 0
+            for p in purs:
+                if p is not self and p.target != None and p.target[0] is t:
+                    purs_num += 1
+            if np.linalg.norm(t.position - self.position) < self.target_close and purs_num < 5:
                 self.target = [t, self.purs_types['circling']]
                 self.state = States.PURSUE
                 #clearing ignore list, not needed now, because pursuer has target
@@ -245,29 +254,31 @@ class Pursuer(Agent):
     def pursuit_circling(self, target: list[Invader, int]):
         target[1] = self.purs_types['circling']
         #strong repulsive force is needed
-        self.rep_in_purs = 7.0
-        self.prime_rep_in_purs = 2.9
+        self.rep_in_purs = 25.0
+        self.prime_rep_in_purs = 20.9
         #the center of the vortex field is not shifted
         rel_pos = self.position - (target[0].position) #+ target[0].curr_speed * self.dt * self.pred_time)
+        dist = np.linalg.norm(rel_pos)
         rho = 1 - (rel_pos[0]/self.t_circle)**2 - (rel_pos[1]/self.t_circle)**2
         #inside of circle
         if rho > 0:
-            alpha = 4.0
+            alpha = 20.0
         #outside of circle
         else:
             alpha = 1.0
         #circling in opposite direction to defensive formation circle
         purs_vel = np.array([self.circle_dir*rel_pos[1] + alpha*rel_pos[0]*rho, -self.circle_dir*rel_pos[0] + alpha*rel_pos[1]*rho])
-        # vel_norm = np.linalg.norm(purs_vel)
-        # if vel_norm > 1e-8:
-        #     purs_vel = purs_vel/vel_norm
+        vel_norm = np.linalg.norm(purs_vel)
+        vel_dot = np.dot(target[0].curr_speed, self.curr_speed)
+        if self.t_circle * 8.0 >= dist >= self.t_circle * 3.0 and vel_norm >= 3.0 and vel_dot < 0:
+            purs_vel = purs_vel/vel_norm * 0.9
         return purs_vel
         
     def pursuit_constant_bearing(self, target: list[Invader, int]):
         #target is quite fast, circling is not possible
         target[1] = self.purs_types['const_bear']
-        self.rep_in_purs = 1.0
-        self.prime_rep_in_purs = 2.9
+        self.rep_in_purs = 8.0
+        self.prime_rep_in_purs = 7.9
         v_tar = target[0].curr_speed #/ np.linalg.norm(target.curr_speed)) * target.max_speed
         #line of sight
         r = target[0].position - self.position
@@ -301,8 +312,8 @@ class Pursuer(Agent):
     def pursuit_pure_pursuit(self, target: list[Invader, int]):
         #target is very fast, pure pursuit
         target[1] = self.purs_types['pure_pursuit']
-        self.rep_in_purs = 1.0
-        self.prime_rep_in_purs = 2.9
+        self.rep_in_purs = 8.0
+        self.prime_rep_in_purs = 7.9
         PP_dir = target[0].position - self.position
         #norming it to the max speed
         if np.linalg.norm(PP_dir) < 1e-12:

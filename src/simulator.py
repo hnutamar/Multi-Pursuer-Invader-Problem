@@ -77,8 +77,8 @@ class DroneSimulation:
         #init positions and acceleration of agents (random)
         if self._3d:
             rnd_points_purs = purs_pos if purs_pos is not None else np.random.uniform(
-                low=[-self.sc.PURSUER_NUM/2 - 2 + pos_u[0], -self.sc.PURSUER_NUM/2 - 2 + pos_u[1], pos_u[2]], 
-                high=[self.sc.PURSUER_NUM/2 + 2 + pos_u[0], self.sc.PURSUER_NUM/2 + 2 + pos_u[1], pos_u[2]], 
+                low=[-self.sc.PURSUER_NUM/2 - 2 + pos_u[0], -self.sc.PURSUER_NUM/2 - 2 + pos_u[1], -self.sc.PURSUER_NUM/2 - 2 + pos_u[2]], 
+                high=[self.sc.PURSUER_NUM/2 + 2 + pos_u[0], self.sc.PURSUER_NUM/2 + 2 + pos_u[1], self.sc.PURSUER_NUM/2 + 2 +  pos_u[2]], 
                 size=(self.sc.PURSUER_NUM, 3)
             )
             rnd_points_inv = inv_pos if inv_pos is not None else np.random.uniform(

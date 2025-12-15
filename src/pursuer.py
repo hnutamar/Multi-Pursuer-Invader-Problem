@@ -85,7 +85,10 @@ class Pursuer(Agent):
         if np.array_equal(tar_vel, form_vel):
             self.target = None
             self.state = States.FORM
-            form_vel = self.form_vortex_field_circle(prime_unit)
+            if len(self.position) == 2:
+                form_vel = self.form_vortex_field_circle(prime_unit)
+            else:
+                form_vel = self.form_vortex_field_sphere(prime_unit)
         if form_vel.size != self.position.size:
             form_vel = np.append(form_vel, prime_unit.position[2] - self.position[2])
         if tar_vel.size != self.position.size and self.target != None:
@@ -213,11 +216,6 @@ class Pursuer(Agent):
             my_pos = self.position
         unit_pos = unit.position
         unit_vel = unit.curr_speed
-        #TODO: 3D circle
-        if self.position.size == 3:
-            my_pos = np.delete(my_pos, -1)
-            unit_pos = np.delete(unit_pos, -1)
-            unit_vel = np.delete(unit_vel, -1)
         #the center of the vortex field shifted in the current unit speed vector, because unit is moving
         #rel_pos = my_pos - (unit_pos + unit_vel * self.dt * self.pred_time)
         rel_unit_pos = my_pos - unit_pos
@@ -231,7 +229,49 @@ class Pursuer(Agent):
         else:
             alpha = 1.0
         #circle around center
-        form_vel = np.array([-self.circle_dir*rel_unit_pos[1] + alpha*rel_unit_pos[0]*rho, self.circle_dir*rel_unit_pos[0] + alpha*rel_unit_pos[1]*rho])
+        tangent_vec = np.array([-rel_unit_pos[1], rel_unit_pos[0]])
+        fdbck = alpha * rho * rel_unit_pos
+        fdwrd = self.circle_dir * tangent_vec
+        form_vel = fdbck + fdwrd
+        return form_vel
+
+    def form_vortex_field_sphere(self, unit: Prime_unit, mock_position=None):
+        if mock_position is not None:
+            my_pos = mock_position
+        else:
+            my_pos = self.position
+            
+        unit_pos = unit.position
+        unit_vel = unit.curr_speed
+        rel_unit_pos = my_pos - unit_pos
+        #the radius is according to the position of pursuer w.r.t. prime's velocity vector
+        sigm = self.sigmoid(np.dot(unit_vel, rel_unit_pos))
+        form_r = sigm * self.formation_r + (1 - sigm) * self.formation_r_min
+        #distance from prime
+        dist = np.linalg.norm(rel_unit_pos)
+        if dist < 1e-6:
+            return np.zeros_like(my_pos)
+        rho = 1 - (dist / form_r)**2
+        #alpha, stronger on the inside
+        if rho > 0:
+            alpha = 20.0
+        else:
+            alpha = 1.0
+        #normalized vec from prime to pursuer
+        normal_vec = rel_unit_pos / dist
+        #rotation axis, cool looking
+        t = self.num_iter * 0.3
+        rotation_axis = np.array([np.sin(t), np.cos(t * 0.5), np.sin(t * 1.0)])
+        rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+        #rotation_axis = np.array([0.0, 0.0, 1.0]) 
+        #if np.linalg.norm(unit_vel) > 0.1:
+        #    rotation_axis = unit_vel / np.linalg.norm(unit_vel)
+        #feedforward vector tangential with rotation axis and normalized vec from prime to pursuer
+        tangent_vec = np.cross(rotation_axis, normal_vec)
+        #composing the forces into resulting form vector
+        fdbck = alpha * rho * normal_vec
+        fdwrd = self.circle_dir * tangent_vec
+        form_vel = fdwrd + fdbck
         return form_vel
     
     def pursue_target(self, target: list[Invader, int], purs: list[Agent], unit: Prime_unit):
@@ -247,7 +287,10 @@ class Pursuer(Agent):
         if np.linalg.norm(unit.position - target[0].position) >= self.safe_circle_r:
             for p in purs:
                 if p is not self and p.target != None and p.target[0] is target[0]:
-                    return self.pursuit_circling(target)
+                    if len(self.position) == 2:
+                        return self.pursuit_circling(target)
+                    else:
+                        return self.pursuit_sphering(target)
         #no one else is chasing him, catch him
         return self.pursuit_constant_bearing(target)
     
@@ -267,7 +310,51 @@ class Pursuer(Agent):
         else:
             alpha = 1.0
         #circling in opposite direction to defensive formation circle
-        purs_vel = np.array([self.circle_dir*rel_pos[1] + alpha*rel_pos[0]*rho, -self.circle_dir*rel_pos[0] + alpha*rel_pos[1]*rho])
+        tangent_vec = np.array([-rel_pos[1], rel_pos[0]])
+        fdbck = alpha * rho * rel_pos
+        fdwrd = -self.circle_dir * tangent_vec
+        purs_vel = fdbck + fdwrd
+        #purs_vel = np.array([self.circle_dir*rel_pos[1] + alpha*rel_pos[0]*rho, -self.circle_dir*rel_pos[0] + alpha*rel_pos[1]*rho])
+        #normalizing it to not fly that fast, risk of collision
+        vel_norm = np.linalg.norm(purs_vel)
+        vel_dot = np.dot(target[0].curr_speed, self.curr_speed)
+        if self.t_circle * 8.0 >= dist >= self.t_circle * 3.0 and vel_norm >= 3.0 and vel_dot < 0:
+            purs_vel = purs_vel/vel_norm * 0.9
+        return purs_vel
+    
+    def pursuit_sphering(self, target: list[Invader, int]):
+        target[1] = self.purs_types['circling']
+        #strong repulsive force is needed
+        self.rep_in_purs = 25.0
+        self.prime_rep_in_purs = 20.9
+        my_pos = self.position
+        rel_unit_pos = my_pos - (target[0].position)
+        #distance from target
+        dist = np.linalg.norm(rel_unit_pos)
+        if dist < 1e-6:
+            return np.zeros_like(my_pos)
+        rho = 1 - (dist / self.t_circle)**2
+        #alpha, stronger on the inside
+        if rho > 0:
+            alpha = 20.0
+        else:
+            alpha = 1.0
+        #normalized vec from target to pursuer
+        normal_vec = rel_unit_pos / dist
+        #rotation axis, cool looking
+        t = self.num_iter * 0.3
+        rotation_axis = np.array([np.sin(t), np.cos(t * 0.5), np.sin(t * 1.0)])
+        rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+        #rotation_axis = np.array([0.0, 0.0, 1.0]) 
+        #if np.linalg.norm(unit_vel) > 0.1:
+        #    rotation_axis = unit_vel / np.linalg.norm(unit_vel)
+        #feedforward vector tangential with rotation axis and normalized vec from prime to pursuer
+        tangent_vec = np.cross(rotation_axis, normal_vec)
+        #composing the forces into resulting form vector
+        fdbck = alpha * rho * normal_vec
+        fdwrd = self.circle_dir * tangent_vec
+        purs_vel = fdwrd + fdbck
+        #normalizing it to not fly that fast, risk of collision
         vel_norm = np.linalg.norm(purs_vel)
         vel_dot = np.dot(target[0].curr_speed, self.curr_speed)
         if self.t_circle * 8.0 >= dist >= self.t_circle * 3.0 and vel_norm >= 3.0 and vel_dot < 0:
@@ -278,23 +365,19 @@ class Pursuer(Agent):
         #target is quite fast, circling is not possible
         target[1] = self.purs_types['const_bear']
         self.rep_in_purs = 8.0
-        self.prime_rep_in_purs = 7.9
-        v_tar = target[0].curr_speed #/ np.linalg.norm(target.curr_speed)) * target.max_speed
+        self.prime_rep_in_purs = 20.9
+        v_tar = target[0].curr_speed
         #line of sight
         r = target[0].position - self.position
         #coeficients of quadratic equation
-        a = np.dot(r, r)
-        b = -2*np.dot(v_tar, r)
-        c = np.dot(v_tar, v_tar) - self.max_speed**2
+        a, b, c = np.dot(r, r), -2*np.dot(v_tar, r), np.dot(v_tar, v_tar) - self.max_speed**2
         #discriminant
         D = b**2 - 4*a*c
         CB_dir = np.zeros_like(self.position)
         #positive D
         if D >= 1e-6:
-            lambda1 = (-b + np.sqrt(D))/(2*a)
-            lambda2 = (-b - np.sqrt(D))/(2*a)
-            CB_dir1 = v_tar - lambda1*r
-            CB_dir2 = v_tar - lambda2*r
+            lambda1, lambda2 = (-b + np.sqrt(D))/(2*a), (-b - np.sqrt(D))/(2*a)
+            CB_dir1, CB_dir2 = v_tar - lambda1*r, v_tar - lambda2*r
             if np.dot(CB_dir1, r) > 0:
                 CB_dir = CB_dir1
             else:

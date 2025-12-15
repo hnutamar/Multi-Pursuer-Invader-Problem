@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 class Sim3DConfig:
-    def __init__(self):
-        self.WORLD_WIDTH = 30
-        self.WORLD_HEIGHT = 30
-        self.WORLD_Z = 10
+    def __init__(self, purs_num=15, inv_num=5, world_width=30, world_height=30, world_z=10):
+        self.WORLD_WIDTH = world_width
+        self.WORLD_HEIGHT = world_height
+        self.WORLD_Z = world_z
         
         self.DRONE_RAD = 0.3
         self.UNIT_RAD = 0.6
@@ -14,8 +14,8 @@ class Sim3DConfig:
         self.UNIT_DOWN_RAD = 0.6
         self.PURS_VIS = 3.0
         
-        self.PURSUER_NUM = 10
-        self.INVADER_NUM = 5
+        self.PURSUER_NUM = purs_num
+        self.INVADER_NUM = inv_num
 
         self.drone_marker_size = 3
         self.prime_marker_size = 6

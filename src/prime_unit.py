@@ -25,7 +25,7 @@ class Prime_unit(Agent):
             return np.zeros_like(way_point)
         #repulsive force against all drones
         rep_vel_i = self.repulsive_force(invaders, 3.0)
-        rep_vel_p = self.repulsive_force(pursuers, 1.0)
+        rep_vel_p = self.repulsive_force(pursuers, 2.0)
         #direction of the goal
         if mode == Modes.CIRCLE:
             goal_vel = self.vortex_circle(way_point)

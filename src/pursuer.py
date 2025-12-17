@@ -232,14 +232,6 @@ class Pursuer(Agent):
         fdbck = alpha * rho * norm_vec
         fdwrd = self.circle_dir * tangent_vec
         form_vel = fdbck + fdwrd
-        #clipping the speed, if pursuer is flying directly to prime
-        my_speed = np.linalg.norm(self.curr_speed)
-        #dist = np.linalg.norm(rel_unit_pos)
-        if my_speed > 1e-9 and dist > 1e-9:
-            vel_dot = np.dot(self.curr_speed/my_speed, norm_vec)
-            form_norm = np.linalg.norm(form_vel)
-            if form_r * 3.0 >= dist >= form_r * 1.5 and form_norm >= 3.0 and vel_dot < np.cos(np.deg2rad(150)):
-                form_vel = form_vel/form_norm * 0.8
         return form_vel
 
     def form_vortex_field_sphere(self, unit: Prime_unit, mock_position=None):
@@ -279,14 +271,6 @@ class Pursuer(Agent):
         fdbck = alpha * rho * normal_vec
         fdwrd = self.circle_dir * tangent_vec
         form_vel = fdwrd + fdbck
-        #clipping the speed, if pursuer is flying directly to prime
-        my_speed = np.linalg.norm(self.curr_speed)
-        dist = np.linalg.norm(rel_unit_pos)
-        if my_speed > 1e-9 and dist > 1e-9:
-            vel_dot = np.dot(self.curr_speed/my_speed, rel_unit_pos/dist)
-            form_norm = np.linalg.norm(form_vel)
-            if form_r * 3.0 >= dist >= form_r * 1.5 and form_norm >= 3.0 and vel_dot < np.cos(np.deg2rad(150)):
-                form_vel = form_vel/form_norm * 0.8
         return form_vel
     
     def pursue_target(self, target: list[Invader, int], purs: list[Agent], unit: Prime_unit):

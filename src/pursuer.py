@@ -101,11 +101,6 @@ class Pursuer(Agent):
         else:
             prime_rep_vel = self.repulsive_force([prime_unit], self.prime_coll_r)
             sum_vel = self.purs*tar_vel + self.rep_in_purs*rep_vel + self.prime_rep_in_purs*prime_rep_vel
-            #repulsive force against the target
-            if np.linalg.norm(prime_unit.position - self.target[0].position) > self.safe_circle_r and self.target[1] == self.purs_types["circling"]:
-                safe_dist = self.t_circle * 0.8
-                target_rep_vel = self.repulsive_force([self.target[0]], safe_dist)
-                sum_vel += target_rep_vel * 15.0
         new_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
         return new_acc
     
@@ -228,16 +223,20 @@ class Pursuer(Agent):
         #outside of circle
         else:
             alpha = 1.0
+        dist = np.linalg.norm(rel_unit_pos)
+        if dist < 1e-6:
+            return np.zeros_like(my_pos)
+        norm_vec = rel_unit_pos/dist
         #circle around center
         tangent_vec = np.array([-rel_unit_pos[1], rel_unit_pos[0]])
-        fdbck = alpha * rho * rel_unit_pos
+        fdbck = alpha * rho * norm_vec
         fdwrd = self.circle_dir * tangent_vec
         form_vel = fdbck + fdwrd
         #clipping the speed, if pursuer is flying directly to prime
         my_speed = np.linalg.norm(self.curr_speed)
-        dist = np.linalg.norm(rel_unit_pos)
+        #dist = np.linalg.norm(rel_unit_pos)
         if my_speed > 1e-9 and dist > 1e-9:
-            vel_dot = np.dot(self.curr_speed/my_speed, rel_unit_pos/dist)
+            vel_dot = np.dot(self.curr_speed/my_speed, norm_vec)
             form_norm = np.linalg.norm(form_vel)
             if form_r * 3.0 >= dist >= form_r * 1.5 and form_norm >= 3.0 and vel_dot < np.cos(np.deg2rad(150)):
                 form_vel = form_vel/form_norm * 0.8
@@ -269,13 +268,13 @@ class Pursuer(Agent):
         normal_vec = rel_unit_pos / dist
         #rotation axis, cool looking
         t = self.num_iter * 0.3
-        rotation_axis = np.array([np.sin(t), np.cos(t * 0.5), np.sin(t * 1.0)])
+        rotation_axis = np.array([np.sin(t), np.cos(t * 0.7), np.sin(t * 1.2)])
         rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
         #rotation_axis = np.array([0.0, 0.0, 1.0]) 
         #if np.linalg.norm(unit_vel) > 0.1:
         #    rotation_axis = unit_vel / np.linalg.norm(unit_vel)
         #feedforward vector tangential with rotation axis and normalized vec from prime to pursuer
-        tangent_vec = np.cross(rotation_axis, normal_vec)
+        tangent_vec = np.cross(rotation_axis, rel_unit_pos)
         #composing the forces into resulting form vector
         fdbck = alpha * rho * normal_vec
         fdwrd = self.circle_dir * tangent_vec
@@ -325,16 +324,19 @@ class Pursuer(Agent):
         #outside of circle
         else:
             alpha = 1.0
+        dist = np.linalg.norm(rel_pos)
+        if dist < 1e-6:
+            return np.zeros_like(self.position)
+        norm_vec = rel_pos/dist
         #circling in opposite direction to defensive formation circle
         tangent_vec = np.array([-rel_pos[1], rel_pos[0]])
-        fdbck = alpha * rho * rel_pos
+        fdbck = alpha * rho * norm_vec
         fdwrd = -self.circle_dir * tangent_vec
         purs_vel = fdbck + fdwrd
-        #purs_vel = np.array([self.circle_dir*rel_pos[1] + alpha*rel_pos[0]*rho, -self.circle_dir*rel_pos[0] + alpha*rel_pos[1]*rho])
         #normalizing it to not fly that fast, risk of collision
         vel_norm = np.linalg.norm(purs_vel)
         vel_dot = np.dot(target[0].curr_speed, self.curr_speed)
-        if self.t_circle * 8.0 >= dist >= self.t_circle * 3.0 and vel_norm >= 3.0 and vel_dot < 0:
+        if self.t_circle * 8.0 >= dist >= self.t_circle * 2.0 and vel_norm >= 2.0 and vel_dot < 0:
             purs_vel = purs_vel/vel_norm * 0.9
         return purs_vel
     
@@ -344,9 +346,9 @@ class Pursuer(Agent):
         self.rep_in_purs = 25.0
         self.prime_rep_in_purs = 20.9
         my_pos = self.position
-        rel_unit_pos = my_pos - (target[0].position)
+        rel_pos = my_pos - (target[0].position)
         #distance from target
-        dist = np.linalg.norm(rel_unit_pos)
+        dist = np.linalg.norm(rel_pos)
         if dist < 1e-6:
             return np.zeros_like(my_pos)
         rho = 1 - (dist / self.t_circle)**2
@@ -356,16 +358,16 @@ class Pursuer(Agent):
         else:
             alpha = 1.0
         #normalized vec from target to pursuer
-        normal_vec = rel_unit_pos / dist
+        normal_vec = rel_pos / dist
         #rotation axis, cool looking
         t = self.num_iter * 0.3
-        rotation_axis = np.array([np.sin(t), np.cos(t * 0.5), np.sin(t * 1.0)])
+        rotation_axis = np.array([np.sin(t), np.cos(t * 0.7), np.sin(t * 1.2)])
         rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
         #rotation_axis = np.array([0.0, 0.0, 1.0]) 
         #if np.linalg.norm(unit_vel) > 0.1:
         #    rotation_axis = unit_vel / np.linalg.norm(unit_vel)
         #feedforward vector tangential with rotation axis and normalized vec from prime to pursuer
-        tangent_vec = np.cross(rotation_axis, normal_vec)
+        tangent_vec = np.cross(rotation_axis, rel_pos)
         #composing the forces into resulting form vector
         fdbck = alpha * rho * normal_vec
         fdwrd = self.circle_dir * tangent_vec
@@ -381,7 +383,7 @@ class Pursuer(Agent):
         #target is quite fast, circling is not possible
         target[1] = self.purs_types['const_bear']
         self.rep_in_purs = 8.0
-        self.prime_rep_in_purs = 20.9
+        self.prime_rep_in_purs = 12.9
         v_tar = target[0].curr_speed
         #line of sight
         r = target[0].position - self.position
@@ -412,7 +414,7 @@ class Pursuer(Agent):
         #target is very fast, pure pursuit
         target[1] = self.purs_types['pure_pursuit']
         self.rep_in_purs = 8.0
-        self.prime_rep_in_purs = 7.9
+        self.prime_rep_in_purs = 12.9
         PP_dir = target[0].position - self.position
         #norming it to the max speed
         if np.linalg.norm(PP_dir) < 1e-12:

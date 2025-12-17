@@ -222,7 +222,7 @@ class Pursuer(Agent):
             alpha = 20.0
         #outside of circle
         else:
-            alpha = 1.0
+            alpha = 2.0
         dist = np.linalg.norm(rel_unit_pos)
         if dist < 1e-6:
             return np.zeros_like(my_pos)

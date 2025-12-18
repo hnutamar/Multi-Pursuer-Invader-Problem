@@ -150,6 +150,28 @@ class DroneSimulation:
         new_offsets = np.column_stack((flat_x, flat_y))
         self.sc.quiver.set_offsets(new_offsets)
         self.sc.quiver.set_UVC(u_arrows, v_arrows)
+        #quiver graph for invaders
+        for idx, unit in enumerate(self.invaders):
+            center = unit.position
+            grid_x = self.sc.inv_grid_x_base[idx] + center[0]
+            grid_y = self.sc.inv_grid_y_base[idx] + center[1]
+            u_arrows = []
+            v_arrows = []
+            ref_pursuer = self.pursuers[0]
+            flat_x = grid_x.flatten()
+            flat_y = grid_y.flatten()
+            for x, y in zip(flat_x, flat_y):
+                test_pos = np.array([x, y])
+                force_vec = ref_pursuer.pursuit_circling([unit, 0], mock_position=test_pos)
+                norm = np.linalg.norm(force_vec)
+                if norm > 0:
+                    force_vec = force_vec / norm
+                u_arrows.append(force_vec[0])
+                v_arrows.append(force_vec[1])
+            new_offsets = np.column_stack((flat_x, flat_y))
+            self.sc.inv_quiver[idx].set_offsets(new_offsets)
+            self.sc.inv_quiver[idx].set_UVC(u_arrows, v_arrows)
+        
             
     def _on_key_press(self, event):
         # controls on arrows
@@ -304,7 +326,7 @@ class DroneSimulation:
             # return self.sc.p_dots + self.sc.i_dots + [self.sc.u_dot] #self.sc.quiver]
         else:
             return self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths + \
-                [self.sc.u_dot, self.sc.u_path, self.sc.quiver]
+                [self.sc.u_dot, self.sc.u_path, self.sc.quiver] + self.sc.inv_quiver
 
     def run(self):
         #running the animation

@@ -26,6 +26,8 @@ class Sim2DConfig:
         
         self.FIELD_RES = 15
         self.FIELD_SIZE = 4
+        self.INV_FIELD_RES = 8
+        self.INV_FIELD_SIZE = 2
 
         self._init_plot()
 
@@ -79,3 +81,18 @@ class Sim2DConfig:
             np.zeros_like(self.grid_x_base), np.zeros_like(self.grid_y_base),
             color="#6fa840", alpha=0.7, pivot='mid', scale=20, width=0.003
         )
+        #visual for invaders vortex field
+        self.inv_quiver = []
+        self.inv_grid_x_base, self.inv_grid_y_base = [], []
+        x = np.linspace(-self.INV_FIELD_SIZE, self.INV_FIELD_SIZE, self.INV_FIELD_RES)
+        y = np.linspace(-self.INV_FIELD_SIZE, self.INV_FIELD_SIZE, self.INV_FIELD_RES)
+        for i in range(self.INVADER_NUM):
+            grid_x, grid_y = np.meshgrid(x, y)
+            self.inv_grid_x_base.append(grid_x)
+            self.inv_grid_y_base.append(grid_y)
+            quiver = self.ax.quiver(
+            self.inv_grid_x_base[i], self.inv_grid_y_base[i], 
+            np.zeros_like(self.inv_grid_x_base[i]), np.zeros_like(self.inv_grid_y_base[i]),
+            color="#244163", alpha=0.4, pivot='mid', scale=20, width=0.003
+            )
+            self.inv_quiver.append(quiver)

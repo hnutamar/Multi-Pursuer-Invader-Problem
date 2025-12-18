@@ -293,13 +293,17 @@ class Pursuer(Agent):
         #no one else is chasing him, catch him
         return self.pursuit_constant_bearing(target)
     
-    def pursuit_circling(self, target: list[Invader, int]):
+    def pursuit_circling(self, target: list[Invader, int], mock_position=None):
+        if mock_position is not None:
+            my_pos = mock_position
+        else:
+            my_pos = self.position
         target[1] = self.purs_types['circling']
         #strong repulsive force is needed
         self.rep_in_purs = 25.0
         self.prime_rep_in_purs = 20.9
         #the center of the vortex field is not shifted
-        rel_pos = self.position - (target[0].position) #+ target[0].curr_speed * self.dt * self.pred_time)
+        rel_pos = my_pos - (target[0].position) #+ target[0].curr_speed * self.dt * self.pred_time)
         dist = np.linalg.norm(rel_pos)
         rho = 1 - (rel_pos[0]/self.t_circle)**2 - (rel_pos[1]/self.t_circle)**2
         #inside of circle
@@ -310,7 +314,7 @@ class Pursuer(Agent):
             alpha = 1.0
         dist = np.linalg.norm(rel_pos)
         if dist < 1e-6:
-            return np.zeros_like(self.position)
+            return np.zeros_like(my_pos)
         norm_vec = rel_pos/dist
         #circling in opposite direction to defensive formation circle
         tangent_vec = np.array([-rel_pos[1], rel_pos[0]])

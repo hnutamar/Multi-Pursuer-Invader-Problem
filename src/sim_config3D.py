@@ -10,15 +10,15 @@ class Sim3DConfig:
         self.DRONE_RAD = 0.3
         self.UNIT_RAD = 0.6
         self.CAPTURE_RAD = 0.3
-        self.CRASH_RAD = 0.3
-        self.UNIT_DOWN_RAD = 0.6
+        self.CRASH_RAD = self.DRONE_RAD
+        self.UNIT_DOWN_RAD = self.UNIT_RAD
         self.PURS_VIS = 3.0
         
         self.PURSUER_NUM = purs_num
         self.INVADER_NUM = inv_num
 
-        self.drone_marker_size = 3
-        self.prime_marker_size = 6
+        self.drone_marker_size = self.DRONE_RAD * 10
+        self.prime_marker_size = self.UNIT_RAD * 10
 
         self.p_dots = []
         self.p_paths = []

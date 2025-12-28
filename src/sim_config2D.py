@@ -7,14 +7,14 @@ class Sim2DConfig:
         self.WORLD_HEIGHT = world_height
         
         self.CAPTURE_RAD = 0.3
-        self.CRASH_RAD = 0.3
-        self.UNIT_DOWN_RAD = 0.6
+        self.DRONE_RAD = 0.3
+        self.UNIT_RAD = 0.6
         
         self.PURSUER_NUM = purs_num
         self.INVADER_NUM = inv_num
         
-        self.DRONE_RAD = 0.3
-        self.UNIT_RAD = 0.6
+        self.CRASH_RAD = self.DRONE_RAD
+        self.UNIT_DOWN_RAD = self.UNIT_RAD
         self.PURS_VIS = 3.0
         
         self.p_dots = []
@@ -55,7 +55,7 @@ class Sim2DConfig:
         (x0, y0) = trans((0, 0))
         (x1, y1) = trans((self.DRONE_RAD, 0))
         self.drone_in_pixels = np.hypot(x1 - x0, y1 - y0)
-        self.prime_in_pixels = self.drone_in_pixels * 2
+        self.prime_in_pixels = self.drone_in_pixels * (self.UNIT_RAD/self.DRONE_RAD)
         #pursuers
         for _ in range(self.PURSUER_NUM):
             p_dot, = self.ax.plot([], [], 'o', color='#d62728', label='Pursuer', markersize=self.drone_in_pixels)

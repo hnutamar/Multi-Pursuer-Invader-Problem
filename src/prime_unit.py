@@ -3,8 +3,9 @@ from agent import Agent
 from prime_mode import Modes
 
 class Prime_unit(Agent):
-    def __init__(self, position, max_acc, max_omega):
+    def __init__(self, position, max_acc, max_omega, my_rad):
         super().__init__(position, max_acc, max_omega)
+        self.my_rad = my_rad
         #controler
         self.KP = 10.0
         self.KD = 0.1

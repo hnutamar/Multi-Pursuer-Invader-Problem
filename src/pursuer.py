@@ -7,15 +7,17 @@ from prime_unit import Prime_unit
 from pursuer_states import States
 
 class Pursuer(Agent):
-    def __init__(self, position, max_acc, max_omega, num, purs_num):
+    def __init__(self, position, max_acc, max_omega, my_rad, purs_num):
         super().__init__(position, max_acc, max_omega)
-        self.num_iter = np.longdouble(0.0)
+        #self.num_iter = 0
+        self.my_rad = my_rad
+        self.num_iter = np.random.randint(0, 1001)
         #self.purs_num = purs_num
         #dir par
         self.purs = 1.2
         self.form = 0.9
-        self.rep_in_form = 30.0
-        self.rep_in_purs = 7.0
+        self.rep_in_form = 20.0
+        self.rep_in_purs = 6.0
         #self.prime_rep_in_form = 0.0
         self.prime_rep_in_purs = 2.9
         #radiuses
@@ -25,8 +27,8 @@ class Pursuer(Agent):
         #self.min_formation_r = 2.0
         #self.dist_formation = np.pi/1.8
         #self.formation_r = max(self.purs_num*self.dist_formation/(2*np.pi), self.min_formation_r)
-        self.formation_r = 2.5
-        self.formation_r_min = 1.5
+        self.formation_r = 2.0
+        self.formation_r_min = 1.0
         #print(self.formation_r)
         self.capture_r = 20.0
         self.capture_max = 30.0
@@ -88,7 +90,7 @@ class Pursuer(Agent):
             if len(self.position) == 2:
                 form_vel = self.form_vortex_field_circle(prime_unit)
             else:
-                form_vel = self.form_vortex_field_sphere(prime_unit)
+                form_vel = self.form_vortex_field_sphere(prime_unit, close_purs=pursuers)
         if form_vel.size != self.position.size:
             form_vel = np.append(form_vel, prime_unit.position[2] - self.position[2])
         if tar_vel.size != self.position.size and self.target != None:
@@ -191,7 +193,7 @@ class Pursuer(Agent):
             if drone is self:
                 continue
             diff = self.position - drone.position
-            dist = np.linalg.norm(diff)
+            dist = np.linalg.norm(diff) - self.my_rad - drone.my_rad
             if dist < coll and dist > 0.001:
                 push_dir = diff / dist
                 #hyperbolic repulsive
@@ -216,16 +218,16 @@ class Pursuer(Agent):
         rel_unit_pos = my_pos - unit_pos
         sigm = self.sigmoid(np.dot(unit_vel, rel_unit_pos))
         form_r = sigm * self.formation_r + (1 - sigm) * self.formation_r_min
-        rho = 1 - (rel_unit_pos[0]/form_r)**2 - (rel_unit_pos[1]/form_r)**2
+        dist = np.linalg.norm(rel_unit_pos) - unit.my_rad - self.my_rad
+        if dist < 1e-6:
+            return np.zeros_like(my_pos)
+        rho = 1 - (dist / form_r)**2
         #inside of circle
         if rho > 0:
-            alpha = 20.0
+            alpha = 15.0
         #outside of circle
         else:
             alpha = 2.0
-        dist = np.linalg.norm(rel_unit_pos)
-        if dist < 1e-6:
-            return np.zeros_like(my_pos)
         norm_vec = rel_unit_pos/dist
         #circle around center
         tangent_vec = np.array([-rel_unit_pos[1], rel_unit_pos[0]])
@@ -233,13 +235,37 @@ class Pursuer(Agent):
         fdwrd = self.circle_dir * tangent_vec
         form_vel = fdbck + fdwrd
         return form_vel
+    
+    def calculate_axis_consensus(self, neighbors, center_pos):
+        if not neighbors:
+            return None
+        my_rel_pos = self.position - center_pos
+        my_axis = np.cross(my_rel_pos, self.curr_speed)
+        #sum of all axes
+        axes_sum = my_axis
+        count = 1
+        for n in neighbors:
+            #calculating the second rotation axes
+            n_rel_pos = n.position - center_pos
+            n_axis = np.cross(n_rel_pos, n.curr_speed)
+            #normalize
+            norm = np.linalg.norm(n_axis)
+            if norm > 1e-6:
+                n_axis = n_axis / norm
+                axes_sum += n_axis
+                count += 1
+        #average axis
+        avg_axis = axes_sum / count
+        #normalize
+        if np.linalg.norm(avg_axis) > 1e-6:
+            return avg_axis / np.linalg.norm(avg_axis)
+        return None
 
-    def form_vortex_field_sphere(self, unit: Prime_unit, mock_position=None):
+    def form_vortex_field_sphere(self, unit: Prime_unit, mock_position=None, close_purs=None):
         if mock_position is not None:
             my_pos = mock_position
         else:
             my_pos = self.position
-            
         unit_pos = unit.position
         unit_vel = unit.curr_speed
         rel_unit_pos = my_pos - unit_pos
@@ -247,7 +273,7 @@ class Pursuer(Agent):
         sigm = self.sigmoid(np.dot(unit_vel, rel_unit_pos))
         form_r = sigm * self.formation_r + (1 - sigm) * self.formation_r_min
         #distance from prime
-        dist = np.linalg.norm(rel_unit_pos)
+        dist = np.linalg.norm(rel_unit_pos) - unit.my_rad - self.my_rad
         if dist < 1e-6:
             return np.zeros_like(my_pos)
         rho = 1 - (dist / form_r)**2
@@ -260,13 +286,24 @@ class Pursuer(Agent):
         normal_vec = rel_unit_pos / dist
         #rotation axis, cool looking
         t = self.num_iter * 0.3
-        rotation_axis = np.array([np.sin(t), np.cos(t * 0.7), np.sin(t * 1.2)])
-        rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+        desired_axis = np.array([np.sin(t), np.cos(t * 0.7), np.sin(t * 1.2)])
+        desired_axis /= np.linalg.norm(desired_axis)
+        #average axis of all neighbors
+        consensus_axis = self.calculate_axis_consensus(close_purs, unit.position)
+        #weighted sum of those
+        if consensus_axis is not None:
+            weight = 0.8 
+            final_axis = (1 - weight) * desired_axis + weight * consensus_axis
+            final_axis /= np.linalg.norm(final_axis)
+        else:
+            final_axis = desired_axis
+        #resulting tangent
+        tangent_vec = np.cross(final_axis, rel_unit_pos)
         #rotation_axis = np.array([0.0, 0.0, 1.0]) 
         #if np.linalg.norm(unit_vel) > 0.1:
         #    rotation_axis = unit_vel / np.linalg.norm(unit_vel)
         #feedforward vector tangential with rotation axis and normalized vec from prime to pursuer
-        tangent_vec = np.cross(rotation_axis, rel_unit_pos)
+        #tangent_vec = np.cross(rotation_axis, rel_unit_pos)
         #composing the forces into resulting form vector
         fdbck = alpha * rho * normal_vec
         fdwrd = self.circle_dir * tangent_vec
@@ -277,10 +314,10 @@ class Pursuer(Agent):
         tar_speed = np.linalg.norm(target[0].curr_speed)
         my_speed = self.max_speed
         #if target is faster then pursuer, just pure pursue him
-        if tar_speed >= my_speed: #or target[1] != self.purs_types['circling']:
+        if tar_speed >= my_speed: #or target[1] == self.purs_types['pure_pursuit']:
             return self.pursuit_pure_pursuit(target)
         #still too fast for encirclement, CB him
-        elif tar_speed >= my_speed/2:
+        elif tar_speed >= my_speed/2: #or target[1] == self.purs_types['const_bear']:
             return self.pursuit_constant_bearing(target)
         #if more then one is chasing him and he is further from unit, circle him
         if np.linalg.norm(unit.position - target[0].position) >= self.safe_circle_r:
@@ -289,7 +326,7 @@ class Pursuer(Agent):
                     if len(self.position) == 2:
                         return self.pursuit_circling(target)
                     else:
-                        return self.pursuit_sphering(target)
+                        return self.pursuit_sphering(target, purs)
         #no one else is chasing him, catch him
         return self.pursuit_constant_bearing(target)
     
@@ -299,22 +336,22 @@ class Pursuer(Agent):
         else:
             my_pos = self.position
         target[1] = self.purs_types['circling']
+        self.prime_coll_r = 10.5
         #strong repulsive force is needed
         self.rep_in_purs = 25.0
         self.prime_rep_in_purs = 20.9
         #the center of the vortex field is not shifted
         rel_pos = my_pos - (target[0].position) #+ target[0].curr_speed * self.dt * self.pred_time)
-        dist = np.linalg.norm(rel_pos)
-        rho = 1 - (rel_pos[0]/self.t_circle)**2 - (rel_pos[1]/self.t_circle)**2
+        dist = np.linalg.norm(rel_pos) - target[0].my_rad - self.my_rad
+        if dist < 1e-6:
+            return np.zeros_like(my_pos)
+        rho = 1 - (dist / self.t_circle)**2
         #inside of circle
         if rho > 0:
             alpha = 20.0
         #outside of circle
         else:
             alpha = 1.0
-        dist = np.linalg.norm(rel_pos)
-        if dist < 1e-6:
-            return np.zeros_like(my_pos)
         norm_vec = rel_pos/dist
         #circling in opposite direction to defensive formation circle
         tangent_vec = np.array([-rel_pos[1], rel_pos[0]])
@@ -328,15 +365,20 @@ class Pursuer(Agent):
             purs_vel = purs_vel/vel_norm * 0.9
         return purs_vel
     
-    def pursuit_sphering(self, target: list[Invader, int]):
+    def pursuit_sphering(self, target: list[Invader, int], purs):
+        other_purs = []
+        for p in purs:
+            if p is not self and p.target != None and p.target[0] is target[0]:
+                other_purs.append(p)
         target[1] = self.purs_types['circling']
         #strong repulsive force is needed
+        self.prime_coll_r = 10.5
         self.rep_in_purs = 25.0
         self.prime_rep_in_purs = 20.9
         my_pos = self.position
         rel_pos = my_pos - (target[0].position)
         #distance from target
-        dist = np.linalg.norm(rel_pos)
+        dist = np.linalg.norm(rel_pos) - target[0].my_rad - self.my_rad
         if dist < 1e-6:
             return np.zeros_like(my_pos)
         rho = 1 - (dist / self.t_circle)**2
@@ -349,13 +391,24 @@ class Pursuer(Agent):
         normal_vec = rel_pos / dist
         #rotation axis, cool looking
         t = self.num_iter * 0.3
-        rotation_axis = np.array([np.sin(t), np.cos(t * 0.7), np.sin(t * 1.2)])
-        rotation_axis = rotation_axis / np.linalg.norm(rotation_axis)
+        desired_axis = np.array([np.sin(t), np.cos(t * 0.7), np.sin(t * 1.2)])
+        desired_axis = desired_axis / np.linalg.norm(desired_axis)
+        #average axis of all neighbors
+        consensus_axis = self.calculate_axis_consensus(other_purs, target[0].position)
+        #weighted sum of those
+        if consensus_axis is not None:
+            weight = 0.8 
+            final_axis = (1 - weight) * desired_axis + weight * consensus_axis
+            final_axis /= np.linalg.norm(final_axis)
+        else:
+            final_axis = desired_axis
+        #resulting tangent
+        tangent_vec = np.cross(final_axis, rel_pos)
         #rotation_axis = np.array([0.0, 0.0, 1.0]) 
         #if np.linalg.norm(unit_vel) > 0.1:
         #    rotation_axis = unit_vel / np.linalg.norm(unit_vel)
         #feedforward vector tangential with rotation axis and normalized vec from prime to pursuer
-        tangent_vec = np.cross(rotation_axis, rel_pos)
+        #tangent_vec = np.cross(rotation_axis, rel_pos)
         #composing the forces into resulting form vector
         fdbck = alpha * rho * normal_vec
         fdwrd = self.circle_dir * tangent_vec
@@ -370,6 +423,7 @@ class Pursuer(Agent):
     def pursuit_constant_bearing(self, target: list[Invader, int]):
         #target is quite fast, circling is not possible
         target[1] = self.purs_types['const_bear']
+        self.prime_coll_r = 1.5
         self.rep_in_purs = 8.0
         self.prime_rep_in_purs = 12.9
         v_tar = target[0].curr_speed
@@ -401,6 +455,7 @@ class Pursuer(Agent):
     def pursuit_pure_pursuit(self, target: list[Invader, int]):
         #target is very fast, pure pursuit
         target[1] = self.purs_types['pure_pursuit']
+        self.prime_coll_r = 1.5
         self.rep_in_purs = 8.0
         self.prime_rep_in_purs = 12.9
         PP_dir = target[0].position - self.position

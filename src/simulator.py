@@ -72,7 +72,7 @@ class DroneSimulation:
             pos_u = prime_pos if prime_pos is not None else np.array([3.0, 3.0, 3.0])
         else:
             pos_u = prime_pos if prime_pos is not None else np.array([3.0, 3.0])
-        self.prime = Prime_unit(position=pos_u, max_acc=acc_prime, max_omega=1.0)
+        self.prime = Prime_unit(position=pos_u, max_acc=acc_prime, max_omega=1.0, my_rad=self.sc.UNIT_RAD)
         self.hist_prime.append(pos_u)
 
         #init positions and acceleration of agents (random)
@@ -103,13 +103,13 @@ class DroneSimulation:
         acc_purs = purs_acc or 1.0
         #pursuer init
         for i in range(self.sc.PURSUER_NUM):
-            p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, num=i, purs_num=self.sc.PURSUER_NUM)
+            p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=self.sc.PURSUER_NUM)
             self.pursuers.append(p)
             self.hist_pursuers[i].append(rnd_points_purs[i])
 
         #invader init
         for i in range(self.sc.INVADER_NUM):
-            inv = Invader(position=rnd_points_inv[i], max_acc=rnd_acc_inv[i], max_omega=1.5)
+            inv = Invader(position=rnd_points_inv[i], max_acc=rnd_acc_inv[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD)
             self.invaders.append(inv)
             self.hist_invaders[i].append(rnd_points_inv[i])
 

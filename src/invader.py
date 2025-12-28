@@ -10,7 +10,7 @@ class Invader(Agent):
         self.local_drone_dir = np.random.uniform(-1, 1, size=2)
         self.cons_targ = 0.5
         self.cons_purs = 0.5
-        self.pursuer = None
+        self.purs_num = 0
         self.KP = 10.0
         self.KD = 0.1
         

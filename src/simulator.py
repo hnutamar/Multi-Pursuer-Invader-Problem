@@ -249,15 +249,22 @@ class DroneSimulation:
                 self.hist_invaders[i].append(inv.position.copy())
             self.hist_prime.append(self.prime.position.copy())
 
-        #collisions check
+        #crash (invader and prime)
+        for i in self.invaders:
+            if not i.crashed and np.sum((i.position - self.prime.position)**2) < self.sc.UNIT_DOWN_RAD**2:
+                self.prime.crashed = True
+            i.purs_num = 0
+        
+        #collisions check, pursue check
         for p in free_purs:
+            #pursue check
+            if p.target is not None:
+                p.target[0].purs_num += 1
             #capture check
             for i in free_inv:
                 if np.sum((p.position - i.position)**2) < self.sc.CAPTURE_RAD**2 and not i.crashed:
                     self.captured_count += 1
                     i.crashed = True
-                    if i.pursuer is not None:
-                        i.pursuer.target = None
             #crash (pursuer and pursuer)
             if frame > self.crash_enabled or self.purs_crash:
                 self.purs_crash = True
@@ -267,10 +274,6 @@ class DroneSimulation:
                         other.crashed = True
             #crash (pursuer and prime)
             if np.sum((p.position - self.prime.position)**2) < self.sc.UNIT_DOWN_RAD**2:
-                self.prime.crashed = True
-        #crash (invader and prime)
-        for i in self.invaders:
-            if not i.crashed and np.sum((i.position - self.prime.position)**2) < self.sc.UNIT_DOWN_RAD**2:
                 self.prime.crashed = True
 
         #updating graphics

@@ -52,8 +52,10 @@ class Pursuer(Agent):
         self.circle_dir = 1
         self.pred_time = 20
         self.purs_types = {"circling": 1,
-                           "const_bear": 2,
-                           "pure_pursuit": 3}
+                           "const_bear1": 2,
+                           "pure_pursuit1": 3,
+                           "const_bear": 4,
+                           "pure_pursuit": 5}
         self.capture_cooldown = 100
         self.ema_acc = np.zeros(3)
         
@@ -77,7 +79,7 @@ class Pursuer(Agent):
         if self.target == None:
             if self.strategy_capture_cone(targets, prime_unit, self.num_iter, cooldown=self.capture_cooldown*self.dt):
                 tar_vel = self.pursue_target(self.target, pursuers, prime_unit)
-            elif self.strategy_target_close(targets, pursuers):
+            elif self.strategy_target_close(targets):
                 tar_vel = self.pursue_target(self.target, pursuers, prime_unit)
         #pursuer having target -> pursue it
         elif self.target != None and self.target[0].crashed == False:
@@ -134,6 +136,7 @@ class Pursuer(Agent):
         cand_t_idxs = [
             i for i, inv in enumerate(targets)
             if near_and_forward[i] and inv not in self.ignored_targs
+            and inv.purs_num < 4
         ]
         #those behind go to ignore list, if not already there
         behind_idxs = [
@@ -172,13 +175,13 @@ class Pursuer(Agent):
             self.ignored_targs[targets[i]] = sim_time
         return False
     
-    def strategy_target_close(self, targets: list[Invader], purs):
+    def strategy_target_close(self, targets: list[Invader]):
+        if len(self.position) == 3:
+            MAX_PURSUERS = 10
+        else:
+            MAX_PURSUERS = 4
         for t in targets:
-            purs_num = 0
-            for p in purs:
-                if p is not self and p.target != None and p.target[0] is t:
-                    purs_num += 1
-            if np.linalg.norm(t.position - self.position) < self.target_close and purs_num < 5:
+            if np.linalg.norm(t.position - self.position) < self.target_close and t.purs_num < MAX_PURSUERS:
                 self.target = [t, self.purs_types['circling']]
                 self.state = States.PURSUE
                 #clearing ignore list, not needed now, because pursuer has target
@@ -314,10 +317,12 @@ class Pursuer(Agent):
         tar_speed = np.linalg.norm(target[0].curr_speed)
         my_speed = self.max_speed
         #if target is faster then pursuer, just pure pursue him
-        if tar_speed >= my_speed: #or target[1] == self.purs_types['pure_pursuit']:
+        if tar_speed >= my_speed or target[1] == self.purs_types['pure_pursuit']:
+            target[1] = self.purs_types['pure_pursuit']
             return self.pursuit_pure_pursuit(target)
         #still too fast for encirclement, CB him
-        elif tar_speed >= my_speed/2: #or target[1] == self.purs_types['const_bear']:
+        elif tar_speed >= my_speed/2 or target[1] == self.purs_types['const_bear']:
+            target[1] = self.purs_types['const_bear']
             return self.pursuit_constant_bearing(target)
         #if more then one is chasing him and he is further from unit, circle him
         if np.linalg.norm(unit.position - target[0].position) >= self.safe_circle_r:
@@ -328,6 +333,7 @@ class Pursuer(Agent):
                     else:
                         return self.pursuit_sphering(target, purs)
         #no one else is chasing him, catch him
+        target[1] = self.purs_types['const_bear1']
         return self.pursuit_constant_bearing(target)
     
     def pursuit_circling(self, target: list[Invader, int], mock_position=None):
@@ -422,9 +428,9 @@ class Pursuer(Agent):
         
     def pursuit_constant_bearing(self, target: list[Invader, int]):
         #target is quite fast, circling is not possible
-        target[1] = self.purs_types['const_bear']
+        #target[1] = self.purs_types['const_bear']
         self.prime_coll_r = 1.5
-        self.rep_in_purs = 8.0
+        self.rep_in_purs = 2.0
         self.prime_rep_in_purs = 12.9
         v_tar = target[0].curr_speed
         #line of sight
@@ -454,9 +460,9 @@ class Pursuer(Agent):
     
     def pursuit_pure_pursuit(self, target: list[Invader, int]):
         #target is very fast, pure pursuit
-        target[1] = self.purs_types['pure_pursuit']
+        #target[1] = self.purs_types['pure_pursuit']
         self.prime_coll_r = 1.5
-        self.rep_in_purs = 8.0
+        self.rep_in_purs = 2.0
         self.prime_rep_in_purs = 12.9
         PP_dir = target[0].position - self.position
         #norming it to the max speed

@@ -9,7 +9,7 @@ class Agent:
         self.drone_dir = np.zeros_like(self.position)
         self.max_omega = max_omega
         self.CD = 0.3
-        self.max_speed = self.max_acc / self.CD
+        self.max_speed = np.sqrt(self.max_acc / self.CD)
         self.dt = 0.1
         self.crashed = False
         #only for prime

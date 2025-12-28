@@ -10,7 +10,7 @@ class Prime_unit(Agent):
         self.KP = 10.0
         self.KD = 0.1
         
-        self.rep_force = 2.0
+        self.rep_force = 15.0
         
         self.axis_a = 0
         self.axis_b = 0
@@ -33,7 +33,7 @@ class Prime_unit(Agent):
         elif mode == Modes.LINE:
             goal_vel = self.goal_force(way_point)
         #summing all the velocities
-        sum_vel = goal_vel + rep_vel_i + rep_vel_p
+        sum_vel = goal_vel + self.rep_force * rep_vel_i + self.rep_force * rep_vel_p
         #making acceleration out of it
         sum_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
         return sum_acc

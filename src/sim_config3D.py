@@ -3,11 +3,13 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 
 class Sim3DConfig:
-    def __init__(self, purs_num=15, inv_num=5, world_width=30, world_height=30, world_z=10, obstacle=False):
+    def __init__(self, purs_num=15, inv_num=5, world_width=30, world_height=30, world_z=10, obstacle=False, obstacle_pos=np.array([10.0, 10.0, 5.0]), obstacle_rad=0.6):
         self.WORLD_WIDTH = world_width
         self.WORLD_HEIGHT = world_height
         self.WORLD_Z = world_z
         self.obstacle = obstacle
+        self.OBS_POS = obstacle_pos
+        self.OBS_RAD = obstacle_rad
         
         self.DRONE_RAD = 0.3
         self.UNIT_RAD = 0.6
@@ -73,8 +75,6 @@ class Sim3DConfig:
         self.u_path, = self.ax.plot([], [], '--', color="#77cc70", alpha=0.6, linewidth=3.0)
         #obstacle
         if self.obstacle:
-            self.OBS_POS = np.array([10.0, 10.0, 5.0])
-            self.OBS_RAD = 0.6
             u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:10j]
             x = self.OBS_POS[0] + self.OBS_RAD * np.cos(u) * np.sin(v)
             y = self.OBS_POS[1] + self.OBS_RAD * np.sin(u) * np.sin(v)

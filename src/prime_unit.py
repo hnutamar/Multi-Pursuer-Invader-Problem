@@ -26,6 +26,7 @@ class Prime_unit(Agent):
             return np.zeros_like(way_point)
         #repulsive force against all drones
         rep_vel_i = self.repulsive_force(invaders, 3.0)
+        rep_vel_p = np.zeros_like(self.position)
         if len(pursuers) != 0:
             rep_vel_p = self.repulsive_force(pursuers, pursuers[0].formation_r_min + 0.5)
         #direction of the goal
@@ -42,8 +43,11 @@ class Prime_unit(Agent):
     def vortex_circle(self, way_point):
         rel_pos = self.position - way_point
         rho = 1 - (rel_pos[0]**2/self.t_circle**2) - (rel_pos[1]**2/self.t_circle**2)
-        purs_vel = np.array([1*rel_pos[1] + 2*rel_pos[0]*rho, -1*rel_pos[0] + 2*rel_pos[1]*rho])
-        return purs_vel
+        goal_vel = np.array([1*rel_pos[1] + 2*rel_pos[0]*rho, -1*rel_pos[0] + 2*rel_pos[1]*rho])
+        goal_speed = np.linalg.norm(goal_vel)
+        if goal_speed > self.max_speed:
+            goal_vel = (goal_vel / goal_speed) * self.max_speed
+        return goal_vel
     
     def goal_force(self, way_point):
         goal_vel = way_point - self.position

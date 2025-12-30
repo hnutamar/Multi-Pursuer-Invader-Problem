@@ -14,7 +14,7 @@ from prime_mode import Modes
 
 class DroneSimulation:
     def __init__(self, sc_config, _3d=False, purs_acc=None, prime_acc=None, inv_acc=None, inv_control=False, no_paths=False,
-                 prime_pos=None, inv_pos=None, purs_pos=None, crash_enabled=100, formation_delay=100, prime_mode=Modes.LINE):
+                 prime_pos=None, inv_pos=None, purs_pos=None, crash_enabled=100, formation_delay=100, prime_mode=Modes.LINE, purs_num=None):
         self._3d = _3d
         self.anim = None
         #figure and plots init
@@ -36,7 +36,7 @@ class DroneSimulation:
         self.hist_invaders = [[] for _ in range(self.sc.INVADER_NUM)]
         
         #init of agents
-        self._init_agents(purs_acc, prime_acc, inv_acc, prime_pos, inv_pos, purs_pos)
+        self._init_agents(purs_acc, prime_acc, inv_acc, prime_pos, inv_pos, purs_pos, purs_num)
         self.crash_enabled = crash_enabled
         self.purs_crash = False
         self.formation_delay = formation_delay
@@ -54,7 +54,7 @@ class DroneSimulation:
             self.fig.canvas.mpl_connect('key_press_event', self._on_key_press)
             self.fig.canvas.mpl_connect('key_release_event', self._on_key_release)
 
-    def _init_agents(self, purs_acc, prime_acc, inv_acc, prime_pos, inv_pos, purs_pos):
+    def _init_agents(self, purs_acc, prime_acc, inv_acc, prime_pos, inv_pos, purs_pos, purs_num):
         #borders and waypoint for prime unit
         x_border = self.sc.WORLD_WIDTH / 6
         y_border = self.sc.WORLD_HEIGHT / 6
@@ -104,7 +104,10 @@ class DroneSimulation:
         acc_purs = purs_acc or 1.0
         #pursuer init
         for i in range(self.sc.PURSUER_NUM):
-            p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=self.sc.PURSUER_NUM)
+            if purs_num is not None:
+                p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=purs_num[i])
+            else:
+                p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD)
             self.pursuers.append(p)
             self.hist_pursuers[i].append(rnd_points_purs[i])
 
@@ -229,7 +232,7 @@ class DroneSimulation:
                 dirs_i.append(inv_acc)
             #normal AI
             else:
-                dirs_i.append(inv.evade(free_purs, self.prime))
+                dirs_i.append(inv.evade(free_purs, self.prime, self.obstacle))
         
         dirs_p = []
         for purs in self.pursuers:

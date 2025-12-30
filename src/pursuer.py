@@ -8,18 +8,18 @@ from pursuer_states import States
 from matplotlib.patches import Circle
 
 class Pursuer(Agent):
-    def __init__(self, position, max_acc, max_omega, my_rad, purs_num):
+    def __init__(self, position, max_acc, max_omega, my_rad, purs_num=np.random.randint(0, 1001)):
         super().__init__(position, max_acc, max_omega)
         #self.num_iter = 0
         self.my_rad = my_rad
-        self.num_iter = np.random.randint(0, 1001)
+        self.num_iter = purs_num
         #self.purs_num = purs_num
         #dir par
         self.purs = 1.2
         self.form = 0.9
         self.rep_in_form = 20.0
         self.rep_in_purs = 6.0
-        self.rep_obs = 5.0
+        self.rep_obs = 1.0
         #self.prime_rep_in_form = 0.0
         self.prime_rep_in_purs = 2.9
         #radiuses
@@ -39,6 +39,7 @@ class Pursuer(Agent):
         self.t_circle = 1.0
         self.target_close = 2.0
         self.safe_circle_r = 3.0
+        self.obs_rad = 8.0
         #other
         self.target = None
         #self.num = num
@@ -77,9 +78,6 @@ class Pursuer(Agent):
         #if crashed, dont move, you are supposed to be dead
         if self.crashed:
             return tar_vel
-        #formation direction according to the obstacle
-        if obstacle is not None and len(self.position) == 2:
-            self.get_avoidance_direction(obstacle.center, obstacle.radius, prime_unit)
         #previous target captured, back to formation
         if self.target != None and self.target[0].crashed == True:
             self.target = None
@@ -99,9 +97,9 @@ class Pursuer(Agent):
             self.target = None
             self.state = States.FORM
             if len(self.position) == 2:
-                form_vel = self.form_vortex_field_circle(prime_unit)
+                form_vel = self.form_vortex_field_circle(prime_unit, obstacle=obstacle)
             else:
-                form_vel = self.form_vortex_field_sphere(prime_unit, close_purs=pursuers)
+                form_vel = self.form_vortex_field_sphere(prime_unit, close_purs=pursuers, obstacle=obstacle)
         #repulsive dirs to avoid collision
         rep_vel = self.repulsive_force(pursuers, self.collision_r)
         #repulsive dirs to avoid collision with obstacle
@@ -117,7 +115,7 @@ class Pursuer(Agent):
     
     def get_avoidance_direction(self, obstacle_pos, obstacle_rad, prime):
         self.circle_dir = 1
-        if np.linalg.norm(obstacle_pos - prime.position) - prime.my_rad - obstacle_rad <= 8.0:
+        if np.linalg.norm(obstacle_pos - prime.position) - prime.my_rad - obstacle_rad <= self.obs_rad:
             vel = prime.curr_speed[:2]
             if np.linalg.norm(vel) < 0.1:
                 return
@@ -255,7 +253,7 @@ class Pursuer(Agent):
         #sigmoid function
         return 1 / (1 + np.exp(-x))
     
-    def form_vortex_field_circle(self, unit: Prime_unit, mock_position=None):
+    def form_vortex_field_circle(self, unit: Prime_unit, obstacle=None, mock_position=None):
         if mock_position is not None:
             my_pos = mock_position
         else:
@@ -282,6 +280,9 @@ class Pursuer(Agent):
         #circle around center
         tangent_vec = np.array([-rel_unit_pos[1], rel_unit_pos[0]])
         fdbck = alpha * rho * norm_vec
+        #direction is also determined by the position of obstacle
+        if obstacle is not None:
+            self.get_avoidance_direction(obstacle.center, obstacle.radius, unit)
         fdwrd = self.circle_dir * tangent_vec
         form_vel = fdbck + fdwrd
         return form_vel
@@ -310,8 +311,28 @@ class Pursuer(Agent):
         if np.linalg.norm(avg_axis) > 1e-6:
             return avg_axis / np.linalg.norm(avg_axis)
         return None
+    
+    def calculate_obstacle_avoidance_axis(self, unit, obstacle_pos, obstacle_rad):
+        #calculating if prime is too close to obstacle
+        vec_to_obs = obstacle_pos - unit.position
+        dist = np.linalg.norm(vec_to_obs) - unit.my_rad - obstacle_rad
+        if dist > self.obs_rad:
+            return None
+        #prime velocity vector
+        velocity = unit.curr_speed
+        if np.linalg.norm(velocity) < 0.1:
+            velocity = np.array([0.0, 0.0, 1.0])
+        #axis for avoidance
+        avoidance_axis = np.cross(velocity, vec_to_obs)
+        #if prime flies directly into the obstacle
+        norm = np.linalg.norm(avoidance_axis)
+        if norm < 1e-6:
+            avoidance_axis = np.cross(velocity, np.array([0,0,1]))
+            norm = np.linalg.norm(avoidance_axis)
+        avoidance_axis = -avoidance_axis / norm
+        return avoidance_axis
 
-    def form_vortex_field_sphere(self, unit: Prime_unit, mock_position=None, close_purs=None):
+    def form_vortex_field_sphere(self, unit: Prime_unit, obstacle=None, mock_position=None, close_purs=None):
         if mock_position is not None:
             my_pos = mock_position
         else:
@@ -334,30 +355,35 @@ class Pursuer(Agent):
             alpha = 1.0
         #normalized vec from prime to pursuer
         normal_vec = rel_unit_pos / dist
+        final_axis = None
+        #axis to avoid obstacle
+        if obstacle != None:
+            final_axis = self.calculate_obstacle_avoidance_axis(unit, obstacle[1], obstacle[2])
         #rotation axis, cool looking
-        t = self.num_iter * 0.3
-        desired_axis = np.array([np.sin(t), np.cos(t * 0.7), np.sin(t * 1.2)])
-        desired_axis /= np.linalg.norm(desired_axis)
-        #average axis of all neighbors
-        consensus_axis = self.calculate_axis_consensus(close_purs, unit.position)
-        #weighted sum of those
-        if consensus_axis is not None:
-            weight = 0.8 
-            final_axis = (1 - weight) * desired_axis + weight * consensus_axis
-            final_axis /= np.linalg.norm(final_axis)
+        if final_axis is None:
+            t = self.num_iter * 0.3
+            desired_axis = np.array([np.sin(t), np.cos(t * 0.7), np.sin(t * 1.2)])
+            desired_axis /= np.linalg.norm(desired_axis)
+            #average axis of all neighbors
+            consensus_axis = self.calculate_axis_consensus(close_purs, unit.position)
+            #weighted sum of those
+            if consensus_axis is not None:
+                weight = 0.8
+                final_axis = (1 - weight) * desired_axis + weight * consensus_axis
+                final_axis /= np.linalg.norm(final_axis)
+            else:
+                final_axis = desired_axis
+            force_flatten = 0
         else:
-            final_axis = desired_axis
+            #force to flatten formation so that the obstacle avoidance would work
+            dist_from_plane = np.dot(rel_unit_pos, final_axis)
+            force_flatten = -final_axis * dist_from_plane * 5.0
         #resulting tangent
         tangent_vec = np.cross(final_axis, rel_unit_pos)
-        #rotation_axis = np.array([0.0, 0.0, 1.0]) 
-        #if np.linalg.norm(unit_vel) > 0.1:
-        #    rotation_axis = unit_vel / np.linalg.norm(unit_vel)
-        #feedforward vector tangential with rotation axis and normalized vec from prime to pursuer
-        #tangent_vec = np.cross(rotation_axis, rel_unit_pos)
         #composing the forces into resulting form vector
         fdbck = alpha * rho * normal_vec
         fdwrd = self.circle_dir * tangent_vec
-        form_vel = fdwrd + fdbck
+        form_vel = fdwrd + fdbck + force_flatten
         return form_vel
     
     def pursue_target(self, target: list[Invader, int], purs: list[Agent], unit: Prime_unit):
@@ -457,11 +483,6 @@ class Pursuer(Agent):
             final_axis = desired_axis
         #resulting tangent
         tangent_vec = np.cross(final_axis, rel_pos)
-        #rotation_axis = np.array([0.0, 0.0, 1.0]) 
-        #if np.linalg.norm(unit_vel) > 0.1:
-        #    rotation_axis = unit_vel / np.linalg.norm(unit_vel)
-        #feedforward vector tangential with rotation axis and normalized vec from prime to pursuer
-        #tangent_vec = np.cross(rotation_axis, rel_pos)
         #composing the forces into resulting form vector
         fdbck = alpha * rho * normal_vec
         fdwrd = self.circle_dir * tangent_vec

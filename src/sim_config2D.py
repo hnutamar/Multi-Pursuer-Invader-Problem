@@ -3,7 +3,7 @@ from matplotlib.patches import Circle
 import numpy as np
 
 class Sim2DConfig:
-    def __init__(self, purs_num=15, inv_num=5, world_width=30, world_height=30, obstacle=False):
+    def __init__(self, purs_num=15, inv_num=5, world_width=30, world_height=30, obstacle=False, obstacle_rad=0.6, obstacle_pos=[15.0, 15.0]):
         self.WORLD_WIDTH = world_width
         self.WORLD_HEIGHT = world_height
         self.obstacle = obstacle
@@ -11,7 +11,8 @@ class Sim2DConfig:
         self.CAPTURE_RAD = 0.3
         self.DRONE_RAD = 0.3
         self.UNIT_RAD = 0.6
-        self.OBS_RAD = 0.6
+        self.OBS_RAD = obstacle_rad
+        self.obs_pos = obstacle_pos
         
         self.PURSUER_NUM = purs_num
         self.INVADER_NUM = inv_num
@@ -79,7 +80,7 @@ class Sim2DConfig:
         self.u_path, = self.ax.plot([], [], '--', color="#77cc70", alpha=0.6, linewidth=3.0)
         #obstacle
         if self.obstacle:
-            self.obs_patch = Circle((15.0, 15.0), self.OBS_RAD, color='black', zorder=5)
+            self.obs_patch = Circle(self.obs_pos, self.OBS_RAD, color='black', zorder=5)
             self.ax.add_patch(self.obs_patch)
         
         #visual for prime vortex field

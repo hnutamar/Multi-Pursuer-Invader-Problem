@@ -60,8 +60,12 @@ class Pursuer(Agent):
                            "pure_pursuit": 5}
         self.capture_cooldown = 100
         self.ema_acc = np.zeros(3)
+        if len(self.position) == 3:
+            self.MAX_PURSUERS = 10
+        else:
+            self.MAX_PURSUERS = 4
         
-    def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit, obstacle: Circle):
+    def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit, obstacle):
         #calculation of the formation
         #self.form_p = [p for p in pursuers if (p.state == States.FORM and np.linalg.norm(p.position - prime_unit.position) < self.form_max[0])]
         #self.formation_r = max(len(self.form_p)*self.dist_formation/(2*np.pi), self.min_formation_r)
@@ -73,6 +77,9 @@ class Pursuer(Agent):
         #if crashed, dont move, you are supposed to be dead
         if self.crashed:
             return tar_vel
+        #formation direction according to the obstacle
+        if obstacle is not None and len(self.position) == 2:
+            self.get_avoidance_direction(obstacle.center, obstacle.radius, prime_unit)
         #previous target captured, back to formation
         if self.target != None and self.target[0].crashed == True:
             self.target = None
@@ -108,6 +115,21 @@ class Pursuer(Agent):
         new_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
         return new_acc
     
+    def get_avoidance_direction(self, obstacle_pos, obstacle_rad, prime):
+        self.circle_dir = 1
+        if np.linalg.norm(obstacle_pos - prime.position) - prime.my_rad - obstacle_rad <= 8.0:
+            vel = prime.curr_speed[:2]
+            if np.linalg.norm(vel) < 0.1:
+                return
+            vec_to_obs = (obstacle_pos - prime.position)[:2]
+            #2D cross product
+            cross_z = vel[0] * vec_to_obs[1] - vel[1] * vec_to_obs[0]
+            if cross_z > 0:
+                self.circle_dir = -1
+            else:
+                self.circle_dir = 1
+        return
+    
     def strategy_capture_cone(self, targets: list[Invader], unit: Prime_unit, sim_time: float, cooldown: float = 10.0):
         if not targets:
             return False
@@ -136,7 +158,7 @@ class Pursuer(Agent):
         cand_t_idxs = [
             i for i, inv in enumerate(targets)
             if near_and_forward[i] and inv not in self.ignored_targs
-            and inv.purs_num < 4
+            and inv.purs_num < self.MAX_PURSUERS
         ]
         #those behind go to ignore list, if not already there
         behind_idxs = [
@@ -176,12 +198,9 @@ class Pursuer(Agent):
         return False
     
     def strategy_target_close(self, targets: list[Invader]):
-        if len(self.position) == 3:
-            MAX_PURSUERS = 10
-        else:
-            MAX_PURSUERS = 4
+        #if target is close enough and is not pursued by too many pursuers
         for t in targets:
-            if np.linalg.norm(t.position - self.position) < self.target_close and t.purs_num < MAX_PURSUERS:
+            if np.linalg.norm(t.position - self.position) < self.target_close and t.purs_num < self.MAX_PURSUERS:
                 self.target = [t, self.purs_types['circling']]
                 self.state = States.PURSUE
                 #clearing ignore list, not needed now, because pursuer has target
@@ -205,19 +224,31 @@ class Pursuer(Agent):
                 rep_dir += push_dir * magnitude
         return rep_dir  
     
-    def repulsive_force_obs(self, circle: Circle, coll=5.0):
+    def repulsive_force_obs(self, circle, coll=5.0):
         rep_dir = np.zeros_like(self.position)
         if circle is None:
             return rep_dir
         #compute the distance from self and if close enough, compute the repulsive force
-        diff = self.position - circle.center
-        dist = np.linalg.norm(diff) - self.my_rad - circle.radius
-        if dist < coll and dist > 0.001:
-            push_dir = diff / dist
-            #hyperbolic repulsive
-            magnitude = (1.0 / dist - 1.0 / coll) 
-            # magnitude = (coll - dist) / coll
-            rep_dir += push_dir * magnitude
+        #for 2D
+        if len(rep_dir) == 2:
+            diff = self.position - circle.center
+            dist = np.linalg.norm(diff) - self.my_rad - circle.radius
+            if dist < coll and dist > 0.001:
+                push_dir = diff / dist
+                #hyperbolic repulsive
+                magnitude = (1.0 / dist - 1.0 / coll) 
+                # magnitude = (coll - dist) / coll
+                rep_dir += push_dir * magnitude
+        #for 3D
+        else:
+            diff = self.position - circle[1]
+            dist = np.linalg.norm(diff) - self.my_rad - circle[2]
+            if dist < coll and dist > 0.001:
+                push_dir = diff / dist
+                #hyperbolic repulsive
+                magnitude = (1.0 / dist - 1.0 / coll) 
+                # magnitude = (coll - dist) / coll
+                rep_dir += push_dir * magnitude
         return rep_dir 
     
     def sigmoid(self, x):

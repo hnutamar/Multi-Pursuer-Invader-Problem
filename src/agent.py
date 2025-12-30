@@ -58,32 +58,22 @@ class Agent:
     def clip_angle(self, dir_vec, dt):
         current_speed_norm = np.linalg.norm(self.curr_speed)
         target_speed_norm = np.linalg.norm(dir_vec)
-
         if current_speed_norm < 1e-6 or target_speed_norm < 1e-6:
             return dir_vec
 
         u = self.curr_speed / current_speed_norm
         v = dir_vec / target_speed_norm
-
         dot_product = np.dot(u, v)
-
         dot_product = np.clip(dot_product, -1.0, 1.0)
-        
         angle = np.arccos(dot_product)
-
         max_step = self.max_omega * dt
 
         if angle <= max_step:
             return dir_vec
-        
         else:
             t = max_step / angle
-
             sin_angle = np.sin(angle)
-            
             w1 = np.sin((1 - t) * angle) / sin_angle
             w2 = np.sin(t * angle) / sin_angle
-
             new_dir_normed = w1 * u + w2 * v
-
             return new_dir_normed * target_speed_norm

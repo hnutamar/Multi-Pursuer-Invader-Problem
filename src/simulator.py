@@ -28,6 +28,7 @@ class DroneSimulation:
         self.pursuers = []
         self.invaders = []
         self.captured_count = 0
+        self.obstacle = None
         
         #agents path history
         self.hist_prime = []
@@ -112,6 +113,11 @@ class DroneSimulation:
             inv = Invader(position=rnd_points_inv[i], max_acc=rnd_acc_inv[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD)
             self.invaders.append(inv)
             self.hist_invaders[i].append(rnd_points_inv[i])
+        #obstacle
+        if not self._3d:
+            self.obstacle = self.sc.obs_patch
+        else:
+            self.obstacle = [self.sc.obs_patch, self.sc.OBS_POS, self.sc.OBS_RAD]
 
     def _init_graphics(self):
         #ellipse for vortex field visualization
@@ -228,7 +234,7 @@ class DroneSimulation:
         dirs_p = []
         for purs in self.pursuers:
             close_purs = [p for p in free_purs if np.linalg.norm(p.position - purs.position) <= self.sc.PURS_VIS]
-            dirs_p.append(purs.pursue(free_inv, close_purs, self.prime, self.sc.obs_patch))
+            dirs_p.append(purs.pursue(free_inv, close_purs, self.prime, self.obstacle))
 
         dir_u = self.prime.fly(self.way_point, free_inv, free_purs, self.prime_mode)
 
@@ -257,17 +263,22 @@ class DroneSimulation:
             i.purs_num = 0
             
         #crash (obstacle and prime)
-        if self.sc.obs_patch is not None and np.sum((self.prime.position - self.sc.obs_patch.center)**2) < self.sc.obs_patch.radius:
-            self.prime.crashed = True
-        
+        if self.obstacle is not None:
+            if not self._3d and np.sum((self.prime.position - self.obstacle.center)**2) < self.obstacle.radius**2:
+                self.prime.crashed = True
+            elif self._3d and np.sum((self.prime.position - self.sc.OBS_POS)**2) < self.sc.OBS_RAD**2:
+                self.prime.crashed = True
         #collisions check, pursue check
         for p in free_purs:
             #pursue check
             if p.target is not None:
                 p.target[0].purs_num += 1
             #obstacle check
-            if self.sc.obs_patch is not None and np.sum((p.position - self.sc.obs_patch.center)**2) < self.sc.obs_patch.radius:
-                p.crashed = True
+            if self.sc.obs_patch is not None:
+                if not self._3d and np.sum((p.position - self.sc.obs_patch.center)**2) < self.sc.obs_patch.radius**2:
+                    p.crashed = True
+                elif self._3d and np.sum((p.position - self.sc.OBS_POS)**2) < self.sc.OBS_RAD**2:
+                    p.crashed = True
             #capture check
             for i in free_inv:
                 if np.sum((p.position - i.position)**2) < self.sc.CAPTURE_RAD**2 and not i.crashed:
@@ -333,11 +344,11 @@ class DroneSimulation:
             print("anim_starts!")
         if self._3d:
             artists = (self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths +
-                [self.sc.u_dot, self.sc.u_path]), #self.sc.quiver]
+                [self.sc.u_dot, self.sc.u_path, self.sc.obs_patch]), #self.sc.quiver]
             # return self.sc.p_dots + self.sc.i_dots + [self.sc.u_dot] #self.sc.quiver]
         else:
             artists = (self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths + 
-                [self.sc.u_dot, self.sc.u_path, self.sc.quiver, self.sc.obs_patch] + self.sc.inv_quiver)
+                [self.sc.u_dot, self.sc.u_path, self.sc.quiver, self.obstacle] + self.sc.inv_quiver)
         return [a for a in artists if a is not None]
 
     def run(self):

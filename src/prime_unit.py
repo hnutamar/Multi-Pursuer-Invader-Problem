@@ -11,7 +11,7 @@ class Prime_unit(Agent):
         self.KD = 0.1
         
         self.rep_force = self.max_speed * 1.5
-        
+        #not needed ríght now
         self.axis_a = 0
         self.axis_b = 0
         self.rot_angle = 0

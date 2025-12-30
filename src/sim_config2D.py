@@ -1,20 +1,24 @@
 import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
 import numpy as np
 
 class Sim2DConfig:
-    def __init__(self, purs_num=15, inv_num=5, world_width=30, world_height=30):
+    def __init__(self, purs_num=15, inv_num=5, world_width=30, world_height=30, obstacle=False):
         self.WORLD_WIDTH = world_width
         self.WORLD_HEIGHT = world_height
+        self.obstacle = obstacle
         
         self.CAPTURE_RAD = 0.3
         self.DRONE_RAD = 0.3
         self.UNIT_RAD = 0.6
+        self.OBS_RAD = 0.6
         
         self.PURSUER_NUM = purs_num
         self.INVADER_NUM = inv_num
         
         self.CRASH_RAD = self.DRONE_RAD
         self.UNIT_DOWN_RAD = self.UNIT_RAD
+        #visibility of pursuer of other pursuers
         self.PURS_VIS = 3.0
         
         self.p_dots = []
@@ -23,7 +27,8 @@ class Sim2DConfig:
         self.i_paths = []
         self.u_dot = None
         self.u_path = None
-        
+        self.obs_patch = None
+        #vortex fields size
         self.FIELD_RES = 15
         self.FIELD_SIZE = 4
         self.INV_FIELD_RES = 8
@@ -56,6 +61,7 @@ class Sim2DConfig:
         (x1, y1) = trans((self.DRONE_RAD, 0))
         self.drone_in_pixels = np.hypot(x1 - x0, y1 - y0)
         self.prime_in_pixels = self.drone_in_pixels * (self.UNIT_RAD/self.DRONE_RAD)
+        self.obs_in_pixels = self.drone_in_pixels * (self.OBS_RAD/self.DRONE_RAD)
         #pursuers
         for _ in range(self.PURSUER_NUM):
             p_dot, = self.ax.plot([], [], 'o', color='#d62728', label='Pursuer', markersize=self.drone_in_pixels)
@@ -71,8 +77,12 @@ class Sim2DConfig:
         #prime
         self.u_dot, = self.ax.plot([], [], 'o', color="#10ec22", label='Prime Unit', markersize=self.prime_in_pixels)
         self.u_path, = self.ax.plot([], [], '--', color="#77cc70", alpha=0.6, linewidth=3.0)
+        #obstacle
+        if self.obstacle:
+            self.obs_patch = Circle((15.0, 15.0), self.OBS_RAD, color='black', zorder=5)
+            self.ax.add_patch(self.obs_patch)
         
-        #visual for vortex field
+        #visual for prime vortex field
         x = np.linspace(-self.FIELD_SIZE, self.FIELD_SIZE, self.FIELD_RES)
         y = np.linspace(-self.FIELD_SIZE, self.FIELD_SIZE, self.FIELD_RES)
         self.grid_x_base, self.grid_y_base = np.meshgrid(x, y)

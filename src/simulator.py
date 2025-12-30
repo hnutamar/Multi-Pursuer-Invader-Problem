@@ -228,7 +228,7 @@ class DroneSimulation:
         dirs_p = []
         for purs in self.pursuers:
             close_purs = [p for p in free_purs if np.linalg.norm(p.position - purs.position) <= self.sc.PURS_VIS]
-            dirs_p.append(purs.pursue(free_inv, close_purs, self.prime))
+            dirs_p.append(purs.pursue(free_inv, close_purs, self.prime, self.sc.obs_patch))
 
         dir_u = self.prime.fly(self.way_point, free_inv, free_purs, self.prime_mode)
 
@@ -253,13 +253,21 @@ class DroneSimulation:
         for i in self.invaders:
             if not i.crashed and np.sum((i.position - self.prime.position)**2) < self.sc.UNIT_DOWN_RAD**2:
                 self.prime.crashed = True
+            #recounting number of pursuers later
             i.purs_num = 0
+            
+        #crash (obstacle and prime)
+        if self.sc.obs_patch is not None and np.sum((self.prime.position - self.sc.obs_patch.center)**2) < self.sc.obs_patch.radius:
+            self.prime.crashed = True
         
         #collisions check, pursue check
         for p in free_purs:
             #pursue check
             if p.target is not None:
                 p.target[0].purs_num += 1
+            #obstacle check
+            if self.sc.obs_patch is not None and np.sum((p.position - self.sc.obs_patch.center)**2) < self.sc.obs_patch.radius:
+                p.crashed = True
             #capture check
             for i in free_inv:
                 if np.sum((p.position - i.position)**2) < self.sc.CAPTURE_RAD**2 and not i.crashed:
@@ -324,12 +332,13 @@ class DroneSimulation:
         if frame == self.formation_delay and not self.start_anim:
             print("anim_starts!")
         if self._3d:
-            return self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths + \
-                [self.sc.u_dot, self.sc.u_path], #self.sc.quiver]
+            artists = (self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths +
+                [self.sc.u_dot, self.sc.u_path]), #self.sc.quiver]
             # return self.sc.p_dots + self.sc.i_dots + [self.sc.u_dot] #self.sc.quiver]
         else:
-            return self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths + \
-                [self.sc.u_dot, self.sc.u_path, self.sc.quiver] + self.sc.inv_quiver
+            artists = (self.sc.p_dots + self.sc.i_dots + self.sc.p_paths + self.sc.i_paths + 
+                [self.sc.u_dot, self.sc.u_path, self.sc.quiver, self.sc.obs_patch] + self.sc.inv_quiver)
+        return [a for a in artists if a is not None]
 
     def run(self):
         #running the animation

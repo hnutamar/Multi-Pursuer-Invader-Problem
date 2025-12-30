@@ -5,6 +5,7 @@ from agent import Agent
 from invader import Invader
 from prime_unit import Prime_unit
 from pursuer_states import States
+from matplotlib.patches import Circle
 
 class Pursuer(Agent):
     def __init__(self, position, max_acc, max_omega, my_rad, purs_num):
@@ -18,6 +19,7 @@ class Pursuer(Agent):
         self.form = 0.9
         self.rep_in_form = 20.0
         self.rep_in_purs = 6.0
+        self.rep_obs = 5.0
         #self.prime_rep_in_form = 0.0
         self.prime_rep_in_purs = 2.9
         #radiuses
@@ -59,7 +61,7 @@ class Pursuer(Agent):
         self.capture_cooldown = 100
         self.ema_acc = np.zeros(3)
         
-    def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit):
+    def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit, obstacle: Circle):
         #calculation of the formation
         #self.form_p = [p for p in pursuers if (p.state == States.FORM and np.linalg.norm(p.position - prime_unit.position) < self.form_max[0])]
         #self.formation_r = max(len(self.form_p)*self.dist_formation/(2*np.pi), self.min_formation_r)
@@ -93,18 +95,16 @@ class Pursuer(Agent):
                 form_vel = self.form_vortex_field_circle(prime_unit)
             else:
                 form_vel = self.form_vortex_field_sphere(prime_unit, close_purs=pursuers)
-        if form_vel.size != self.position.size:
-            form_vel = np.append(form_vel, prime_unit.position[2] - self.position[2])
-        if tar_vel.size != self.position.size and self.target != None:
-            tar_vel = np.append(tar_vel, self.target[0].position[2] - self.position[2])
         #repulsive dirs to avoid collision
         rep_vel = self.repulsive_force(pursuers, self.collision_r)
+        #repulsive dirs to avoid collision with obstacle
+        obs_vel = self.repulsive_force_obs(obstacle)
         #returning sum of those
         if not np.array_equal(form_vel, np.zeros_like(form_vel)):
-            sum_vel = self.rep_in_form*rep_vel + self.form*form_vel
+            sum_vel = self.rep_in_form*rep_vel + self.form*form_vel + self.rep_obs*obs_vel
         else:
             prime_rep_vel = self.repulsive_force([prime_unit], self.prime_coll_r)
-            sum_vel = self.purs*tar_vel + self.rep_in_purs*rep_vel + self.prime_rep_in_purs*prime_rep_vel
+            sum_vel = self.purs*tar_vel + self.rep_in_purs*rep_vel + self.prime_rep_in_purs*prime_rep_vel + self.rep_obs*obs_vel
         new_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
         return new_acc
     
@@ -205,6 +205,21 @@ class Pursuer(Agent):
                 rep_dir += push_dir * magnitude
         return rep_dir  
     
+    def repulsive_force_obs(self, circle: Circle, coll=5.0):
+        rep_dir = np.zeros_like(self.position)
+        if circle is None:
+            return rep_dir
+        #compute the distance from self and if close enough, compute the repulsive force
+        diff = self.position - circle.center
+        dist = np.linalg.norm(diff) - self.my_rad - circle.radius
+        if dist < coll and dist > 0.001:
+            push_dir = diff / dist
+            #hyperbolic repulsive
+            magnitude = (1.0 / dist - 1.0 / coll) 
+            # magnitude = (coll - dist) / coll
+            rep_dir += push_dir * magnitude
+        return rep_dir 
+    
     def sigmoid(self, x):
         #sigmoid function
         return 1 / (1 + np.exp(-x))
@@ -216,9 +231,10 @@ class Pursuer(Agent):
             my_pos = self.position
         unit_pos = unit.position
         unit_vel = unit.curr_speed
-        #the center of the vortex field shifted in the current unit speed vector, because unit is moving
+        #the center of the vortex directly at prime
         #rel_pos = my_pos - (unit_pos + unit_vel * self.dt * self.pred_time)
         rel_unit_pos = my_pos - unit_pos
+        #radius is combination of two according to prime fly direction
         sigm = self.sigmoid(np.dot(unit_vel, rel_unit_pos))
         form_r = sigm * self.formation_r + (1 - sigm) * self.formation_r_min
         dist = np.linalg.norm(rel_unit_pos) - unit.my_rad - self.my_rad

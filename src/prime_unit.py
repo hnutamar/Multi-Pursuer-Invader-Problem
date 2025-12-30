@@ -10,7 +10,7 @@ class Prime_unit(Agent):
         self.KP = 10.0
         self.KD = 0.1
         
-        self.rep_force = 15.0
+        self.rep_force = self.max_speed * 1.5
         
         self.axis_a = 0
         self.axis_b = 0
@@ -26,7 +26,8 @@ class Prime_unit(Agent):
             return np.zeros_like(way_point)
         #repulsive force against all drones
         rep_vel_i = self.repulsive_force(invaders, 3.0)
-        rep_vel_p = self.repulsive_force(pursuers, 2.0)
+        if len(pursuers) != 0:
+            rep_vel_p = self.repulsive_force(pursuers, pursuers[0].formation_r_min + 0.5)
         #direction of the goal
         if mode == Modes.CIRCLE:
             goal_vel = self.vortex_circle(way_point)
@@ -58,7 +59,7 @@ class Prime_unit(Agent):
             if drone is self:
                 continue
             diff = self.position - drone.position
-            dist = np.linalg.norm(diff)
+            dist = np.linalg.norm(diff) - self.my_rad - drone.my_rad
             if dist < coll and dist > 0.001:
                 push_dir = diff / dist
                 #hyperbolic repulsive

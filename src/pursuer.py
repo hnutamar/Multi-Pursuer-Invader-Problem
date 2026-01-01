@@ -20,6 +20,7 @@ class Pursuer(Agent):
         self.rep_in_form = 20.0
         self.rep_in_purs = 6.0
         self.rep_obs = 1.0
+        self.rep_invs = 20.0
         #self.prime_rep_in_form = 0.0
         self.prime_rep_in_purs = 2.9
         #radiuses
@@ -40,6 +41,7 @@ class Pursuer(Agent):
         self.target_close = 2.0
         self.safe_circle_r = 3.0
         self.obs_rad = 8.0
+        self.rep_invs_r = 8.0
         #other
         self.target = None
         #self.num = num
@@ -53,6 +55,7 @@ class Pursuer(Agent):
         #list of targets
         self.ignored_targs = {}
         self.circle_dir = 1
+        self.circle_dir_obs = 1
         self.pred_time = 20
         self.purs_types = {"circling": 1,
                            "const_bear1": 2,
@@ -65,6 +68,9 @@ class Pursuer(Agent):
             self.MAX_PURSUERS = 10
         else:
             self.MAX_PURSUERS = 4
+        #axis for 3D obstacle avoidance
+        self.avoid_axis = None
+        self.axis_found = False
         
     def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit, obstacle):
         #calculation of the formation
@@ -106,16 +112,23 @@ class Pursuer(Agent):
         obs_vel = self.repulsive_force_obs(obstacle)
         #returning sum of those
         if not np.array_equal(form_vel, np.zeros_like(form_vel)):
-            sum_vel = self.rep_in_form*rep_vel + self.form*form_vel + self.rep_obs*obs_vel
+            #pushing whole formation away from invaders
+            invs_rep_vel = self.repulsive_inv_force(prime_unit, targets, obstacle)
+            sum_vel = self.rep_in_form*rep_vel + self.form*form_vel + self.rep_obs*obs_vel + self.rep_invs*invs_rep_vel
         else:
             prime_rep_vel = self.repulsive_force([prime_unit], self.prime_coll_r)
+            # if self.target[1] != self.purs_types["circling"]:
+            #     prime_rep_vel = self.repulsive_force([prime_unit], self.prime_coll_r)
+            # elif self.repulsive_force_in_circling_pursuit(prime_unit, self.target[0]):
+            #     prime_rep_vel = self.repulsive_force([prime_unit], self.prime_coll_r)
             sum_vel = self.purs*tar_vel + self.rep_in_purs*rep_vel + self.prime_rep_in_purs*prime_rep_vel + self.rep_obs*obs_vel
         new_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
         return new_acc
     
     def get_avoidance_direction(self, obstacle_pos, obstacle_rad, prime):
-        self.circle_dir = 1
         if np.linalg.norm(obstacle_pos - prime.position) - prime.my_rad - obstacle_rad <= self.obs_rad:
+            if self.axis_found:
+                return True
             vel = prime.curr_speed[:2]
             if np.linalg.norm(vel) < 0.1:
                 return
@@ -123,10 +136,13 @@ class Pursuer(Agent):
             #2D cross product
             cross_z = vel[0] * vec_to_obs[1] - vel[1] * vec_to_obs[0]
             if cross_z > 0:
-                self.circle_dir = -1
+                self.axis_found = True
+                self.circle_dir_obs = -1
             else:
-                self.circle_dir = 1
-        return
+                self.axis_found = True
+                self.circle_dir_obs = 1
+            return True
+        return False
     
     def strategy_capture_cone(self, targets: list[Invader], unit: Prime_unit, sim_time: float, cooldown: float = 10.0):
         if not targets:
@@ -220,17 +236,31 @@ class Pursuer(Agent):
                 magnitude = (1.0 / dist - 1.0 / coll) 
                 # magnitude = (coll - dist) / coll
                 rep_dir += push_dir * magnitude
-        return rep_dir  
+        return rep_dir 
     
-    def repulsive_force_obs(self, circle, coll=5.0):
+    def repulsive_force_in_circling_pursuit(self, prime, target):
+        #calculation rel pos of pursuer, finding out if pursuer is in between prime and center of mass
+        vec_to_target = target.position - self.position
+        vec_to_prime = prime.position - self.position
+        norm_t = np.linalg.norm(vec_to_target)
+        norm_p = np.linalg.norm(vec_to_prime)
+        if norm_t > 1e-6 and norm_p > 1e-6:
+            vec_a = vec_to_target / norm_t
+            vec_b = vec_to_prime / norm_p
+            dot_prod = np.dot(vec_a, vec_b)
+            if dot_prod < 0.0:
+                return True            
+        return False
+    
+    def repulsive_force_obs(self, obstacle, coll=5.0):
         rep_dir = np.zeros_like(self.position)
-        if circle is None:
+        if obstacle is None:
             return rep_dir
         #compute the distance from self and if close enough, compute the repulsive force
         #for 2D
         if len(rep_dir) == 2:
-            diff = self.position - circle.center
-            dist = np.linalg.norm(diff) - self.my_rad - circle.radius
+            diff = self.position - obstacle.center
+            dist = np.linalg.norm(diff) - self.my_rad - obstacle.radius
             if dist < coll and dist > 0.001:
                 push_dir = diff / dist
                 #hyperbolic repulsive
@@ -239,8 +269,8 @@ class Pursuer(Agent):
                 rep_dir += push_dir * magnitude
         #for 3D
         else:
-            diff = self.position - circle[1]
-            dist = np.linalg.norm(diff) - self.my_rad - circle[2]
+            diff = self.position - obstacle[1]
+            dist = np.linalg.norm(diff) - self.my_rad - obstacle[2]
             if dist < coll and dist > 0.001:
                 push_dir = diff / dist
                 #hyperbolic repulsive
@@ -248,6 +278,66 @@ class Pursuer(Agent):
                 # magnitude = (coll - dist) / coll
                 rep_dir += push_dir * magnitude
         return rep_dir 
+    
+    def repulsive_inv_force(self, prime, targets, obstacle):
+        rep_dir = np.zeros_like(self.position)
+        close_targs = []
+        dists = []
+        #targets that are close
+        for t in targets:
+            dist = np.linalg.norm(t.position - prime.position) - t.my_rad - prime.my_rad
+            if dist < self.rep_invs_r:
+                close_targs.append(t.position)
+                dists.append(dist)
+        #obstacle dist
+        if obstacle is not None:
+            if len(self.position) == 2:
+                obs_pos = obstacle.center
+                obs_rad = obstacle.radius
+            else:
+                obs_pos = obstacle[1]
+                obs_rad = obstacle[2]
+            dist = np.linalg.norm(obs_pos - prime.position) - obs_rad - prime.my_rad
+            if dist < self.rep_invs_r:
+                close_targs.append(obs_pos)
+                dists.append(dist/4)
+        #making weighted center of mass and then repulsive force against
+        if close_targs:
+            close_targs = np.array(close_targs)
+            dists = np.array(dists)
+            #weights, the closer, the bigger
+            exp_dists = np.exp(-dists)
+            weights = exp_dists / np.sum(exp_dists)
+            w_center_of_mass = np.sum(close_targs * weights[:, np.newaxis], axis=0)
+            #calculation rel pos of pursuer, finding out if pursuer is in between prime and center of mass
+            vec_prime_to_pursuer = self.position - prime.position
+            vec_prime_to_com = w_center_of_mass - prime.position
+            norm_p2u = np.linalg.norm(vec_prime_to_pursuer)
+            norm_u2com = np.linalg.norm(vec_prime_to_com)
+            if norm_p2u > 1e-6 and norm_u2com > 1e-6:
+                vec_a = vec_prime_to_pursuer / norm_p2u
+                vec_b = vec_prime_to_com / norm_u2com
+                dot_prod = np.dot(vec_a, vec_b)
+                #45 degree threshold
+                THRESHOLD_45_DEG = 0.7071
+                if dot_prod < THRESHOLD_45_DEG:
+                    return rep_dir
+            else:
+                return rep_dir
+            #calculating rep dir
+            diff = self.position - w_center_of_mass
+            dist = np.linalg.norm(diff)
+            if dist > 0.001:
+                push_dir = diff / dist
+                detection_dist = self.rep_invs_r
+                if dist < detection_dist:
+                    factor = (detection_dist - dist) / detection_dist
+                    magnitude = factor
+                else:
+                    magnitude = 0
+                rep_dir = push_dir * magnitude
+        return rep_dir
+        
     
     def sigmoid(self, x):
         #sigmoid function
@@ -281,9 +371,11 @@ class Pursuer(Agent):
         tangent_vec = np.array([-rel_unit_pos[1], rel_unit_pos[0]])
         fdbck = alpha * rho * norm_vec
         #direction is also determined by the position of obstacle
+        circle_dir = self.circle_dir
         if obstacle is not None:
-            self.get_avoidance_direction(obstacle.center, obstacle.radius, unit)
-        fdwrd = self.circle_dir * tangent_vec
+            if self.get_avoidance_direction(obstacle.center, obstacle.radius, unit):
+                circle_dir = self.circle_dir_obs
+        fdwrd = circle_dir * tangent_vec
         form_vel = fdbck + fdwrd
         return form_vel
     
@@ -316,8 +408,11 @@ class Pursuer(Agent):
         #calculating if prime is too close to obstacle
         vec_to_obs = obstacle_pos - unit.position
         dist = np.linalg.norm(vec_to_obs) - unit.my_rad - obstacle_rad
-        if dist > self.obs_rad:
-            return None
+        if dist > self.obs_rad or np.dot(unit.curr_speed, vec_to_obs) < 0.0:
+            self.avoid_axis = None
+            return self.avoid_axis
+        elif self.avoid_axis is not None:
+            return self.avoid_axis
         #prime velocity vector
         velocity = unit.curr_speed
         if np.linalg.norm(velocity) < 0.1:
@@ -380,9 +475,12 @@ class Pursuer(Agent):
             force_flatten = -final_axis * dist_from_plane * 5.0
         #resulting tangent
         tangent_vec = np.cross(final_axis, rel_unit_pos)
+        tan_len = np.linalg.norm(tangent_vec)
+        if tan_len > 1e-6:
+            tangent_vec = tangent_vec / tan_len
         #composing the forces into resulting form vector
         fdbck = alpha * rho * normal_vec
-        fdwrd = self.circle_dir * tangent_vec
+        fdwrd = self.circle_dir * tangent_vec * self.max_speed
         form_vel = fdwrd + fdbck + force_flatten
         return form_vel
     

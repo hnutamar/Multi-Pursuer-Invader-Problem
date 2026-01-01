@@ -16,7 +16,7 @@ class Sim3DConfig:
         self.CAPTURE_RAD = 0.3
         self.CRASH_RAD = self.DRONE_RAD
         self.UNIT_DOWN_RAD = self.UNIT_RAD
-        self.PURS_VIS = 3.0
+        self.PURS_VIS = 4.0
         
         self.PURSUER_NUM = purs_num
         self.INVADER_NUM = inv_num

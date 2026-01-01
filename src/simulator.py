@@ -120,7 +120,10 @@ class DroneSimulation:
         if not self._3d:
             self.obstacle = self.sc.obs_patch
         else:
-            self.obstacle = [self.sc.obs_patch, self.sc.OBS_POS, self.sc.OBS_RAD]
+            if self.sc.obs_patch is None:
+                self.obstacle = None
+            else:
+                self.obstacle = [self.sc.obs_patch, self.sc.OBS_POS, self.sc.OBS_RAD]
 
     def _init_graphics(self):
         #ellipse for vortex field visualization
@@ -150,7 +153,7 @@ class DroneSimulation:
         flat_y = grid_y.flatten()
         for x, y in zip(flat_x, flat_y):
             test_pos = np.array([x, y])
-            force_vec = ref_pursuer.form_vortex_field_circle(unit, mock_position=test_pos)
+            force_vec = ref_pursuer.form_vortex_field_circle(unit, mock_position=test_pos, obstacle=self.obstacle)
             norm = np.linalg.norm(force_vec)
             if norm > 0:
                 force_vec = force_vec / norm

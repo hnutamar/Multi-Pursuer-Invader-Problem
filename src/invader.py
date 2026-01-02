@@ -22,7 +22,7 @@ class Invader(Agent):
         p_idx = self.strategy_closest_pursuer(pursuers)
         #v_dir = self.cons_purs*self.strategy_run_away(pursuers, pursuer) + self.cons_targ*self.pursuit_pure_pursuit(target)
         #if the closest pursuer is close enough, run away from him, otherwise pursue the prime
-        if p_idx != -1 and np.linalg.norm(self.position - pursuers[p_idx].position) <= 3.5:
+        if p_idx != -1 and np.linalg.norm(self.position - pursuers[p_idx].position) - self.my_rad - pursuers[p_idx].my_rad <= 3.5:
             v_dir = self.strategy_run_away(pursuers, p_idx)
         else:
             v_dir = self.pursuit_pure_pursuit(target)

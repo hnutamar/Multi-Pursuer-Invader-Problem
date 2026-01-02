@@ -18,7 +18,7 @@ class Pursuer(Agent):
         #repulsive forces
         self.purs = 1.2
         self.form = 0.9
-        self.rep_in_form = 20.0
+        self.rep_in_form = 5.0
         self.rep_in_purs = 6.0
         self.rep_obs = 1.0
         self.rep_invs = 20.0
@@ -419,7 +419,7 @@ class Pursuer(Agent):
         vto_normed = np.zeros_like(self.position)
         if vec_to_obs_norm > 1e-6:
             vto_normed = vec_to_obs/vec_to_obs_norm
-        if dist > self.obs_rad or np.dot(v, vto_normed) <= 0.0:
+        if dist > self.obs_rad or np.dot(v, vto_normed) <= -0.2:
             self.avoid_axis = None
             return None
         elif self.avoid_axis is not None:

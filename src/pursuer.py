@@ -42,7 +42,7 @@ class Pursuer(Agent):
         self.rep_invs_r = 8.0
         #obstacle radiuses
         self.obs_rad = 8.0
-        self.rep_obs_r = 12.0
+        self.rep_obs_r = 8.0
         #states
         self.target = None
         self.state = States.FORM
@@ -279,10 +279,12 @@ class Pursuer(Agent):
         dists = []
         #targets that are close
         for t in targets:
-            dist = np.linalg.norm(t.position - prime.position) - t.my_rad - prime.my_rad
-            if dist < self.rep_invs_r:
-                close_targs.append(t.position)
-                dists.append(dist)
+            dist = np.linalg.norm(t.position - prime.position)
+            if dist - t.my_rad - prime.my_rad < self.rep_invs_r:
+                #position on surface is needed
+                pos = t.position - ((t.position - prime.position)/dist * t.my_rad)
+                close_targs.append(pos)
+                dists.append(dist - t.my_rad - prime.my_rad)
         #obstacle dist
         if obstacle is not None:
             if len(self.position) == 2:
@@ -291,10 +293,12 @@ class Pursuer(Agent):
             else:
                 obs_pos = obstacle[1]
                 obs_rad = obstacle[2]
-            dist = np.linalg.norm(obs_pos - prime.position) - obs_rad - prime.my_rad
-            if dist < self.rep_obs_r:
-                close_targs.append(obs_pos)
-                dists.append(dist/4)
+            dist = np.linalg.norm(obs_pos - prime.position)
+            if dist - obs_rad - prime.my_rad < self.rep_obs_r:
+                #position on surface is needed
+                pos = obs_pos - ((obs_pos - prime.position)/dist * obs_rad)
+                close_targs.append(pos)
+                dists.append((dist - obs_rad - prime.my_rad)/4)
         #making weighted center of mass and then repulsive force against
         if close_targs:
             close_targs = np.array(close_targs)
@@ -319,7 +323,7 @@ class Pursuer(Agent):
             else:
                 return rep_dir
             #calculating rep dir
-            diff = self.position - w_center_of_mass
+            diff = prime.position - w_center_of_mass
             dist = np.linalg.norm(diff)
             if dist > 0.001:
                 push_dir = diff / dist

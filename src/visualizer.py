@@ -4,17 +4,14 @@ from pursuer_states import States
 
 class MatplotlibVisualizer:
     def __init__(self, sc_config, _3d=False):
+        #basic configs
         self.sc = sc_config
         self._3d = _3d
         self.fig = self.sc.fig
         self.ax = self.sc.ax
-        
+        #boolean to signal plt window close
         self.is_open = True
-        
-        # Inicializace grafiky (převezmeme to, co už máš v sc_config, nebo nastavíme zde)
-        # Předpokládám, že sc_config už má vytvořené objekty p_dots, i_dots atd.
-        
-        # Manuální ovládání - stav kláves
+        #manual control
         self.manual_vel = np.zeros(3) if self._3d else np.zeros(2)
         self.fig.canvas.mpl_connect('key_press_event', self._on_key_press)
         self.fig.canvas.mpl_connect('key_release_event', self._on_key_release)
@@ -24,32 +21,26 @@ class MatplotlibVisualizer:
         plt.show(block=False)
 
     def render(self, state, world_instance=None, quiver=False):
-        """Aktualizuje grafiku na základě stavu."""
-        
-        # 1. Pursuers
+        #pursuers
         for i, (p_pos, p_state) in enumerate(zip(state['pursuers'], state['pursuers_status'])):
             p_dot = self.sc.p_dots[i]
             p_dot.set_data([p_pos[0]], [p_pos[1]])
             if self._3d:
                 p_dot.set_3d_properties([p_pos[2]])
-            
-            # Barva podle stavu
+            #color according to the state
             p_dot.set_color("#631616" if p_state == States.PURSUE else '#d62728')
-
-        # 2. Invaders
+        #invaders
         for i, i_pos in enumerate(state['invaders']):
             i_dot = self.sc.i_dots[i]
             i_dot.set_data([i_pos[0]], [i_pos[1]])
             if self._3d:
                 i_dot.set_3d_properties([i_pos[2]])
-
-        # 3. Prime
+        #prime
         u_pos = state['prime']
         self.sc.u_dot.set_data([u_pos[0]], [u_pos[1]])
         if self._3d:
             self.sc.u_dot.set_3d_properties([u_pos[2]])
-            
-        # 4. Vortex Field (Quiver) - pokud chceme
+        #vortex field
         if not self._3d and world_instance is not None and quiver:
              self._update_vector_field(world_instance)
 
@@ -57,8 +48,6 @@ class MatplotlibVisualizer:
         self.fig.canvas.flush_events()
 
     def _update_vector_field(self, world):
-        # Tady zkopíruj svou logiku _update_vector_field
-        # Ale pozor: místo self.pursuers[0] použij world.pursuers[0]
         #making quiver graph, visualizing vortex field
         unit = world.prime
         center = unit.position
@@ -105,10 +94,11 @@ class MatplotlibVisualizer:
             self.sc.inv_quiver[idx].set_UVC(u_arrows, v_arrows)
 
     def _on_close(self, event):
+        #window of plt was closed
         self.is_open = False
 
     def _on_key_press(self, event):
-        # Stejná logika jako dřív
+        #keys pressed
         if event.key == 'up': self.manual_vel[1] = 1.0
         elif event.key == 'down': self.manual_vel[1] = -1.0
         elif event.key == 'left': self.manual_vel[0] = -1.0
@@ -118,7 +108,7 @@ class MatplotlibVisualizer:
             elif event.key == 's': self.manual_vel[2] = -1.0
 
     def _on_key_release(self, event):
-        # Stejná logika pro nulování rychlosti
+        #nulling the velocities on key release
         if event.key in ['up', 'down']: self.manual_vel[1] = 0.0
         elif event.key in ['left', 'right']: self.manual_vel[0] = 0.0
         if self._3d and event.key in ['w', 's']: self.manual_vel[2] = 0.0

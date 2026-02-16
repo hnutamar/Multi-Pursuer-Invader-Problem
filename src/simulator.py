@@ -76,7 +76,6 @@ class DroneSimulation:
             pos_u = prime_pos if prime_pos is not None else np.array([3.0, 3.0])
         self.prime = Prime_unit(position=pos_u, max_acc=acc_prime, max_omega=1.0, my_rad=self.sc.UNIT_RAD)
         self.hist_prime.append(pos_u)
-
         #init positions and acceleration of agents (random)
         if self._3d:
             rnd_points_purs = purs_pos if purs_pos is not None else np.random.uniform(

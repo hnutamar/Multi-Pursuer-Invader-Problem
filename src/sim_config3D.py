@@ -3,13 +3,14 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 
 class Sim3DConfig:
-    def __init__(self, purs_num=15, inv_num=5, world_width=30, world_height=30, world_z=10, obstacle=False, obstacle_pos=np.array([10.0, 10.0, 5.0]), obstacle_rad=0.6):
+    def __init__(self, purs_num=15, inv_num=5, world_width=30, world_height=30, world_z=10, obstacle=False, obstacle_pos=None, obstacle_rad=0.6):
         self.WORLD_WIDTH = world_width
         self.WORLD_HEIGHT = world_height
         self.WORLD_Z = world_z
+        #lists of obstacles
         self.obstacle = obstacle
-        self.OBS_POS = obstacle_pos
-        self.OBS_RAD = obstacle_rad
+        self.obs_pos = obstacle_pos
+        self.obs_rads = obstacle_rad
         
         self.DRONE_RAD = 0.3
         self.UNIT_RAD = 0.6
@@ -74,9 +75,13 @@ class Sim3DConfig:
         self.u_dot, = self.ax.plot([], [], 'o', color="#10ec22", label='Prime Unit', markersize=self.prime_marker_size)
         self.u_path, = self.ax.plot([], [], '--', color="#77cc70", alpha=0.6, linewidth=3.0)
         #obstacle
+        self.obs_patch = []
         if self.obstacle:
             u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:10j]
-            x = self.OBS_POS[0] + self.OBS_RAD * np.cos(u) * np.sin(v)
-            y = self.OBS_POS[1] + self.OBS_RAD * np.sin(u) * np.sin(v)
-            z = self.OBS_POS[2] + self.OBS_RAD * np.cos(v)
-            self.obs_patch = self.ax.plot_wireframe(x, y, z, color="black")
+            for i in range(self.obs_rads):
+                obs_pos = self.obs_pos[i]
+                obs_rad = self.obs_rads[i]
+                x = obs_pos[0] + obs_rad * np.cos(u) * np.sin(v)
+                y = obs_pos[1] + obs_rad * np.sin(u) * np.sin(v)
+                z = obs_pos[2] + obs_rad * np.cos(v)
+                self.obs_patch.append(self.ax.plot_wireframe(x, y, z, color="black"))

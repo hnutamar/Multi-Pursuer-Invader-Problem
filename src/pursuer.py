@@ -15,7 +15,6 @@ class Pursuer(Agent):
         #internal clock
         self.num_iter = purs_num
         #print(purs_num)
-        #self.purs_num = purs_num
         #repulsive forces
         self.purs = 1.2
         self.form = 0.9
@@ -23,14 +22,15 @@ class Pursuer(Agent):
         self.rep_in_purs = 6.0
         self.rep_obs = 1.0
         self.rep_invs = 20.0
-        #self.prime_rep_in_form = 0.0
         self.prime_rep_in_purs = 2.9
-        #radiuses
+        #self.prime_rep_in_form = 0.0
+        #collision radiuses
         self.prime_coll_r = 10.5
         self.collision_r = 2.0
         #formation radiuses
         self.formation_r = 2.0
         self.formation_r_min = 1.0
+        #formation direction
         self.circle_dir = 1
         self.circle_dir_obs = 1
         #capture radiuses
@@ -60,7 +60,7 @@ class Pursuer(Agent):
                            "const_bear": 4,
                            "pure_pursuit": 5}
         self.capture_cooldown = 100
-        self.ema_acc = np.zeros(3)
+        #self.ema_acc = np.zeros(3)
         if len(self.position) == 3:
             self.MAX_PURSUERS = 10
         else:
@@ -474,85 +474,67 @@ class Pursuer(Agent):
         #normalized vec from prime to pursuer
         normal_vec = rel_unit_pos / dist
         final_axis = None
-
+        #observed average axis of neighbors
         observed_group_axis = self.calculate_axis_consensus(close_purs, unit.position)
         #axis to avoid obstacle
         if obstacle is not None:
              final_axis = self.calculate_obstacle_avoidance_axis(unit, obstacle[1], obstacle[2])
              force_flatten = 0
-        # Pokud není překážka, děláme "School of Fish" synchronizaci
+        #if obstacle is not close, do school of fish
         if final_axis is None:
             self.rep_in_form = 20.0
-            # Moje aktuální zamýšlená osa
+            #my axis
             current_axis = self.get_axis_at_time(self.num_iter)
-            
-            # --- IMPLICITNÍ SYNCHRONIZACE HODIN (S Global Search) ---
+            #synchronization of clocks
             if observed_group_axis is not None:
                 #alignment = np.dot(self.get_axis_at_time(self.num_iter), observed_group_axis)
                 #print(f"Alignment: {alignment:.4f}")
-                # 1. Změříme aktuální shodu
+                #current alignment
                 current_axis = self.get_axis_at_time(self.num_iter)
                 current_alignment = np.dot(current_axis, observed_group_axis)
-                
-                # 2. ROZHODOVÁNÍ: Jsem ztracený nebo jen ladím?
-                
-                # A) JSEM ZTRACENÝ (Alignment < 0.8) -> GLOBAL SEARCH
-                # Pokud je shoda malá (např. 0.5), znamená to, že jemné posouvání nestačí.
-                # Musíme "proskenovat" čas kolem sebe a skočit na nejlepší místo.
+                #bad sync, searching for better
                 if current_alignment < 0.8:
                     best_t = self.num_iter
                     best_score = current_alignment
-                    
-                    # Prohledáme okno +/- 15 sekund (to by mělo pokrýt celou periodu pohybu)
-                    # Zkusíme 20 různých časů v tomto okně
+                    #searching through the whole period
                     search_range = np.linspace(self.num_iter - 15.0, self.num_iter + 15.0, 20)
-                    
                     for t_test in search_range:
                         axis_test = self.get_axis_at_time(t_test)
                         score_test = np.dot(axis_test, observed_group_axis)
                         if score_test > best_score:
                             best_score = score_test
                             best_t = t_test
-                    
-                    # SKOK na nejlepší nalezený čas
+                    #best time
                     self.num_iter = best_t
-                    
-                    # Pokud ani hledání nepomohlo a jsme úplně mimo (negativní shoda),
-                    # zkusíme zoufalý náhodný skok, abychom se odsekli.
+                    #if the dot product is very bad, try random jump
                     if best_score < 0.0:
                          self.num_iter += np.random.uniform(10.0, 50.0)
-
-                # B) JSEM SKORO TAM (Alignment >= 0.8) -> FINE TUNING (Gradient Descent)
-                # Tady už jen jemně dolaďujeme, abychom se trefili přesně na 1.0
+                #fine tuning, axes are very similar
                 else:
-                    delta_test = 0.3 # Menší krok pro přesnost
+                    #smaller jump, testing if setting clocks forward or backward makes better alignment
+                    delta_test = 0.3
                     axis_future = self.get_axis_at_time(self.num_iter + delta_test)
                     axis_past = self.get_axis_at_time(self.num_iter - delta_test)
-                    
+                    #making dot products
                     score_future = np.dot(axis_future, observed_group_axis)
                     score_past = np.dot(axis_past, observed_group_axis)
-                    
-                    sync_speed = 0.2 # Jemnější ladění
-                    
+                    #setting clocks to better result
+                    sync_speed = 0.2
                     if score_future > current_alignment:
                          self.num_iter += sync_speed
                     elif score_past > current_alignment:
                          self.num_iter -= sync_speed
-
-                # 3. Finalizace osy pro tento krok
-                # Vezmeme nově vypočtenou osu podle mého času
+                #new my final axis
                 final_axis = self.get_axis_at_time(self.num_iter)
-                
-                # Namícháme to s tím, co vidíme (pro plynulost animace)
+                #combination of my axis with the observed one
                 weight = 0.5 
                 final_axis = (1 - weight) * final_axis + weight * observed_group_axis
-                
-                # Normalizace (pojistka proti dělení nulou)
+                #norm
                 norm = np.linalg.norm(final_axis)
                 if norm > 1e-6:
                     final_axis /= norm
             else:
-                # Jsem sám, věřím jen sobě
+                #being alone
                 final_axis = current_axis
             force_flatten = 0
         else:

@@ -16,12 +16,14 @@ def main():
     #world, physics
     world = SimulationWorld(sc, _3d=_3d, purs_acc=2.8, inv_acc=1.5, prime_acc=0.3)
     #visualization
-    SHOW_VISUALIZATION = True
+    SHOW_VISUALIZATION = False
     vis = None
     if SHOW_VISUALIZATION:
         vis = MatplotlibVisualizer(sc_config=sc, _3d=_3d)
     RENDER_EVERY = 2
+    EPISODE_NUM = 2
     step_counter = 1
+    current_episode = 1
     #loop (used also for RL training)
     running = True
     while running:
@@ -43,8 +45,12 @@ def main():
         #end of episode check
         if done:
             print("End of episode!")
+            if EPISODE_NUM == current_episode:
+                running = False
+                break
             world.reset()
-            running = False
+            step_counter = 1
+            current_episode += 1
 
 if __name__ == "__main__":
     main()

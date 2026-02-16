@@ -1,0 +1,50 @@
+import time
+from world import SimulationWorld
+from visualizer import MatplotlibVisualizer
+from sim_config3D import Sim3DConfig
+from sim_config2D import Sim2DConfig
+import numpy as np
+import matplotlib.pyplot as plt
+
+def main():
+    _3d = False
+    #config
+    if _3d:
+        sc = Sim3DConfig(purs_num=30, inv_num=5, obstacle=False, obstacle_rad=7.0, obstacle_pos=np.array([13.0, 13.0, 6.0]))
+    else:
+        sc = Sim2DConfig(world_height=50, world_width=50, purs_num=20, inv_num=3, obstacle=False, obstacle_rad=7.0, obstacle_pos=[15.0, 15.0])
+    #world, physics
+    world = SimulationWorld(sc, _3d=_3d, purs_acc=2.8, inv_acc=1.5, prime_acc=0.3)
+    #visualization
+    SHOW_VISUALIZATION = True
+    vis = None
+    if SHOW_VISUALIZATION:
+        vis = MatplotlibVisualizer(sc_config=sc, _3d=_3d)
+    RENDER_EVERY = 2
+    step_counter = 1
+    #loop (used also for RL training)
+    running = True
+    while running:
+        #manual control of invader
+        manual_action = None
+        if vis:
+            manual_action = vis.manual_vel
+        #physics step
+        state, reward, done = world.step(dt=0.1)
+        step_counter += 1
+        #graphics
+        if vis and step_counter % RENDER_EVERY == 0:
+            if not vis.is_open:
+                print("Simulation ends!")
+                running = False
+                break
+            vis.render(state, world_instance=world, quiver=False)
+            plt.pause(0.001)
+        #end of episode check
+        if done:
+            print("End of episode!")
+            world.reset()
+            running = False
+
+if __name__ == "__main__":
+    main()

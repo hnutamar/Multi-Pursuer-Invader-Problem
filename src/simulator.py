@@ -14,9 +14,10 @@ from prime_mode import Modes
 
 class DroneSimulation:
     def __init__(self, sc_config, _3d=False, purs_acc=None, prime_acc=None, inv_acc=None, inv_control=False, no_paths=False,
-                 prime_pos=None, inv_pos=None, purs_pos=None, crash_enabled=100, formation_delay=100, prime_mode=Modes.LINE, purs_num=None):
+                 prime_pos=None, inv_pos=None, purs_pos=None, crash_enabled=100, formation_delay=100, prime_mode=Modes.LINE, purs_num=None, headless=False):
         self._3d = _3d
         self.anim = None
+        self.headless = headless
         #figure and plots init
         self.sc = sc_config
         self.ax = sc_config.ax
@@ -107,7 +108,7 @@ class DroneSimulation:
             if purs_num is not None:
                 p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=purs_num[i])
             else:
-                p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD)
+                p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=np.random.randint(0, 1001))
             self.pursuers.append(p)
             self.hist_pursuers[i].append(rnd_points_purs[i])
 
@@ -239,7 +240,7 @@ class DroneSimulation:
         
         dirs_p = []
         for purs in self.pursuers:
-            close_purs = [p for p in free_purs if np.linalg.norm(p.position - purs.position) <= self.sc.PURS_VIS]
+            close_purs = [p for p in free_purs if (np.linalg.norm(p.position - purs.position) - p.my_rad - purs.my_rad) <= self.sc.PURS_VIS]
             dirs_p.append(purs.pursue(free_inv, close_purs, self.prime, self.obstacle))
 
         dir_u = self.prime.fly(self.way_point, free_inv, free_purs, self.prime_mode)

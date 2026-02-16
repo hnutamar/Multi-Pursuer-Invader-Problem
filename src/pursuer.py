@@ -8,12 +8,13 @@ from pursuer_states import States
 from matplotlib.patches import Circle
 
 class Pursuer(Agent):
-    def __init__(self, position, max_acc, max_omega, my_rad, purs_num=np.random.randint(0, 1001)):
+    def __init__(self, position, max_acc, max_omega, my_rad, purs_num):
         super().__init__(position, max_acc, max_omega)
         #radius of drone
         self.my_rad = my_rad
         #internal clock
         self.num_iter = purs_num
+        #print(purs_num)
         #self.purs_num = purs_num
         #repulsive forces
         self.purs = 1.2
@@ -89,7 +90,7 @@ class Pursuer(Agent):
                 tar_vel = self.pursue_target(self.target, pursuers, prime_unit)
         #pursuer having target -> pursue it
         elif self.target != None and self.target[0].crashed == False:
-            if not (self.target[1] != self.purs_types["circling"] and np.linalg.norm(self.position - prime_unit.position) > self.capture_max): #min(self.capture_max, form_count * 3):
+            if not (self.target[1] != self.purs_types["circling"] and np.linalg.norm(self.position - prime_unit.position) > self.capture_max):
                 tar_vel = self.pursue_target(self.target, pursuers, prime_unit) 
         #if target dir is zero, pursuer has no target -> keep the formation
         if np.array_equal(tar_vel, form_vel):
@@ -116,6 +117,7 @@ class Pursuer(Agent):
             #     prime_rep_vel = self.repulsive_force([prime_unit], self.prime_coll_r)
             sum_vel = self.purs*tar_vel + self.rep_in_purs*rep_vel + self.prime_rep_in_purs*prime_rep_vel + self.rep_obs*obs_vel
         new_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
+        #print(self.num_iter)
         return new_acc
     
     def get_avoidance_direction(self, obstacle_pos, obstacle_rad, prime):
@@ -342,6 +344,7 @@ class Pursuer(Agent):
         return 1 / (1 + np.exp(-x))
     
     def form_vortex_field_circle(self, unit: Prime_unit, obstacle=None, mock_position=None):
+        self.rep_in_form = 20.0
         if mock_position is not None:
             my_pos = mock_position
         else:
@@ -376,6 +379,7 @@ class Pursuer(Agent):
         if obstacle is not None:
             if self.get_avoidance_direction(obstacle.center, obstacle.radius, unit):
                 circle_dir = self.circle_dir_obs
+                self.rep_in_form = 5.0
         fdwrd = circle_dir * tangent_vec# * self.max_speed
         form_vel = fdbck + fdwrd
         return form_vel
@@ -437,6 +441,15 @@ class Pursuer(Agent):
         self.avoid_axis = avoidance_axis
         return self.avoid_axis
 
+    def get_axis_at_time(self, t):
+        #school of fish
+        time_scaled = t * 0.3
+        axis = np.array([np.sin(time_scaled), np.cos(time_scaled * 0.7), np.sin(time_scaled * 1.2)])
+        norm = np.linalg.norm(axis)
+        if norm > 1e-6:
+            return axis / norm
+        return np.array([0.0, 0.0, 1.0])
+
     def form_vortex_field_sphere(self, unit: Prime_unit, obstacle=None, mock_position=None, close_purs=None):
         if mock_position is not None:
             my_pos = mock_position
@@ -461,25 +474,89 @@ class Pursuer(Agent):
         #normalized vec from prime to pursuer
         normal_vec = rel_unit_pos / dist
         final_axis = None
+
+        observed_group_axis = self.calculate_axis_consensus(close_purs, unit.position)
         #axis to avoid obstacle
-        if obstacle != None:
-            final_axis = self.calculate_obstacle_avoidance_axis(unit, obstacle[1], obstacle[2])
-        #rotation axis, cool looking
+        if obstacle is not None:
+             final_axis = self.calculate_obstacle_avoidance_axis(unit, obstacle[1], obstacle[2])
+             force_flatten = 0
+        # Pokud není překážka, děláme "School of Fish" synchronizaci
         if final_axis is None:
-            t = self.num_iter * 0.3
-            desired_axis = np.array([np.sin(t), np.cos(t * 0.7), np.sin(t * 1.2)])
-            desired_axis /= np.linalg.norm(desired_axis)
-            #average axis of all neighbors
-            consensus_axis = self.calculate_axis_consensus(close_purs, unit.position)
-            #weighted sum of those
-            if consensus_axis is not None:
-                weight = 0.8
-                final_axis = (1 - weight) * desired_axis + weight * consensus_axis
-                final_axis /= np.linalg.norm(final_axis)
+            self.rep_in_form = 20.0
+            # Moje aktuální zamýšlená osa
+            current_axis = self.get_axis_at_time(self.num_iter)
+            
+            # --- IMPLICITNÍ SYNCHRONIZACE HODIN (S Global Search) ---
+            if observed_group_axis is not None:
+                #alignment = np.dot(self.get_axis_at_time(self.num_iter), observed_group_axis)
+                #print(f"Alignment: {alignment:.4f}")
+                # 1. Změříme aktuální shodu
+                current_axis = self.get_axis_at_time(self.num_iter)
+                current_alignment = np.dot(current_axis, observed_group_axis)
+                
+                # 2. ROZHODOVÁNÍ: Jsem ztracený nebo jen ladím?
+                
+                # A) JSEM ZTRACENÝ (Alignment < 0.8) -> GLOBAL SEARCH
+                # Pokud je shoda malá (např. 0.5), znamená to, že jemné posouvání nestačí.
+                # Musíme "proskenovat" čas kolem sebe a skočit na nejlepší místo.
+                if current_alignment < 0.8:
+                    best_t = self.num_iter
+                    best_score = current_alignment
+                    
+                    # Prohledáme okno +/- 15 sekund (to by mělo pokrýt celou periodu pohybu)
+                    # Zkusíme 20 různých časů v tomto okně
+                    search_range = np.linspace(self.num_iter - 15.0, self.num_iter + 15.0, 20)
+                    
+                    for t_test in search_range:
+                        axis_test = self.get_axis_at_time(t_test)
+                        score_test = np.dot(axis_test, observed_group_axis)
+                        if score_test > best_score:
+                            best_score = score_test
+                            best_t = t_test
+                    
+                    # SKOK na nejlepší nalezený čas
+                    self.num_iter = best_t
+                    
+                    # Pokud ani hledání nepomohlo a jsme úplně mimo (negativní shoda),
+                    # zkusíme zoufalý náhodný skok, abychom se odsekli.
+                    if best_score < 0.0:
+                         self.num_iter += np.random.uniform(10.0, 50.0)
+
+                # B) JSEM SKORO TAM (Alignment >= 0.8) -> FINE TUNING (Gradient Descent)
+                # Tady už jen jemně dolaďujeme, abychom se trefili přesně na 1.0
+                else:
+                    delta_test = 0.3 # Menší krok pro přesnost
+                    axis_future = self.get_axis_at_time(self.num_iter + delta_test)
+                    axis_past = self.get_axis_at_time(self.num_iter - delta_test)
+                    
+                    score_future = np.dot(axis_future, observed_group_axis)
+                    score_past = np.dot(axis_past, observed_group_axis)
+                    
+                    sync_speed = 0.2 # Jemnější ladění
+                    
+                    if score_future > current_alignment:
+                         self.num_iter += sync_speed
+                    elif score_past > current_alignment:
+                         self.num_iter -= sync_speed
+
+                # 3. Finalizace osy pro tento krok
+                # Vezmeme nově vypočtenou osu podle mého času
+                final_axis = self.get_axis_at_time(self.num_iter)
+                
+                # Namícháme to s tím, co vidíme (pro plynulost animace)
+                weight = 0.5 
+                final_axis = (1 - weight) * final_axis + weight * observed_group_axis
+                
+                # Normalizace (pojistka proti dělení nulou)
+                norm = np.linalg.norm(final_axis)
+                if norm > 1e-6:
+                    final_axis /= norm
             else:
-                final_axis = desired_axis
+                # Jsem sám, věřím jen sobě
+                final_axis = current_axis
             force_flatten = 0
         else:
+            self.rep_in_form = 5.0
             #force to flatten formation so that the obstacle avoidance would work
             dist_from_plane = np.dot(rel_unit_pos, final_axis)
             force_flatten = -final_axis * dist_from_plane * 20.0

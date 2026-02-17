@@ -28,6 +28,20 @@ class SimulationWorld:
         return self.get_state()
 
     def _init_agents(self, purs_acc, prime_acc, inv_acc, prime_pos, inv_pos, purs_pos, purs_num):
+        #obstacle
+        self.obstacle = None
+        if not self._3d and self.sc.obs_patch is not None:
+             #only physics
+            self.obstacle = type('obj', (object,), {'center': self.sc.obs_patch.center, 'radius': self.sc.obs_patch.radius})
+        elif self._3d and self.sc.obs_patch is not None:
+            self.obstacle = []
+            for i in range(len(self.sc.obs_patch)):
+                obs_pos = self.sc.obs_pos[i]
+                obs_rad = self.sc.obs_rads[i]
+                obstacle = {'center': obs_pos, 'radius': obs_rad}
+                self.obstacle.append(obstacle)
+            print(self.obstacle)
+            print(len(self.sc.obs_patch))
         #borders and waypoints
         x_border = self.sc.WORLD_WIDTH / 6
         y_border = self.sc.WORLD_HEIGHT / 6
@@ -82,17 +96,6 @@ class SimulationWorld:
         for i in range(self.sc.INVADER_NUM):
             inv = Invader(position=rnd_points_inv[i], max_acc=rnd_acc_inv[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD)
             self.invaders.append(inv)
-        #obstacle
-        self.obstacle = None
-        if not self._3d and self.sc.obs_patch is not None:
-             #only physics
-            self.obstacle = type('obj', (object,), {'center': self.sc.obs_patch.center, 'radius': self.sc.obs_patch.radius})
-        elif self._3d and self.sc.obs_patch is not None:
-            self.obstacle = []
-            for i in range(self.sc.obs_patch):
-                obs_pos = self.obs_pos[i]
-                obs_rad = self.obs_rads[i]
-                self.obstacle = [None, self.sc.obs_pos, self.sc.obs_rads]
 
     def step(self, dt=0.1, manual_invader_vel=None):
         #filtering living drones
@@ -138,8 +141,10 @@ class SimulationWorld:
             for obstacle in self.obstacle:
                 if not self._3d and np.sum((self.prime.position - self.obstacle.center)**2) < self.obstacle.radius**2:
                     self.prime.crashed = True
-                elif self._3d and np.sum((self.prime.position - self.sc.OBS_POS)**2) < self.sc.OBS_RAD**2:
+                    break
+                elif self._3d and np.sum((self.prime.position - obstacle['center'])**2) < obstacle['radius']**2:
                     self.prime.crashed = True
+                    break
         #collisions and pursue check
         for p in free_purs:
             #pursue check
@@ -147,10 +152,13 @@ class SimulationWorld:
                 p.target[0].purs_num += 1
             #obstacle check
             if self.sc.obs_patch is not None:
-                if not self._3d and np.sum((p.position - self.sc.obs_patch.center)**2) < self.sc.obs_patch.radius**2:
-                    p.crashed = True
-                elif self._3d and np.sum((p.position - self.sc.OBS_POS)**2) < self.sc.OBS_RAD**2:
-                    p.crashed = True
+                for obstacle in self.obstacle:
+                    if not self._3d and np.sum((p.position - self.sc.obs_patch.center)**2) < self.sc.obs_patch.radius**2:
+                        p.crashed = True
+                        break
+                    elif self._3d and np.sum((p.position - obstacle['center'])**2) < obstacle['radius']**2:
+                        p.crashed = True
+                        break
             #capture check
             for i in free_inv:
                 if np.sum((p.position - i.position)**2) < self.sc.CAPTURE_RAD**2 and not i.crashed:
@@ -175,7 +183,7 @@ class SimulationWorld:
         return {
             "prime": self.prime.position.copy(),
             "pursuers": [p.position.copy() for p in self.pursuers],
-            "pursuers_status": [p.state for p in self.pursuers], #for colors
+            "pursuers_status": [[p.state, p.target] for p in self.pursuers], #for colors
             "invaders": [i.position.copy() for i in self.invaders],
             "time": self.time
         }

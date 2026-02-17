@@ -27,7 +27,8 @@ class Invader(Agent):
         else:
             v_dir = self.pursuit_pure_pursuit(target)
         #repulsive dirs to avoid collision with obstacle
-        obs_vel = self.repulsive_force_obs(obstacle)
+        #obs_vel = self.repulsive_force_obs(obstacle)
+        obs_vel = np.zeros_like(self.position)
         #summing all vectors, making acc out of them
         v_sum = v_dir + obs_vel
         u_dir = self.KP*(v_sum - self.curr_speed) - self.KD*self.curr_speed

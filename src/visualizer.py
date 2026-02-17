@@ -28,7 +28,14 @@ class MatplotlibVisualizer:
             if self._3d:
                 p_dot.set_3d_properties([p_pos[2]])
             #color according to the state
-            p_dot.set_color("#631616" if p_state == States.PURSUE else '#d62728')
+            if p_state[0] == States.PURSUE:
+                if p_state[1][1] == 1:
+                    p_dot.set_color("#000000")
+                else:
+                    p_dot.set_color("#FFEE00")
+            else:
+                p_dot.set_color('#d62728')
+                
         #invaders
         for i, i_pos in enumerate(state['invaders']):
             i_dot = self.sc.i_dots[i]

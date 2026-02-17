@@ -75,7 +75,6 @@ class Sim3DConfig:
         self.u_dot, = self.ax.plot([], [], 'o', color="#10ec22", label='Prime Unit', markersize=self.prime_marker_size)
         self.u_path, = self.ax.plot([], [], '--', color="#77cc70", alpha=0.6, linewidth=3.0)
         #obstacle
-        self.obs_patch = None
         if self.obstacle:
             self.obs_patch = []
             u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:10j]

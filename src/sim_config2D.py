@@ -11,8 +11,8 @@ class Sim2DConfig:
         self.CAPTURE_RAD = 0.3
         self.DRONE_RAD = 0.3
         self.UNIT_RAD = 0.6
-        self.OBS_RAD = obstacle_rad
         self.obs_pos = obstacle_pos
+        self.obs_rads = obstacle_rad
         
         self.PURSUER_NUM = purs_num
         self.INVADER_NUM = inv_num
@@ -62,7 +62,7 @@ class Sim2DConfig:
         (x1, y1) = trans((self.DRONE_RAD, 0))
         self.drone_in_pixels = np.hypot(x1 - x0, y1 - y0)
         self.prime_in_pixels = self.drone_in_pixels * (self.UNIT_RAD/self.DRONE_RAD)
-        self.obs_in_pixels = self.drone_in_pixels * (self.OBS_RAD/self.DRONE_RAD)
+        #self.obs_in_pixels = self.drone_in_pixels * (self.OBS_RAD/self.DRONE_RAD)
         #pursuers
         for _ in range(self.PURSUER_NUM):
             p_dot, = self.ax.plot([], [], 'o', color='#d62728', label='Pursuer', markersize=self.drone_in_pixels)
@@ -80,8 +80,12 @@ class Sim2DConfig:
         self.u_path, = self.ax.plot([], [], '--', color="#77cc70", alpha=0.6, linewidth=3.0)
         #obstacle
         if self.obstacle:
-            self.obs_patch = Circle(self.obs_pos, self.OBS_RAD, color='black', zorder=5)
-            self.ax.add_patch(self.obs_patch)
+            self.obs_patch = []
+            for i in range(len(self.obs_rads)):
+                obs_pos = self.obs_pos[i]
+                obs_rad = self.obs_rads[i]
+                obs_patch = Circle(obs_pos, obs_rad, color='black', zorder=5)
+                self.obs_patch.append(self.ax.add_patch(obs_patch))
         
         #visual for prime vortex field
         x = np.linspace(-self.FIELD_SIZE, self.FIELD_SIZE, self.FIELD_RES)

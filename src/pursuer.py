@@ -451,7 +451,7 @@ class Pursuer(Agent):
         #direction is also determined by the position of obstacle
         circle_dir = self.circle_dir
         if obstacle is not None:
-            if self.get_avoidance_direction(obstacle.center, obstacle.radius, unit):
+            if self.get_avoidance_direction(obstacle['center'], obstacle['radius'], unit):
                 circle_dir = self.circle_dir_obs
                 self.rep_in_form = 5.0
         fdwrd = circle_dir * tangent_vec# * self.max_speed

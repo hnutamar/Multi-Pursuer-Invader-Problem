@@ -30,18 +30,13 @@ class SimulationWorld:
     def _init_agents(self, purs_acc, prime_acc, inv_acc, prime_pos, inv_pos, purs_pos, purs_num):
         #obstacle
         self.obstacle = None
-        if not self._3d and self.sc.obs_patch is not None:
-             #only physics
-            self.obstacle = type('obj', (object,), {'center': self.sc.obs_patch.center, 'radius': self.sc.obs_patch.radius})
-        elif self._3d and self.sc.obs_patch is not None:
+        if self.sc.obs_patch is not None:
             self.obstacle = []
             for i in range(len(self.sc.obs_patch)):
                 obs_pos = self.sc.obs_pos[i]
                 obs_rad = self.sc.obs_rads[i]
                 obstacle = {'center': obs_pos, 'radius': obs_rad}
                 self.obstacle.append(obstacle)
-            print(self.obstacle)
-            print(len(self.sc.obs_patch))
         #borders and waypoints
         x_border = self.sc.WORLD_WIDTH / 6
         y_border = self.sc.WORLD_HEIGHT / 6
@@ -133,16 +128,18 @@ class SimulationWorld:
         #COLLISIONS
         #Prime and Invader
         for i in self.invaders:
-            if not i.crashed and np.sum((i.position - self.prime.position)**2) < self.sc.UNIT_DOWN_RAD**2:
-                self.prime.crashed = True
+            if not i.crashed:
+                for obstacle in self.obstacle:
+                    if np.sum((i.position - obstacle['center'])**2) < obstacle['radius']**2:
+                        i.crashed = True
+                        break
+                if np.sum((i.position - self.prime.position)**2) < self.sc.UNIT_DOWN_RAD**2:
+                    self.prime.crashed = True
             i.purs_num = 0
         #Prime and Obstacle
         if self.obstacle is not None:
             for obstacle in self.obstacle:
-                if not self._3d and np.sum((self.prime.position - self.obstacle.center)**2) < self.obstacle.radius**2:
-                    self.prime.crashed = True
-                    break
-                elif self._3d and np.sum((self.prime.position - obstacle['center'])**2) < obstacle['radius']**2:
+                if np.sum((self.prime.position - obstacle['center'])**2) < obstacle['radius']**2:
                     self.prime.crashed = True
                     break
         #collisions and pursue check
@@ -153,10 +150,7 @@ class SimulationWorld:
             #obstacle check
             if self.sc.obs_patch is not None:
                 for obstacle in self.obstacle:
-                    if not self._3d and np.sum((p.position - self.sc.obs_patch.center)**2) < self.sc.obs_patch.radius**2:
-                        p.crashed = True
-                        break
-                    elif self._3d and np.sum((p.position - obstacle['center'])**2) < obstacle['radius']**2:
+                    if np.sum((p.position - obstacle['center'])**2) < obstacle['radius']**2:
                         p.crashed = True
                         break
             #capture check

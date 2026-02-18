@@ -7,12 +7,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def main():
-    _3d = True
+    _3d = False
     #config
     if _3d:
-        sc = Sim3DConfig(purs_num=30, inv_num=0, obstacle=False, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
+        sc = Sim3DConfig(purs_num=30, inv_num=0, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
     else:
-        sc = Sim2DConfig(world_height=30, world_width=30, purs_num=10, inv_num=1, obstacle=True, 
+        sc = Sim2DConfig(world_height=30, world_width=30, purs_num=20, inv_num=10, obstacle=False, 
                          obstacle_rad=[3.0, 4.0, 4.0], obstacle_pos=[np.array([13.0, 13.0]), np.array([17.0, 6.0]), np.array([6.0, 17.0])])
     #world, physics
     inv_pos = np.array([[20.24, 30.15, 25.58]])

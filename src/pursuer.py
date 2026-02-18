@@ -42,6 +42,7 @@ class Pursuer(Agent):
         self.target_close = 2.0
         self.safe_circle_r = 3.0
         self.rep_invs_r = 8.0
+        self.circle_tan_max = 3.0
         #obstacle radiuses
         self.obs_rad = 8.0
         self.rep_obs_r = 8.0
@@ -90,11 +91,12 @@ class Pursuer(Agent):
             return tar_vel
         #computing closest obstacle
         if obstacles is not None:
-            self.obs_centers = np.array([o['center'] for o in obstacles])
-            #print(obstacles)
-            #print("Shape:", self.obs_centers.shape) 
-            #print("Dtype:", self.obs_centers.dtype)
-            self.obs_radii = np.array([o['radius'] for o in obstacles])
+            #immovable obstacles
+            if self.obs_centers is None:
+                self.obs_centers = np.array([o['center'] for o in obstacles])
+            if self.obs_radii is None:
+                self.obs_radii = np.array([o['radius'] for o in obstacles])
+            #searching for closest obstacle
             curr_obs = self.get_nearest_obstacle(prime_unit, obstacles)
             if curr_obs is None:
                 self.curr_obs = None
@@ -371,27 +373,48 @@ class Pursuer(Agent):
         dists_center = np.linalg.norm(vecs_to_obs, axis=1)
         #distance from surface to surface
         dists_surface = dists_center - obs_radii - self.my_rad
-        for dist_surf, dist_center, vec in zip(dists_surface, dists_center, vecs_to_obs):
-            if dist_surf < coll and dist_surf > 0.001:
-                push_dir = vec / dist_center
-                #hyperbolic repulsive
-                magnitude = (1.0 / dist_surf - 1.0 / coll) 
-                # magnitude = (coll - dist) / coll
-                rep_dir += push_dir * magnitude
-        return rep_dir 
+        #mask
+        mask = dists_surface < coll
+        #valid data
+        valid_dists_center = dists_center[mask]
+        valid_dists_surface = dists_surface[mask]
+        valid_diffs = vecs_to_obs[mask]
+        #norm and magnitude
+        push_dirs = valid_diffs / valid_dists_center[:, np.newaxis]
+        magnitudes = (1.0 / valid_dists_surface) - (1.0 / coll)
+        #total force
+        return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0)
     
     def repulsive_inv_force(self, prime, targets, obstacles):
         rep_dir = np.zeros_like(self.position)
         close_targs = []
         dists = []
         #targets that are close
-        for t in targets:
-            dist = np.linalg.norm(t.position - prime.position)
-            if dist - t.my_rad - prime.my_rad < self.rep_invs_r:
-                #position on surface is needed
-                pos = t.position - ((t.position - prime.position)/dist * t.my_rad)
-                close_targs.append(pos)
-                dists.append(dist - t.my_rad - prime.my_rad)
+        if targets:
+            t_pos = self.all_inv_pos
+            t_rad = self.all_inv_rads
+            #dists center to center
+            vecs_to_t = t_pos - prime.position
+            dists_c = np.linalg.norm(vecs_to_t, axis=1)
+            #zero div protection
+            dists_c[dists_c < 1e-6] = 1e-6
+            #dists surface to surface
+            dists_s = dists_c - t_rad - prime.my_rad
+            #mask
+            mask = dists_s < self.rep_invs_r
+            if np.any(mask):
+                #relevant data
+                valid_pos = t_pos[mask]
+                valid_rad = t_rad[mask]
+                valid_vecs = vecs_to_t[mask]
+                valid_dists_c = dists_c[mask]
+                valid_dists_s = dists_s[mask]
+                #point on the surface of invader
+                dirs_norm = valid_vecs / valid_dists_c[:, np.newaxis]
+                surface_points = valid_pos - (dirs_norm * valid_rad[:, np.newaxis])
+                #storing
+                close_targs.extend(surface_points)
+                dists.extend(valid_dists_s)
         #obstacle dist
         if obstacles is not None:
             obs_centers = self.obs_centers
@@ -481,16 +504,16 @@ class Pursuer(Agent):
         rho = 1 - (dist / form_r)**2
         #inside of circle
         if rho > 0:
-            alpha = 15.0
+            alpha = 20.0
         #outside of circle
         else:
-            alpha = 2.0
+            alpha = 1.0
         norm_vec = rel_unit_pos/dist
         #circle around center
         tangent_vec = np.array([-rel_unit_pos[1], rel_unit_pos[0]])
-        # tan_len = np.linalg.norm(tangent_vec)
-        # if tan_len > 1e-6:
-        #     tangent_vec = tangent_vec / tan_len
+        tan_len = np.linalg.norm(tangent_vec)
+        if tan_len > 1e-6 or tan_len > self.circle_tan_max:
+            tangent_vec = (tangent_vec / tan_len) * self.circle_tan_max
         fdbck = alpha * rho * norm_vec
         #direction is also determined by the position of obstacle
         circle_dir = self.circle_dir

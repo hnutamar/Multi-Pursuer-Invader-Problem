@@ -15,13 +15,13 @@ class Invader(Agent):
         self.KD = 0.1
         
     def evade(self, pursuers, target, obstacles):
-        if obstacles is not None:
-            self.obs_centers = np.array([o['center'] for o in obstacles])
-            self.obs_radii = np.array([o['radius'] for o in obstacles])
         self.num_iter += 1
         v_dir = np.zeros_like(self.position)
         if self.crashed:
             return v_dir
+        if obstacles is not None:
+            self.obs_centers = np.array([o['center'] for o in obstacles])
+            self.obs_radii = np.array([o['radius'] for o in obstacles])
         p_idx = self.strategy_closest_pursuer(pursuers)
         #v_dir = self.cons_purs*self.strategy_run_away(pursuers, pursuer) + self.cons_targ*self.pursuit_pure_pursuit(target)
         #if the closest pursuer is close enough, run away from him, otherwise pursue the prime

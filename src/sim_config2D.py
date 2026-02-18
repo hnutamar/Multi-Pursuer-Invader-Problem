@@ -20,7 +20,7 @@ class Sim2DConfig:
         self.CRASH_RAD = self.DRONE_RAD
         self.UNIT_DOWN_RAD = self.UNIT_RAD
         #visibility of pursuer of other pursuers
-        self.PURS_VIS = 2.0
+        self.PURS_VIS = 1.0
         
         self.p_dots = []
         self.p_paths = []

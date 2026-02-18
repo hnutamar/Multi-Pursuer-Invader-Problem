@@ -14,7 +14,10 @@ class Invader(Agent):
         self.KP = 10.0
         self.KD = 0.1
         
-    def evade(self, pursuers, target, obstacle):
+    def evade(self, pursuers, target, obstacles):
+        if obstacles is not None:
+            self.obs_centers = np.array([o['center'] for o in obstacles])
+            self.obs_radii = np.array([o['radius'] for o in obstacles])
         self.num_iter += 1
         v_dir = np.zeros_like(self.position)
         if self.crashed:
@@ -27,8 +30,8 @@ class Invader(Agent):
         else:
             v_dir = self.pursuit_pure_pursuit(target)
         #repulsive dirs to avoid collision with obstacle
-        #obs_vel = self.repulsive_force_obs(obstacle)
-        obs_vel = np.zeros_like(self.position)
+        obs_vel = self.repulsive_force_obs(obstacles)
+        #obs_vel = np.zeros_like(self.position)
         #summing all vectors, making acc out of them
         v_sum = v_dir + obs_vel
         u_dir = self.KP*(v_sum - self.curr_speed) - self.KD*self.curr_speed
@@ -58,29 +61,24 @@ class Invader(Agent):
         dir_ = dir_ * self.max_speed
         return dir_
     
-    def repulsive_force_obs(self, circle, coll=5.0):
+    def repulsive_force_obs(self, obstacles, coll=5.0):
         rep_dir = np.zeros_like(self.position)
-        if circle is None:
+        if obstacles is None:
             return rep_dir
-        #compute the distance from self and if close enough, compute the repulsive force
-        #for 2D
-        if len(rep_dir) == 2:
-            diff = self.position - circle.center
-            dist = np.linalg.norm(diff) - self.my_rad - circle.radius
-            if dist < coll and dist > 0.001:
-                push_dir = diff / dist
+        #obstacle centers and radiuses
+        obs_centers = self.obs_centers
+        obs_radii = self.obs_radii
+        #vector from self to obstacle center
+        vecs_to_obs = self.position - obs_centers
+        #distances center to center
+        dists_center = np.linalg.norm(vecs_to_obs, axis=1)
+        #distance from surface to surface
+        dists_surface = dists_center - obs_radii - self.my_rad
+        for dist_surf, dist_center, vec in zip(dists_surface, dists_center, vecs_to_obs):
+            if dist_surf < coll and dist_surf > 0.001:
+                push_dir = vec / dist_center
                 #hyperbolic repulsive
-                magnitude = (1.0 / dist - 1.0 / coll) 
-                # magnitude = (coll - dist) / coll
-                rep_dir += push_dir * magnitude
-        #for 3D
-        else:
-            diff = self.position - circle[1]
-            dist = np.linalg.norm(diff) - self.my_rad - circle[2]
-            if dist < coll and dist > 0.001:
-                push_dir = diff / dist
-                #hyperbolic repulsive
-                magnitude = (1.0 / dist - 1.0 / coll) 
+                magnitude = (1.0 / dist_surf - 1.0 / coll) 
                 # magnitude = (coll - dist) / coll
                 rep_dir += push_dir * magnitude
         return rep_dir 

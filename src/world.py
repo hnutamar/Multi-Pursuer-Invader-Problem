@@ -84,13 +84,30 @@ class SimulationWorld:
         self.pursuers = []
         for i in range(self.sc.PURSUER_NUM):
             p_num = purs_num[i] if purs_num is not None else np.random.randint(0, 1001)
-            p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=p_num)
+            p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=p_num, purs_vis=self.sc.PURS_VIS)
             self.pursuers.append(p)
         #invader init
         self.invaders = []
         for i in range(self.sc.INVADER_NUM):
             inv = Invader(position=rnd_points_inv[i], max_acc=rnd_acc_inv[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD)
             self.invaders.append(inv)
+
+    def _get_safe_agent_data(self, agents):
+        dim = 3 if self._3d else 2
+        #no one is alive
+        if not agents:
+            return (np.empty((0, dim)), 
+                    np.empty((0,)), 
+                    np.empty((0,)))
+        #living
+        pos = np.vstack([a.position for a in agents])
+        rad = np.array([a.my_rad for a in agents])
+        #in case of invaders
+        try:
+            p_nums = np.array([a.purs_num for a in agents])
+        except AttributeError:
+            p_nums = np.zeros(len(agents)) #fallback    
+        return pos, rad, p_nums
 
     def step(self, dt=0.1, manual_invader_vel=None):
         #filtering living drones
@@ -111,14 +128,16 @@ class SimulationWorld:
                 # AI logic
                 dirs_i.append(inv.evade(free_purs, self.prime, self.obstacle))
         #pursuer acc
+        all_inv_pos, all_inv_rad, all_inv_pnums = self._get_safe_agent_data(free_inv)
+        all_purs_pos, all_purs_rad, _ = self._get_safe_agent_data(free_purs)
         dirs_p = []
-        for purs in self.pursuers:
+        for i, purs in enumerate(free_purs):
             close_purs = [p for p in free_purs if (np.linalg.norm(p.position - purs.position) - p.my_rad - purs.my_rad) <= self.sc.PURS_VIS]
-            dirs_p.append(purs.pursue(free_inv, close_purs, self.prime, self.obstacle))
+            dirs_p.append(purs.pursue(free_inv, close_purs, self.prime, self.obstacle, precalc_data=(all_inv_pos, all_inv_pnums, all_inv_rad, all_purs_pos, all_purs_rad, i)))
         #prime acc
         dir_u = self.prime.fly(self.way_point, free_inv, free_purs, Modes.LINE)
         #drones moving
-        for p, p_dir in zip(self.pursuers, dirs_p):
+        for p, p_dir in zip(free_purs, dirs_p):
             p.move(p_dir)
         for i, i_dir in zip(self.invaders, dirs_i):
             i.move(i_dir)
@@ -127,19 +146,19 @@ class SimulationWorld:
         self.time += dt
         #COLLISIONS
         #Prime and Invader
-        for i in self.invaders:
-            if not i.crashed:
+        for i in free_inv:
+            if self.obstacle is not None:
                 for obstacle in self.obstacle:
-                    if np.sum((i.position - obstacle['center'])**2) < obstacle['radius']**2:
+                    if np.linalg.norm(i.position - obstacle['center']) - i.my_rad < obstacle['radius']:
                         i.crashed = True
                         break
-                if np.sum((i.position - self.prime.position)**2) < self.sc.UNIT_DOWN_RAD**2:
-                    self.prime.crashed = True
+            if np.linalg.norm(i.position - self.prime.position) - i.my_rad < self.prime.my_rad:
+                self.prime.crashed = True
             i.purs_num = 0
         #Prime and Obstacle
         if self.obstacle is not None:
             for obstacle in self.obstacle:
-                if np.sum((self.prime.position - obstacle['center'])**2) < obstacle['radius']**2:
+                if np.linalg.norm(self.prime.position - obstacle['center']) - self.prime.my_rad < obstacle['radius']:
                     self.prime.crashed = True
                     break
         #collisions and pursue check
@@ -150,27 +169,25 @@ class SimulationWorld:
             #obstacle check
             if self.sc.obs_patch is not None:
                 for obstacle in self.obstacle:
-                    if np.sum((p.position - obstacle['center'])**2) < obstacle['radius']**2:
+                    if np.linalg.norm(p.position - obstacle['center']) - p.my_rad < obstacle['radius']:
                         p.crashed = True
                         break
             #capture check
             for i in free_inv:
-                if np.sum((p.position - i.position)**2) < self.sc.CAPTURE_RAD**2 and not i.crashed:
+                if np.linalg.norm(p.position - i.position) - p.my_rad < i.my_rad and not i.crashed:
                     self.captured_count += 1
                     i.crashed = True
             #Pursuer and Pursuer
             for other in free_purs:
-                if (other is not p) and np.sum((p.position - other.position)**2) < self.sc.CRASH_RAD**2:
+                if (other is not p) and np.linalg.norm(p.position - other.position) - p.my_rad < other.my_rad:
                     p.crashed = True
                     other.crashed = True
             #Pursuer and Prime
-            if np.sum((p.position - self.prime.position)**2) < self.sc.UNIT_DOWN_RAD**2:
+            if np.linalg.norm(p.position - self.prime.position) - p.my_rad < self.prime.my_rad:
                 self.prime.crashed = True
         #ending check
         done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
-        #reward for RL
-        reward = 0
-        return self.get_state(), reward, done
+        return self.get_state(), done
 
     def get_state(self):
         #returns state of the simulation

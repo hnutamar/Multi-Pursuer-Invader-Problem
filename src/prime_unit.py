@@ -3,21 +3,16 @@ from agent import Agent
 from prime_mode import Modes
 
 class Prime_unit(Agent):
-    def __init__(self, position, max_acc, max_omega, my_rad):
-        super().__init__(position, max_acc, max_omega)
-        self.my_rad = my_rad
+    def __init__(self, position, max_acc, max_omega, my_rad, dt):
+        super().__init__(position, max_acc, max_omega, dt, my_rad)
         #controler
         self.KP = 10.0
         self.KD = 0.1
-        
+        #repulsion force from other drones
         self.rep_force = 0.7
-        #not needed ríght now
-        self.axis_a = 0
-        self.axis_b = 0
-        self.rot_angle = 0
-        self.center = position
+        #speed cap according to the speed of pursuers
         self.biggest_poss_speed = self.max_speed
-        
+        #for circle mode
         self.t_circle = 7.0
         
     def fly(self, way_point, invaders, pursuers, mode):

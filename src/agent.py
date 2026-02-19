@@ -1,21 +1,31 @@
 import numpy as np
 
 class Agent:
-    def __init__(self, position, max_acc, max_omega):
+    def __init__(self, position, max_acc, max_omega, dt, my_rad, num_iter=0):
+        #drone radius
+        self.my_rad = my_rad
+        #drone position
         self.position = np.array(position, dtype=float)
+        #drone controller
+        self.CD = 0.3
+        #drone speed and velocity
         self.max_acc = max_acc
         self.curr_speed = np.zeros_like(self.position)
         self.curr_acc = np.zeros_like(self.position)
-        self.drone_dir = np.zeros_like(self.position)
-        self.max_omega = max_omega
-        self.CD = 0.3
         self.max_speed = np.sqrt(self.max_acc / self.CD)
-        self.dt = 0.1
+        #angular speed
+        self.max_omega = max_omega
+        #internal clock
+        self.dt = dt
+        self.num_iter = num_iter
+        #boolean signalling crash
         self.crashed = False
         #only for prime
         self.finished = False
 
     def move(self, acc):
+        #clock
+        self.num_iter += self.dt
         if self.crashed:
             return
         if self.finished:
@@ -56,20 +66,22 @@ class Agent:
         #        self.position += final_dir
     
     def clip_angle(self, dir_vec, dt):
+        #speed new and old
         current_speed_norm = np.linalg.norm(self.curr_speed)
         target_speed_norm = np.linalg.norm(dir_vec)
         if current_speed_norm < 1e-6 or target_speed_norm < 1e-6:
             return dir_vec
-
+        #norming the velocity vectors, calculating angles
         u = self.curr_speed / current_speed_norm
         v = dir_vec / target_speed_norm
         dot_product = np.dot(u, v)
         dot_product = np.clip(dot_product, -1.0, 1.0)
         angle = np.arccos(dot_product)
         max_step = self.max_omega * dt
-
+        #angle is ok
         if angle <= max_step:
             return dir_vec
+        #too sharp angle
         else:
             t = max_step / angle
             sin_angle = np.sin(angle)

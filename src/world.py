@@ -53,7 +53,7 @@ class SimulationWorld:
         else:
             pos_u = prime_pos if prime_pos is not None else np.array([3.0, 3.0])
             
-        self.prime = Prime_unit(position=pos_u, max_acc=acc_prime, max_omega=1.0, my_rad=self.sc.UNIT_RAD)
+        self.prime = Prime_unit(position=pos_u, max_acc=acc_prime, max_omega=1.0, my_rad=self.sc.UNIT_RAD, dt=self.sc.DT)
         #init positions and acceleration of agents (random)
         if self._3d:
             rnd_points_purs = purs_pos if purs_pos is not None else np.random.uniform(
@@ -84,12 +84,12 @@ class SimulationWorld:
         self.pursuers = []
         for i in range(self.sc.PURSUER_NUM):
             p_num = purs_num[i] if purs_num is not None else np.random.randint(0, 1001)
-            p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=p_num, purs_vis=self.sc.PURS_VIS)
+            p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=p_num, purs_vis=self.sc.PURS_VIS, dt=self.sc.DT)
             self.pursuers.append(p)
         #invader init
         self.invaders = []
         for i in range(self.sc.INVADER_NUM):
-            inv = Invader(position=rnd_points_inv[i], max_acc=rnd_acc_inv[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD)
+            inv = Invader(position=rnd_points_inv[i], max_acc=rnd_acc_inv[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD, dt=self.sc.DT)
             self.invaders.append(inv)
 
     def _get_safe_agent_data(self, agents):
@@ -109,7 +109,9 @@ class SimulationWorld:
             p_nums = np.zeros(len(agents)) #fallback    
         return pos, rad, p_nums
 
-    def step(self, dt=0.1, manual_invader_vel=None):
+    def step(self, manual_invader_vel=None):
+        #counter
+        self.time += self.sc.DT
         #filtering living drones
         free_inv = [inv for inv in self.invaders if not inv.crashed]
         free_purs = [pur for pur in self.pursuers if not pur.crashed]
@@ -142,8 +144,6 @@ class SimulationWorld:
         for i, i_dir in zip(self.invaders, dirs_i):
             i.move(i_dir)
         self.prime.move(dir_u)
-        #counter
-        self.time += dt
         #COLLISIONS
         #Prime and Invader
         for i in free_inv:

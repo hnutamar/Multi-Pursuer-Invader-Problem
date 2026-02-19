@@ -11,9 +11,9 @@ def main():
     MANUAL_CONTROL = False
     #config
     if _3d:
-        sc = Sim3DConfig(purs_num=30, inv_num=5, obstacle=False, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
+        sc = Sim3DConfig(dt=0.1, purs_num=30, inv_num=2, obstacle=False, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
     else:
-        sc = Sim2DConfig(world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=False, 
+        sc = Sim2DConfig(dt=0.1, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=False, 
                          obstacle_rad=[3.0, 4.0, 4.0], obstacle_pos=[np.array([13.0, 13.0]), np.array([17.0, 6.0]), np.array([6.0, 17.0])])
     #world, physics
     inv_pos = np.array([[20.24, 30.15, 25.58]])
@@ -35,7 +35,7 @@ def main():
         if vis and MANUAL_CONTROL:
             manual_action = vis.manual_vel
         #physics step
-        state, done = world.step(dt=0.1, manual_invader_vel=manual_action)
+        state, done = world.step(manual_invader_vel=manual_action)
         step_counter += 1
         #graphics
         if vis and step_counter % RENDER_EVERY == 0:

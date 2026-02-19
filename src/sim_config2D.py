@@ -1,9 +1,11 @@
 
 class Sim2DConfig:
-    def __init__(self, purs_num=15, inv_num=5, world_width=30, world_height=30, obstacle=False, obstacle_rad=0.6, obstacle_pos=[15.0, 15.0]):
+    def __init__(self, dt=0.1, purs_num=15, inv_num=5, world_width=30, world_height=30, obstacle=False, obstacle_rad=0.6, obstacle_pos=[15.0, 15.0]):
         #world size
         self.WORLD_WIDTH = world_width
         self.WORLD_HEIGHT = world_height
+        #time
+        self.DT = dt
         #obstacles
         self.obstacle = obstacle
         self.obs_pos = obstacle_pos

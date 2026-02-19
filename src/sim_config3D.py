@@ -1,10 +1,12 @@
 
 class Sim3DConfig:
-    def __init__(self, purs_num=15, inv_num=5, world_width=30, world_height=30, world_z=10, obstacle=False, obstacle_pos=None, obstacle_rad=0.6):
+    def __init__(self, dt=0.1, purs_num=15, inv_num=5, world_width=30, world_height=30, world_z=10, obstacle=False, obstacle_pos=None, obstacle_rad=0.6):
         #world size
         self.WORLD_WIDTH = world_width
         self.WORLD_HEIGHT = world_height
         self.WORLD_Z = world_z
+        #time
+        self.DT = dt
         #obstacles
         self.obstacle = obstacle
         self.obs_pos = obstacle_pos

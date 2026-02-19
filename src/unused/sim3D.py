@@ -1,5 +1,5 @@
 from sim_config3D import Sim3DConfig
-from simulator import DroneSimulation
+from unused.simulator import DroneSimulation
 import numpy as np
 
 def run():

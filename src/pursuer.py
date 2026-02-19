@@ -1,21 +1,14 @@
 import numpy as np
-import random
-import time
 from agent import Agent
 from invader import Invader
 from prime_unit import Prime_unit
 from pursuer_states import States
-from matplotlib.patches import Circle
 
 class Pursuer(Agent):
-    def __init__(self, position, max_acc, max_omega, my_rad, purs_num, purs_vis):
-        super().__init__(position, max_acc, max_omega)
-        #radius of drone
-        self.my_rad = my_rad
+    def __init__(self, position, max_acc, max_omega, my_rad, purs_num, purs_vis, dt):
+        super().__init__(position, max_acc, max_omega, dt, my_rad, num_iter=purs_num)
+        #visibility range
         self.vis_range = purs_vis
-        #internal clock
-        self.num_iter = purs_num
-        #print(purs_num)
         #repulsive forces
         self.purs = 1.2
         self.form = 0.9
@@ -24,7 +17,6 @@ class Pursuer(Agent):
         self.rep_obs = 1.0
         self.rep_invs = 20.0
         self.prime_rep_in_purs = 2.9
-        #self.prime_rep_in_form = 0.0
         #collision radiuses
         self.prime_coll_r = 10.5
         self.collision_r = min(purs_vis, 2.0)
@@ -62,7 +54,6 @@ class Pursuer(Agent):
                            "const_bear": 4,
                            "pure_pursuit": 5}
         self.capture_cooldown = 100
-        #self.ema_acc = np.zeros(3)
         if len(self.position) == 3:
             self.MAX_PURSUERS = 10
         else:
@@ -71,18 +62,14 @@ class Pursuer(Agent):
         self.avoid_axis = None
         self.axis_found = False
         self.curr_obs = None
-        #self.new_obs = False
         #obstacles centers and radiuses
         self.obs_centers = None
         self.obs_radii = None
         
     def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit, obstacles, precalc_data):
-        #self.new_obs = False
         #precalculated data, faster this way
         self.all_inv_pos, self.all_inv_purs_num, self.all_inv_rads, all_purs_pos, all_purs_rads, self.my_index = precalc_data
         self.all_purs_pos, self.all_purs_rads = self.get_visible_neighbors_data(all_purs_pos, all_purs_rads)
-        #clock
-        self.num_iter += self.dt
         #init directions
         tar_vel = np.zeros_like(self.position)
         form_vel = np.zeros_like(self.position)
@@ -137,13 +124,8 @@ class Pursuer(Agent):
             sum_vel = self.rep_in_form*rep_vel + self.form*form_vel + self.rep_obs*obs_vel + self.rep_invs*invs_rep_vel
         else:
             prime_rep_vel = self.repulsive_force_prime(prime_unit, self.prime_coll_r)
-            # if self.target[1] != self.purs_types["circling"]:
-            #     prime_rep_vel = self.repulsive_force([prime_unit], self.prime_coll_r)
-            # elif self.repulsive_force_in_circling_pursuit(prime_unit, self.target[0]):
-            #     prime_rep_vel = self.repulsive_force([prime_unit], self.prime_coll_r)
             sum_vel = self.purs*tar_vel + self.rep_in_purs*rep_vel + self.prime_rep_in_purs*prime_rep_vel + self.rep_obs*obs_vel
         new_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
-        #print(self.num_iter)
         return new_acc
     
     def get_visible_neighbors_data(self, all_pos, all_rad):
@@ -346,20 +328,6 @@ class Pursuer(Agent):
             total_force = push_dir * magnitude
         return total_force
     
-    def repulsive_force_in_circling_pursuit(self, prime, target):
-        #calculation rel pos of pursuer, finding out if pursuer is in between prime and center of mass
-        vec_to_target = target.position - self.position
-        vec_to_prime = prime.position - self.position
-        norm_t = np.linalg.norm(vec_to_target)
-        norm_p = np.linalg.norm(vec_to_prime)
-        if norm_t > 1e-6 and norm_p > 1e-6:
-            vec_a = vec_to_target / norm_t
-            vec_b = vec_to_prime / norm_p
-            dot_prod = np.dot(vec_a, vec_b)
-            if dot_prod < 0.0:
-                return True            
-        return False
-    
     def repulsive_force_obs(self, obstacles, coll=5.0):
         rep_dir = np.zeros_like(self.position)
         if obstacles is None:
@@ -493,7 +461,6 @@ class Pursuer(Agent):
         unit_pos = unit.position
         unit_vel = unit.curr_speed
         #the center of the vortex directly at prime
-        #rel_pos = my_pos - (unit_pos + unit_vel * self.dt * self.pred_time)
         rel_unit_pos = my_pos - unit_pos
         #radius is combination of two according to prime fly direction
         sigm = self.sigmoid(np.dot(unit_vel, rel_unit_pos))
@@ -773,6 +740,7 @@ class Pursuer(Agent):
         return avoidance_axis
     
     def pursuit_sphering(self, target: list[Invader, int], purs, prime):
+        #other pursuers pursuing same target in visibility region
         other_purs = []
         for p in purs:
             if p is not self and p.target != None and p.target[0] is target[0]:
@@ -796,8 +764,8 @@ class Pursuer(Agent):
             alpha = 1.0
         #normalized vec from target to pursuer
         normal_vec = rel_pos / dist
-        #distance from prime
-        prime_dist = np.linalg.norm(prime.position - self.position)
+        #if prime is too close to target, push target out
+        prime_dist = np.linalg.norm(prime.position - target[0].position) - target[0].my_rad - prime.my_rad
         if prime_dist < self.prime_coll_r:
             final_axis = self.calculate_prime_avoidance_axis(target[0], prime.position)
             #force to flatten formation so that the obstacle avoidance would work
@@ -827,18 +795,10 @@ class Pursuer(Agent):
         fdbck = alpha * rho * normal_vec
         fdwrd = self.circle_dir * tangent_vec * self.max_speed
         purs_vel = fdwrd + fdbck + force_flatten
-        #normalizing it to not fly that fast, risk of collision
-        # vel_norm = np.linalg.norm(purs_vel)
-        # if vel_norm > 1e-6:
-        #     purs_vel = purs_vel / vel_norm * self.max_speed
-        # vel_dot = np.dot(target[0].curr_speed, self.curr_speed)
-        # if self.t_circle * 8.0 >= dist >= self.t_circle * 3.0 and vel_norm >= 3.0 and vel_dot < 0:
-        #     purs_vel = purs_vel/vel_norm * 0.9
         return purs_vel
         
     def pursuit_constant_bearing(self, target: list[Invader, int]):
         #target is quite fast, circling is not possible
-        #target[1] = self.purs_types['const_bear']
         self.prime_coll_r = 1.5
         self.rep_in_purs = 2.0
         self.prime_rep_in_purs = 12.9
@@ -870,7 +830,6 @@ class Pursuer(Agent):
     
     def pursuit_pure_pursuit(self, target: list[Invader, int]):
         #target is very fast, pure pursuit
-        #target[1] = self.purs_types['pure_pursuit']
         self.prime_coll_r = 1.5
         self.rep_in_purs = 2.0
         self.prime_rep_in_purs = 12.9
@@ -883,6 +842,20 @@ class Pursuer(Agent):
         return PP_dir
     
 # =============== CURRENTLY UNUSED CODE ======================
+
+    # def repulsive_force_in_circling_pursuit(self, prime, target):
+    #     #calculation rel pos of pursuer, finding out if pursuer is in between prime and center of mass
+    #     vec_to_target = target.position - self.position
+    #     vec_to_prime = prime.position - self.position
+    #     norm_t = np.linalg.norm(vec_to_target)
+    #     norm_p = np.linalg.norm(vec_to_prime)
+    #     if norm_t > 1e-6 and norm_p > 1e-6:
+    #         vec_a = vec_to_target / norm_t
+    #         vec_b = vec_to_prime / norm_p
+    #         dot_prod = np.dot(vec_a, vec_b)
+    #         if dot_prod < 0.0:
+    #             return True            
+    #     return False
 
     # def rotate(self, v, angle_rad):
     #     c, s = np.cos(angle_rad), np.sin(angle_rad)

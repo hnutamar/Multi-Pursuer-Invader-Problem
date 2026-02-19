@@ -1,21 +1,16 @@
 import numpy as np
 from agent import Agent
-#from pursuer import Pursuer
 
 class Invader(Agent):
-    def __init__(self, position, max_acc, max_omega, my_rad):
-        super().__init__(position, max_acc, max_omega)
-        self.num_iter = 0
-        self.my_rad = my_rad
-        self.local_drone_dir = np.random.uniform(-1, 1, size=2)
-        self.cons_targ = 0.5
-        self.cons_purs = 0.5
+    def __init__(self, position, max_acc, max_omega, my_rad, dt):
+        super().__init__(position, max_acc, max_omega, dt, my_rad)
+        #number of pursuers pursuing this invader
         self.purs_num = 0
+        #controller
         self.KP = 10.0
         self.KD = 0.1
         
     def evade(self, pursuers, target, obstacles):
-        self.num_iter += 1
         v_dir = np.zeros_like(self.position)
         if self.crashed:
             return v_dir

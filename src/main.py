@@ -8,11 +8,12 @@ import matplotlib.pyplot as plt
 
 def main():
     _3d = False
+    MANUAL_CONTROL = False
     #config
     if _3d:
-        sc = Sim3DConfig(purs_num=30, inv_num=0, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
+        sc = Sim3DConfig(purs_num=30, inv_num=5, obstacle=False, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
     else:
-        sc = Sim2DConfig(world_height=30, world_width=30, purs_num=20, inv_num=10, obstacle=False, 
+        sc = Sim2DConfig(world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=False, 
                          obstacle_rad=[3.0, 4.0, 4.0], obstacle_pos=[np.array([13.0, 13.0]), np.array([17.0, 6.0]), np.array([6.0, 17.0])])
     #world, physics
     inv_pos = np.array([[20.24, 30.15, 25.58]])
@@ -21,7 +22,7 @@ def main():
     SHOW_VISUALIZATION = True
     vis = None
     if SHOW_VISUALIZATION:
-        vis = MatplotlibVisualizer(sc_config=sc, _3d=_3d)
+        vis = MatplotlibVisualizer(sc_config=sc, _3d=_3d, quiver=False)
     RENDER_EVERY = 2
     EPISODE_NUM = 2
     step_counter = 1
@@ -31,10 +32,10 @@ def main():
     while running:
         #manual control of invader
         manual_action = None
-        if vis:
+        if vis and MANUAL_CONTROL:
             manual_action = vis.manual_vel
         #physics step
-        state, done = world.step(dt=0.1)
+        state, done = world.step(dt=0.1, manual_invader_vel=manual_action)
         step_counter += 1
         #graphics
         if vis and step_counter % RENDER_EVERY == 0:
@@ -42,7 +43,7 @@ def main():
                 print("Simulation ends!")
                 running = False
                 break
-            vis.render(state, world_instance=world, quiver=False)
+            vis.render(state, world_instance=world)
             plt.pause(0.001)
         #end of episode check
         if done:

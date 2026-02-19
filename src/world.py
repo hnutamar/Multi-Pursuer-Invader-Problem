@@ -30,9 +30,9 @@ class SimulationWorld:
     def _init_agents(self, purs_acc, prime_acc, inv_acc, prime_pos, inv_pos, purs_pos, purs_num):
         #obstacle
         self.obstacle = None
-        if self.sc.obs_patch is not None:
+        if self.sc.obstacle:
             self.obstacle = []
-            for i in range(len(self.sc.obs_patch)):
+            for i in range(len(self.sc.obs_rads)):
                 obs_pos = self.sc.obs_pos[i]
                 obs_rad = self.sc.obs_rads[i]
                 obstacle = {'center': obs_pos, 'radius': obs_rad}
@@ -167,7 +167,7 @@ class SimulationWorld:
             if p.target is not None:
                 p.target[0].purs_num += 1
             #obstacle check
-            if self.sc.obs_patch is not None:
+            if self.obstacle is not None:
                 for obstacle in self.obstacle:
                     if np.linalg.norm(p.position - obstacle['center']) - p.my_rad < obstacle['radius']:
                         p.crashed = True

@@ -65,10 +65,11 @@ class Pursuer(Agent):
         #obstacles centers and radiuses
         self.obs_centers = None
         self.obs_radii = None
+        self.coll_obs = 5.0
         
-    def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit, obstacles, precalc_data):
+    def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit, precalc_data):
         #precalculated data, faster this way
-        self.all_inv_pos, self.all_inv_purs_num, self.all_inv_rads, all_purs_pos, all_purs_rads, self.my_index = precalc_data
+        self.all_inv_pos, self.all_inv_purs_num, self.all_inv_rads, all_purs_pos, all_purs_rads, self.my_index, self.obs_centers, self.obs_radii = precalc_data
         self.all_purs_pos, self.all_purs_rads = self.get_visible_neighbors_data(all_purs_pos, all_purs_rads)
         #init directions
         tar_vel = np.zeros_like(self.position)
@@ -77,14 +78,14 @@ class Pursuer(Agent):
         if self.crashed:
             return tar_vel
         #computing closest obstacle
-        if obstacles is not None:
+        if self.obs_centers is not None:
             #immovable obstacles
-            if self.obs_centers is None:
-                self.obs_centers = np.array([o['center'] for o in obstacles])
-            if self.obs_radii is None:
-                self.obs_radii = np.array([o['radius'] for o in obstacles])
+            #if self.obs_centers is None:
+            #     self.obs_centers = np.array([o['center'] for o in obstacles])
+            # if self.obs_radii is None:
+            #     self.obs_radii = np.array([o['radius'] for o in obstacles])
             #searching for closest obstacle
-            curr_obs = self.get_nearest_obstacle(prime_unit, obstacles)
+            curr_obs = self.get_nearest_obstacle(prime_unit)
             if curr_obs is None:
                 self.curr_obs = None
             elif self.curr_obs is None or not np.array_equal(curr_obs['center'], self.curr_obs['center']):
@@ -116,11 +117,11 @@ class Pursuer(Agent):
         #repulsive dirs to avoid collision
         rep_vel = self.repulsive_force_purs(self.collision_r)
         #repulsive dirs to avoid collision with obstacle
-        obs_vel = self.repulsive_force_obs(obstacles)
+        obs_vel = self.repulsive_force_obs(self.coll_obs)
         #returning sum of those
         if not np.array_equal(form_vel, np.zeros_like(form_vel)):
             #pushing whole formation away from invaders and obstacle
-            invs_rep_vel = self.repulsive_inv_force(prime_unit, targets, obstacles)
+            invs_rep_vel = self.repulsive_inv_force(prime_unit, targets)
             sum_vel = self.rep_in_form*rep_vel + self.form*form_vel + self.rep_obs*obs_vel + self.rep_invs*invs_rep_vel
         else:
             prime_rep_vel = self.repulsive_force_prime(prime_unit, self.prime_coll_r)
@@ -144,7 +145,7 @@ class Pursuer(Agent):
         visible_rad = all_rad[mask]
         return visible_pos, visible_rad
     
-    def get_nearest_obstacle(self, prime, obstacles):
+    def get_nearest_obstacle(self, prime):
         #obstacle centers and radiuses
         obs_centers = self.obs_centers
         obs_radii = self.obs_radii
@@ -170,11 +171,13 @@ class Pursuer(Agent):
             #minimum
             min_idx_local = np.argmin(relevant_dists)
             real_idx = relevant_indices[min_idx_local]
-            return obstacles[real_idx]
+            obstacle = {'center': self.obs_centers[real_idx], 'radius': self.obs_radii[real_idx]}
+            return obstacle
         else:
             #just the closest
             min_idx = np.argmin(dists_surface)
-            return obstacles[min_idx]  
+            obstacle = {'center': self.obs_centers[min_idx], 'radius': self.obs_radii[min_idx]}
+            return obstacle  
              
     def get_avoidance_direction(self, obstacle_pos, obstacle_rad, prime):
         #if prime is too close to obstacle, calculate which direction is better for avoidance, in 2D
@@ -328,9 +331,9 @@ class Pursuer(Agent):
             total_force = push_dir * magnitude
         return total_force
     
-    def repulsive_force_obs(self, obstacles, coll=5.0):
+    def repulsive_force_obs(self, coll):
         rep_dir = np.zeros_like(self.position)
-        if obstacles is None:
+        if self.obs_centers is None:
             return rep_dir
         #obstacle centers and radiuses
         obs_centers = self.obs_centers
@@ -353,7 +356,7 @@ class Pursuer(Agent):
         #total force
         return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0)
     
-    def repulsive_inv_force(self, prime, targets, obstacles):
+    def repulsive_inv_force(self, prime, targets):
         rep_dir = np.zeros_like(self.position)
         close_targs = []
         dists = []
@@ -384,7 +387,7 @@ class Pursuer(Agent):
                 close_targs.extend(surface_points)
                 dists.extend(valid_dists_s)
         #obstacle dist
-        if obstacles is not None:
+        if self.obs_centers is not None:
             obs_centers = self.obs_centers
             obs_radii = self.obs_radii
             #from prime to obstacle center

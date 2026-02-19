@@ -9,14 +9,13 @@ class Invader(Agent):
         #controller
         self.KP = 10.0
         self.KD = 0.1
+        self.coll_obs = 5.0
         
     def evade(self, pursuers, target, obstacles):
         v_dir = np.zeros_like(self.position)
         if self.crashed:
             return v_dir
-        if obstacles is not None:
-            self.obs_centers = np.array([o['center'] for o in obstacles])
-            self.obs_radii = np.array([o['radius'] for o in obstacles])
+        self.obs_centers, self.obs_radii = obstacles
         p_idx = self.strategy_closest_pursuer(pursuers)
         #v_dir = self.cons_purs*self.strategy_run_away(pursuers, pursuer) + self.cons_targ*self.pursuit_pure_pursuit(target)
         #if the closest pursuer is close enough, run away from him, otherwise pursue the prime
@@ -25,7 +24,7 @@ class Invader(Agent):
         else:
             v_dir = self.pursuit_pure_pursuit(target)
         #repulsive dirs to avoid collision with obstacle
-        obs_vel = self.repulsive_force_obs(obstacles)
+        obs_vel = self.repulsive_force_obs(self.coll_obs)
         #obs_vel = np.zeros_like(self.position)
         #summing all vectors, making acc out of them
         v_sum = v_dir + obs_vel
@@ -56,9 +55,9 @@ class Invader(Agent):
         dir_ = dir_ * self.max_speed
         return dir_
     
-    def repulsive_force_obs(self, obstacles, coll=5.0):
+    def repulsive_force_obs(self, coll):
         rep_dir = np.zeros_like(self.position)
-        if obstacles is None:
+        if self.obs_centers is None:
             return rep_dir
         #obstacle centers and radiuses
         obs_centers = self.obs_centers

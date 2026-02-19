@@ -11,9 +11,9 @@ def main():
     MANUAL_CONTROL = False
     #config
     if _3d:
-        sc = Sim3DConfig(dt=0.1, purs_num=30, inv_num=2, obstacle=False, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
+        sc = Sim3DConfig(dt=0.1, purs_num=20, inv_num=2, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
     else:
-        sc = Sim2DConfig(dt=0.1, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=False, 
+        sc = Sim2DConfig(dt=0.1, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=True, 
                          obstacle_rad=[3.0, 4.0, 4.0], obstacle_pos=[np.array([13.0, 13.0]), np.array([17.0, 6.0]), np.array([6.0, 17.0])])
     #world, physics
     inv_pos = np.array([[20.24, 30.15, 25.58]])

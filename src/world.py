@@ -4,6 +4,7 @@ from invader import Invader
 from prime_unit import Prime_unit
 from pursuer_states import States
 from prime_mode import Modes
+from scipy.spatial.distance import cdist
 
 class SimulationWorld:
     def __init__(self, sc_config, _3d=False, purs_acc=None, prime_acc=None, inv_acc=None, 
@@ -29,14 +30,11 @@ class SimulationWorld:
 
     def _init_agents(self, purs_acc, prime_acc, inv_acc, prime_pos, inv_pos, purs_pos, purs_num):
         #obstacle
-        self.obstacle = None
+        self.obs_centers = None
+        self.obs_radii = None
         if self.sc.obstacle:
-            self.obstacle = []
-            for i in range(len(self.sc.obs_rads)):
-                obs_pos = self.sc.obs_pos[i]
-                obs_rad = self.sc.obs_rads[i]
-                obstacle = {'center': obs_pos, 'radius': obs_rad}
-                self.obstacle.append(obstacle)
+            self.obs_centers = np.array(self.sc.obs_pos, dtype=float)
+            self.obs_radii = np.array(self.sc.obs_rads, dtype=float)
         #borders and waypoints
         x_border = self.sc.WORLD_WIDTH / 6
         y_border = self.sc.WORLD_HEIGHT / 6
@@ -115,76 +113,107 @@ class SimulationWorld:
         #filtering living drones
         free_inv = [inv for inv in self.invaders if not inv.crashed]
         free_purs = [pur for pur in self.pursuers if not pur.crashed]
-        #invader acc
-        dirs_i = []
-        for idx, inv in enumerate(self.invaders):
+        all_inv_pos, all_inv_rad, all_inv_pnums = self._get_safe_agent_data(free_inv)
+        all_purs_pos, all_purs_rad, _ = self._get_safe_agent_data(free_purs)
+        #invader move
+        for i, inv in enumerate(self.invaders):
             #manual control
-            if idx == 0 and not inv.crashed and manual_invader_vel is not None:
+            if i == 0 and not inv.crashed and manual_invader_vel is not None:
                 acc_size = np.linalg.norm(manual_invader_vel)
                 if acc_size > 0:
                     inv_acc = (manual_invader_vel / acc_size) * inv.max_acc
                 else:
                     inv_acc = np.zeros_like(manual_invader_vel)
-                dirs_i.append(inv_acc)
             else:
                 # AI logic
-                dirs_i.append(inv.evade(free_purs, self.prime, self.obstacle))
-        #pursuer acc
-        all_inv_pos, all_inv_rad, all_inv_pnums = self._get_safe_agent_data(free_inv)
-        all_purs_pos, all_purs_rad, _ = self._get_safe_agent_data(free_purs)
-        dirs_p = []
-        for i, purs in enumerate(free_purs):
-            close_purs = [p for p in free_purs if (np.linalg.norm(p.position - purs.position) - p.my_rad - purs.my_rad) <= self.sc.PURS_VIS]
-            dirs_p.append(purs.pursue(free_inv, close_purs, self.prime, self.obstacle, precalc_data=(all_inv_pos, all_inv_pnums, all_inv_rad, all_purs_pos, all_purs_rad, i)))
-        #prime acc
-        dir_u = self.prime.fly(self.way_point, free_inv, free_purs, Modes.LINE)
-        #drones moving
-        for p, p_dir in zip(free_purs, dirs_p):
-            p.move(p_dir)
-        for i, i_dir in zip(self.invaders, dirs_i):
-            i.move(i_dir)
-        self.prime.move(dir_u)
-        #COLLISIONS
-        #Prime and Invader
+                inv_acc = inv.evade(free_purs, self.prime, (self.obs_centers, self.obs_radii))
+            inv.move(inv_acc)
+        #pursuer move
+        for i, pur in enumerate(free_purs):
+            close_purs = [p for p in free_purs if (np.linalg.norm(p.position - pur.position) - p.my_rad - pur.my_rad) <= self.sc.PURS_VIS]
+            purs_acc = pur.pursue(free_inv, close_purs, self.prime, 
+                       precalc_data=(all_inv_pos, all_inv_pnums, all_inv_rad, all_purs_pos, all_purs_rad, i, self.obs_centers, self.obs_radii))
+            pur.move(purs_acc)
+        #prime move
+        prime_acc = self.prime.fly(self.way_point, free_inv, free_purs, Modes.LINE)
+        self.prime.move(prime_acc)
+        #number of pursuers pursuing invaders
         for i in free_inv:
-            if self.obstacle is not None:
-                for obstacle in self.obstacle:
-                    if np.linalg.norm(i.position - obstacle['center']) - i.my_rad < obstacle['radius']:
-                        i.crashed = True
-                        break
-            if np.linalg.norm(i.position - self.prime.position) - i.my_rad < self.prime.my_rad:
-                self.prime.crashed = True
             i.purs_num = 0
-        #Prime and Obstacle
-        if self.obstacle is not None:
-            for obstacle in self.obstacle:
-                if np.linalg.norm(self.prime.position - obstacle['center']) - self.prime.my_rad < obstacle['radius']:
-                    self.prime.crashed = True
-                    break
-        #collisions and pursue check
         for p in free_purs:
-            #pursue check
             if p.target is not None:
                 p.target[0].purs_num += 1
-            #obstacle check
-            if self.obstacle is not None:
-                for obstacle in self.obstacle:
-                    if np.linalg.norm(p.position - obstacle['center']) - p.my_rad < obstacle['radius']:
-                        p.crashed = True
-                        break
-            #capture check
-            for i in free_inv:
-                if np.linalg.norm(p.position - i.position) - p.my_rad < i.my_rad and not i.crashed:
+        #Prime data
+        prime_pos = self.prime.position[np.newaxis, :]
+        prime_rad = self.prime.my_rad
+        #COLLISIONS
+        #Prime vs everyone
+        if not self.prime.crashed:
+            #Prime vs Invaders
+            if len(all_inv_pos) > 0:
+                dist_p_i = cdist(prime_pos, all_inv_pos)[0]
+                if np.any(dist_p_i < prime_rad + all_inv_rad):
+                    self.prime.crashed = True
+            #Prime vs Pursuers
+            if len(all_purs_pos) > 0 and not self.prime.crashed:
+                dist_p_p = cdist(prime_pos, all_purs_pos)[0]
+                if np.any(dist_p_p < prime_rad + all_purs_rad):
+                    self.prime.crashed = True
+            #Prime vs Obstacles
+            if self.obs_centers is not None and not self.prime.crashed:
+                dist_p_o = cdist(prime_pos, self.obs_centers)[0]
+                if np.any(dist_p_o < prime_rad + self.obs_radii):
+                    self.prime.crashed = True
+        #Agents vs Obstacles
+        if self.obs_centers is not None:
+            #Invaders vs Obstacles
+            if len(all_inv_pos) > 0:
+                #matrix of distances
+                dists_i_o = cdist(all_inv_pos, self.obs_centers) 
+                #matrix of collision limits
+                limits_i_o = all_inv_rad[:, np.newaxis] + self.obs_radii[np.newaxis, :]
+                #collision of invader in any obstacle
+                crashed_inv_mask = np.any(dists_i_o < limits_i_o, axis=1)
+                for idx in np.where(crashed_inv_mask)[0]:
+                    free_inv[idx].crashed = True
+            #Pursuers vs Obstacles
+            if len(all_purs_pos) > 0:
+                #matrix of distances
+                dists_p_o = cdist(all_purs_pos, self.obs_centers)
+                #matrix of collision limits
+                limits_p_o = all_purs_rad[:, np.newaxis] + self.obs_radii[np.newaxis, :]
+                #collision of invader in any obstacle
+                crashed_purs_mask = np.any(dists_p_o < limits_p_o, axis=1)
+                for idx in np.where(crashed_purs_mask)[0]:
+                    free_purs[idx].crashed = True
+        #Pursuers vs Invaders
+        if len(all_purs_pos) > 0 and len(all_inv_pos) > 0:
+            #matrix of distances
+            dists_p_i = cdist(all_purs_pos, all_inv_pos)
+            #matrix of collision limits
+            limits_p_i = all_purs_rad[:, np.newaxis] + all_inv_rad[np.newaxis, :]
+            #capture matrix
+            capture_matrix = dists_p_i < limits_p_i
+            #invaders caught
+            captured_inv_mask = np.any(capture_matrix, axis=0)
+            #those who were caught
+            for idx in np.where(captured_inv_mask)[0]:
+                if not free_inv[idx].crashed:
                     self.captured_count += 1
-                    i.crashed = True
-            #Pursuer and Pursuer
-            for other in free_purs:
-                if (other is not p) and np.linalg.norm(p.position - other.position) - p.my_rad < other.my_rad:
-                    p.crashed = True
-                    other.crashed = True
-            #Pursuer and Prime
-            if np.linalg.norm(p.position - self.prime.position) - p.my_rad < self.prime.my_rad:
-                self.prime.crashed = True
+                    free_inv[idx].crashed = True
+        #Pursuers vs Pursuers
+        if len(all_purs_pos) > 1:
+            #matrix of distances
+            dists_p_p = cdist(all_purs_pos, all_purs_pos)
+            #dists of one to self set to infinity
+            np.fill_diagonal(dists_p_p, np.inf)
+            #matrix of collision limits
+            limits_p_p = all_purs_rad[:, np.newaxis] + all_purs_rad[np.newaxis, :]
+            #collision mask
+            swarm_crash_mask = np.any(dists_p_p < limits_p_p, axis=1)
+            #those who crashed labeled as crashed
+            for idx in np.where(swarm_crash_mask)[0]:
+                free_purs[idx].crashed = True
         #ending check
         done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
         return self.get_state(), done

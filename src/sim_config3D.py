@@ -18,7 +18,7 @@ class Sim3DConfig:
         self.PURSUER_NUM = purs_num
         self.INVADER_NUM = inv_num
         #visibility of pursuer of other pursuers
-        self.PURS_VIS = 1.0
+        self.PURS_VIS = 2.0
         #marker for visualization
         self.drone_marker_size = self.DRONE_RAD * 10
         self.prime_marker_size = self.UNIT_RAD * 10

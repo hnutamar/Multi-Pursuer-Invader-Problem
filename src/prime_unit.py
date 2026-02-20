@@ -3,21 +3,21 @@ from agent import Agent
 from prime_mode import Modes
 
 class Prime_unit(Agent):
-    def __init__(self, position, max_acc, max_omega, my_rad, dt):
-        super().__init__(position, max_acc, max_omega, dt, my_rad)
+    def __init__(self, position, max_speed, max_acc, max_omega, my_rad, dt):
+        super().__init__(position, max_speed, max_acc, max_omega, dt, my_rad)
         #controler
-        self.KP = 10.0
+        self.KP = 5.0
         self.KD = 0.1
         #repulsion force from other drones
         self.rep_force = 0.7
         #speed cap according to the speed of pursuers
-        self.biggest_poss_speed = self.max_speed
+        self.biggest_poss_speed = self.cruise_speed
         #for circle mode
         self.t_circle = 7.0
         
     def fly(self, way_point, invaders, pursuers, mode):
         if pursuers:
-            self.biggest_poss_speed = max(np.sqrt(0.1 / self.CD), 0.15 * pursuers[0].max_speed)
+            self.biggest_poss_speed = max(np.sqrt(0.1 / self.CD), 0.15 * pursuers[0].max_form_speed)
         #finished, stay on this point
         if np.sum((self.position - way_point)**2) < 0.25 or self.finished:
             self.finished = True
@@ -34,6 +34,10 @@ class Prime_unit(Agent):
             goal_vel = self.goal_force(way_point)
         #summing all the velocities
         sum_vel = goal_vel + self.rep_force * rep_vel_i + self.rep_force * rep_vel_p
+        #norming speed to the possible limit
+        sum_norm = np.linalg.norm(sum_vel)
+        if sum_norm > self.biggest_poss_speed:
+            sum_vel = (sum_vel/sum_norm) * self.biggest_poss_speed
         #making acceleration out of it
         sum_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
         return sum_acc

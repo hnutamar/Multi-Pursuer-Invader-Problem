@@ -7,13 +7,13 @@ from prime_mode import Modes
 from scipy.spatial.distance import cdist
 
 class SimulationWorld:
-    def __init__(self, sc_config, _3d=False, purs_acc=None, prime_acc=None, inv_acc=None, 
+    def __init__(self, sc_config, _3d=False, purs_acc=None, purs_speed=None, prime_acc=None, prime_speed=None, inv_acc=None, inv_speed=None,
                  prime_pos=None, inv_pos=None, purs_pos=None, purs_num=None):
         self.sc = sc_config
         self._3d = _3d
         #parameters for reset
         self.init_params = {
-            'purs_acc': purs_acc, 'prime_acc': prime_acc, 'inv_acc': inv_acc,
+            'purs_acc': purs_acc, 'purs_speed': purs_speed, 'prime_acc': prime_acc, 'prime_speed': prime_speed, 'inv_acc': inv_acc, 'inv_speed': inv_speed,
             'prime_pos': prime_pos, 'inv_pos': inv_pos, 'purs_pos': purs_pos, 'purs_num': purs_num
         }
         self.reset()
@@ -28,7 +28,7 @@ class SimulationWorld:
         self._init_agents(**self.init_params)
         return self.get_state()
 
-    def _init_agents(self, purs_acc, prime_acc, inv_acc, prime_pos, inv_pos, purs_pos, purs_num):
+    def _init_agents(self, purs_acc, purs_speed, prime_acc, prime_speed, inv_acc, inv_speed, prime_pos, inv_pos, purs_pos, purs_num):
         #obstacle
         self.obs_centers = None
         self.obs_radii = None
@@ -45,13 +45,14 @@ class SimulationWorld:
             #only line
             self.way_point = np.array([self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border])
         #Prime
+        speed_prime = prime_speed or 0.5
         acc_prime = prime_acc or 0.1
         if self._3d:
             pos_u = prime_pos if prime_pos is not None else np.array([3.0, 3.0, 3.0])
         else:
             pos_u = prime_pos if prime_pos is not None else np.array([3.0, 3.0])
             
-        self.prime = Prime_unit(position=pos_u, max_acc=acc_prime, max_omega=1.0, my_rad=self.sc.UNIT_RAD, dt=self.sc.DT)
+        self.prime = Prime_unit(position=pos_u, max_speed=speed_prime, max_acc=acc_prime, max_omega=1.0, my_rad=self.sc.UNIT_RAD, dt=self.sc.DT)
         #init positions and acceleration of agents (random)
         if self._3d:
             rnd_points_purs = purs_pos if purs_pos is not None else np.random.uniform(
@@ -77,17 +78,21 @@ class SimulationWorld:
                 size=(self.sc.INVADER_NUM, 2)
             )
         rnd_acc_inv = np.full(self.sc.INVADER_NUM, inv_acc) if inv_acc is not None else np.random.uniform(1.3, 1.5, self.sc.INVADER_NUM)
+        acc_inv = inv_acc or 1.0
+        speed_inv = inv_speed or 5.0
         acc_purs = purs_acc or 1.0
+        speed_purs = purs_speed or 5.0
         #pursuer init
         self.pursuers = []
         for i in range(self.sc.PURSUER_NUM):
             p_num = purs_num[i] if purs_num is not None else np.random.randint(0, 1001)
-            p = Pursuer(position=rnd_points_purs[i], max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=p_num, purs_vis=self.sc.PURS_VIS, dt=self.sc.DT)
+            p = Pursuer(position=rnd_points_purs[i], max_speed=speed_purs,
+                max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=p_num, purs_vis=self.sc.PURS_VIS, dt=self.sc.DT)
             self.pursuers.append(p)
         #invader init
         self.invaders = []
         for i in range(self.sc.INVADER_NUM):
-            inv = Invader(position=rnd_points_inv[i], max_acc=rnd_acc_inv[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD, dt=self.sc.DT)
+            inv = Invader(position=rnd_points_inv[i], max_speed=speed_inv, max_acc=acc_inv, max_omega=1.5, my_rad=self.sc.DRONE_RAD, dt=self.sc.DT)
             self.invaders.append(inv)
 
     def _get_safe_agent_data(self, agents):

@@ -1,18 +1,19 @@
 import numpy as np
 
 class Agent:
-    def __init__(self, position, max_acc, max_omega, dt, my_rad, num_iter=0):
+    def __init__(self, position, max_speed, max_acc, max_omega, dt, my_rad, num_iter=0):
         #drone radius
         self.my_rad = my_rad
         #drone position
         self.position = np.array(position, dtype=float)
-        #drone controller
-        self.CD = 0.3
         #drone speed and velocity
-        self.max_acc = max_acc
+        self.max_speed = float(max_speed)
+        self.max_acc = float(max_acc)
         self.curr_speed = np.zeros_like(self.position)
         self.curr_acc = np.zeros_like(self.position)
-        self.max_speed = np.sqrt(self.max_acc / self.CD)
+        self.cruise_speed = 0.75 * self.max_speed
+        #drone controller
+        self.CD = self.max_acc / (self.max_speed ** 2)
         #angular speed
         self.max_omega = max_omega
         #internal clock
@@ -40,7 +41,7 @@ class Agent:
         #acc cant be bigger than max acc
         acc_norm = np.linalg.norm(acc)
         if acc_norm > self.max_acc:
-            acc = (acc / acc_norm) * self.max_acc
+           acc = (acc / acc_norm) * self.max_acc
         #drag
         speed_val = np.linalg.norm(self.curr_speed)
         drag = self.CD * speed_val * self.curr_speed

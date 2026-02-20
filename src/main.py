@@ -11,19 +11,19 @@ def main():
     MANUAL_CONTROL = False
     #config
     if _3d:
-        sc = Sim3DConfig(dt=0.1, purs_num=40, inv_num=0, obstacle=False, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
+        sc = Sim3DConfig(dt=0.02, purs_num=40, inv_num=5, obstacle=False, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
     else:
-        sc = Sim2DConfig(dt=0.1, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=False, 
+        sc = Sim2DConfig(dt=0.02, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=False, 
                          obstacle_rad=[3.0, 4.0, 4.0], obstacle_pos=[np.array([13.0, 13.0]), np.array([17.0, 6.0]), np.array([6.0, 17.0])])
     #world, physics
     inv_pos = np.array([[20.24, 30.15, 25.58]])
-    world = SimulationWorld(sc, _3d=_3d, purs_acc=2.8, inv_acc=1.7, prime_acc=0.3)
+    world = SimulationWorld(sc, _3d=_3d, purs_acc=6.0, inv_acc=7.7, prime_acc=4.3, purs_speed=12.0, inv_speed=11.0, prime_speed=5.5)
     #visualization
     SHOW_VISUALIZATION = True
     vis = None
     if SHOW_VISUALIZATION:
         vis = MatplotlibVisualizer(sc_config=sc, _3d=_3d, quiver=False)
-    RENDER_EVERY = 2
+    RENDER_EVERY = 5
     EPISODE_NUM = 5
     step_counter = 1
     current_episode = 1

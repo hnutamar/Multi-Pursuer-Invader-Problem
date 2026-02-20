@@ -5,8 +5,8 @@ from prime_unit import Prime_unit
 from pursuer_states import States
 
 class Pursuer(Agent):
-    def __init__(self, position, max_acc, max_omega, my_rad, purs_num, purs_vis, dt):
-        super().__init__(position, max_acc, max_omega, dt, my_rad, num_iter=purs_num)
+    def __init__(self, position, max_speed, max_acc, max_omega, my_rad, purs_num, purs_vis, dt):
+        super().__init__(position, max_speed, max_acc, max_omega, dt, my_rad, num_iter=purs_num)
         #visibility range
         self.vis_range = purs_vis
         #repulsive forces
@@ -42,7 +42,7 @@ class Pursuer(Agent):
         self.target = None
         self.state = States.FORM
         #controler
-        self.KP = 10.0
+        self.KP = 5.0
         self.KD = 0.1
         #list of targets
         self.ignored_targs = {}
@@ -66,6 +66,7 @@ class Pursuer(Agent):
         self.obs_centers = None
         self.obs_radii = None
         self.coll_obs = 5.0
+        self.max_form_speed = 3.0
         
     def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit, precalc_data):
         #precalculated data, faster this way
@@ -121,6 +122,11 @@ class Pursuer(Agent):
         else:
             prime_rep_vel = self.repulsive_force_prime(prime_unit, self.prime_coll_r)
             sum_vel = self.purs*tar_vel + self.rep_in_purs*rep_vel + self.prime_rep_in_purs*prime_rep_vel + self.rep_obs*obs_vel
+        #norming speed to the possible limit
+        sum_norm = np.linalg.norm(sum_vel)
+        if sum_norm > self.cruise_speed:
+            sum_vel = (sum_vel/sum_norm) * self.cruise_speed
+        #converting to acceleration
         new_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
         return new_acc
     
@@ -473,7 +479,7 @@ class Pursuer(Agent):
         #outside of circle
         else:
             alpha = 1.0
-        norm_vec = rel_unit_pos/dist
+        norm_vec = rel_unit_pos/np.linalg.norm(rel_unit_pos)
         #circle around center
         tangent_vec = np.array([-rel_unit_pos[1], rel_unit_pos[0]])
         tan_len = np.linalg.norm(tangent_vec)
@@ -488,6 +494,10 @@ class Pursuer(Agent):
                 self.rep_in_form = 5.0
         fdwrd = circle_dir * tangent_vec# * self.max_speed
         form_vel = fdbck + fdwrd
+        if rho < 0:
+            form_norm = np.linalg.norm(form_vel)
+            if form_norm > self.max_form_speed:
+                form_vel = (form_vel/form_norm)*self.max_form_speed
         return form_vel
     
     def calculate_axis_consensus(self, neighbors, center_pos):
@@ -585,7 +595,7 @@ class Pursuer(Agent):
         else:
             alpha = 1.0
         #normalized vec from prime to pursuer
-        normal_vec = rel_unit_pos / dist
+        normal_vec = rel_unit_pos / np.linalg.norm(rel_unit_pos)
         final_axis = None
         #observed average axis of neighbors
         observed_group_axis = self.calculate_axis_consensus(close_purs, unit.position)
@@ -676,11 +686,15 @@ class Pursuer(Agent):
         fdbck = alpha * rho * normal_vec
         fdwrd = self.circle_dir * tangent_vec * self.max_speed
         form_vel = fdwrd + fdbck + force_flatten
+        if rho < 0:
+            form_norm = np.linalg.norm(form_vel)
+            if form_norm > self.max_form_speed:
+                form_vel = (form_vel/form_norm)*self.max_form_speed
         return form_vel
     
     def pursue_target(self, target: list[Invader, int], purs: list[Agent], unit: Prime_unit):
         tar_speed = np.linalg.norm(target[0].curr_speed)
-        my_speed = self.max_speed
+        my_speed = self.cruise_speed
         #if target is faster then pursuer, just pure pursue him
         if tar_speed >= my_speed or target[1] == self.purs_types['pure_pursuit']:
             target[1] = self.purs_types['pure_pursuit']
@@ -724,7 +738,7 @@ class Pursuer(Agent):
         #outside of circle
         else:
             alpha = 1.0
-        norm_vec = rel_pos/dist
+        norm_vec = rel_pos/np.linalg.norm(rel_pos)
         #circling in opposite direction to defensive formation circle
         tangent_vec = np.array([-rel_pos[1], rel_pos[0]])
         tan_norm = np.linalg.norm(tangent_vec)
@@ -733,6 +747,9 @@ class Pursuer(Agent):
         fdbck = alpha * rho * norm_vec
         fdwrd = -self.circle_dir * tangent_vec
         purs_vel = fdbck + fdwrd
+        purs_norm = np.linalg.norm(purs_vel)
+        if purs_norm > self.cruise_speed:
+            purs_vel = (purs_vel/purs_norm)*self.cruise_speed
         #normalizing it to not fly that fast, risk of collision
         vel_norm = np.linalg.norm(purs_vel)
         vel_dot = np.dot(target[0].curr_speed, self.curr_speed)
@@ -780,7 +797,7 @@ class Pursuer(Agent):
         else:
             alpha = 1.0
         #normalized vec from target to pursuer
-        normal_vec = rel_pos / dist
+        normal_vec = rel_pos / np.linalg.norm(rel_pos)
         #if prime is too close to target, push target out
         prime_dist = np.linalg.norm(prime.position - target[0].position) - target[0].my_rad - prime.my_rad
         if prime_dist < self.prime_coll_r:
@@ -810,8 +827,11 @@ class Pursuer(Agent):
             tangent_vec = tangent_vec / tan_norm
         #composing the forces into resulting form vector
         fdbck = alpha * rho * normal_vec
-        fdwrd = self.circle_dir * tangent_vec * self.max_speed
+        fdwrd = self.circle_dir * tangent_vec
         purs_vel = fdwrd + fdbck + force_flatten
+        purs_norm = np.linalg.norm(purs_vel)
+        if purs_norm > self.cruise_speed:
+            purs_vel = (purs_vel/purs_norm)*self.cruise_speed
         return purs_vel
         
     def pursuit_constant_bearing(self, target: list[Invader, int]):
@@ -823,7 +843,7 @@ class Pursuer(Agent):
         #line of sight
         r = target[0].position - self.position
         #coeficients of quadratic equation
-        a, b, c = np.dot(r, r), -2*np.dot(v_tar, r), np.dot(v_tar, v_tar) - self.max_speed**2
+        a, b, c = np.dot(r, r), -2*np.dot(v_tar, r), np.dot(v_tar, v_tar) - self.cruise_speed**2
         #discriminant
         D = b**2 - 4*a*c
         CB_dir = np.zeros_like(self.position)

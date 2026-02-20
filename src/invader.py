@@ -2,8 +2,8 @@ import numpy as np
 from agent import Agent
 
 class Invader(Agent):
-    def __init__(self, position, max_acc, max_omega, my_rad, dt):
-        super().__init__(position, max_acc, max_omega, dt, my_rad)
+    def __init__(self, position, max_speed, max_acc, max_omega, my_rad, dt):
+        super().__init__(position, max_speed, max_acc, max_omega, dt, my_rad)
         #number of pursuers pursuing this invader
         self.purs_num = 0
         #controller
@@ -28,7 +28,11 @@ class Invader(Agent):
         obs_vel = self.repulsive_force_obs(self.coll_obs)
         #obs_vel = np.zeros_like(self.position)
         #summing all vectors, making acc out of them
-        v_sum = v_dir + obs_vel
+        v_sum = 5*v_dir + 5*obs_vel
+        #norming speed to the possible limit
+        sum_norm = np.linalg.norm(v_sum)
+        if sum_norm > self.cruise_speed:
+            v_sum = (v_sum/sum_norm) * self.cruise_speed
         u_dir = self.KP*(v_sum - self.curr_speed) - self.KD*self.curr_speed
         return u_dir
     

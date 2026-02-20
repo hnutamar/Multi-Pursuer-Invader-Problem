@@ -60,8 +60,8 @@ class SimulationWorld:
                 size=(self.sc.PURSUER_NUM, 3)
             )
             rnd_points_inv = inv_pos if inv_pos is not None else np.random.uniform(
-                low=[self.sc.PURSUER_NUM/2 + 2 + pos_u[0], self.sc.PURSUER_NUM/2 + 2 + pos_u[1], pos_u[2]], 
-                high=[self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border, pos_u[2]], 
+                low=[-2*self.sc.WORLD_WIDTH, -2*self.sc.WORLD_HEIGHT, pos_u[2] - 10], 
+                high=[2*self.sc.WORLD_WIDTH, 2*self.sc.WORLD_HEIGHT, pos_u[2] + 10], 
                 size=(self.sc.INVADER_NUM, 3)
             )
         else:
@@ -72,8 +72,8 @@ class SimulationWorld:
             )
             rnd_points_inv = inv_pos if inv_pos is not None else np.random.uniform(
                 #low=[self.sc.PURSUER_NUM/2 + 2 + pos_u[0], self.sc.PURSUER_NUM/2 + 2 + pos_u[1]],  
-                low=[0.0, self.sc.PURSUER_NUM/2 + 2 + pos_u[1]],  
-                high=[self.sc.WORLD_WIDTH - x_border, self.sc.WORLD_HEIGHT - y_border], 
+                low=[0, 0],  
+                high=[2*self.sc.WORLD_WIDTH, 2*self.sc.WORLD_HEIGHT], 
                 size=(self.sc.INVADER_NUM, 2)
             )
         rnd_acc_inv = np.full(self.sc.INVADER_NUM, inv_acc) if inv_acc is not None else np.random.uniform(1.3, 1.5, self.sc.INVADER_NUM)

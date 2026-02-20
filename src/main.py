@@ -7,13 +7,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def main():
-    _3d = False
+    _3d = True
     MANUAL_CONTROL = False
     #config
     if _3d:
-        sc = Sim3DConfig(dt=0.1, purs_num=20, inv_num=2, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
+        sc = Sim3DConfig(dt=0.1, purs_num=40, inv_num=0, obstacle=False, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
     else:
-        sc = Sim2DConfig(dt=0.1, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=True, 
+        sc = Sim2DConfig(dt=0.1, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=False, 
                          obstacle_rad=[3.0, 4.0, 4.0], obstacle_pos=[np.array([13.0, 13.0]), np.array([17.0, 6.0]), np.array([6.0, 17.0])])
     #world, physics
     inv_pos = np.array([[20.24, 30.15, 25.58]])
@@ -24,10 +24,10 @@ def main():
     if SHOW_VISUALIZATION:
         vis = MatplotlibVisualizer(sc_config=sc, _3d=_3d, quiver=False)
     RENDER_EVERY = 2
-    EPISODE_NUM = 2
+    EPISODE_NUM = 5
     step_counter = 1
     current_episode = 1
-    #loop (used also for RL training)
+    #loop of the simulator
     running = True
     while running:
         #manual control of invader

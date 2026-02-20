@@ -79,11 +79,6 @@ class Pursuer(Agent):
             return tar_vel
         #computing closest obstacle
         if self.obs_centers is not None:
-            #immovable obstacles
-            #if self.obs_centers is None:
-            #     self.obs_centers = np.array([o['center'] for o in obstacles])
-            # if self.obs_radii is None:
-            #     self.obs_radii = np.array([o['radius'] for o in obstacles])
             #searching for closest obstacle
             curr_obs = self.get_nearest_obstacle(prime_unit)
             if curr_obs is None:
@@ -498,21 +493,28 @@ class Pursuer(Agent):
     def calculate_axis_consensus(self, neighbors, center_pos):
         if not neighbors:
             return None
-        my_rel_pos = self.position - center_pos
-        my_axis = np.cross(my_rel_pos, self.curr_speed)
         #sum of all axes
-        axes_sum = my_axis
-        count = 1
-        for n in neighbors:
-            #calculating the second rotation axes
-            n_rel_pos = n.position - center_pos
-            n_axis = np.cross(n_rel_pos, n.curr_speed)
-            #normalize
-            norm = np.linalg.norm(n_axis)
-            if norm > 1e-6:
-                n_axis = n_axis / norm
-                axes_sum += n_axis
-                count += 1
+        #positions and speeds from everyone
+        n_pos = np.vstack([n.position for n in neighbors])
+        n_speed = np.vstack([n.curr_speed for n in neighbors])
+        #relative position
+        n_rel_pos = n_pos - center_pos
+        #cross product
+        n_axes = np.cross(n_rel_pos, n_speed)
+        #norms
+        norms = np.linalg.norm(n_axes, axis=1)
+        #filtering those too small
+        valid_mask = norms > 1e-6
+        valid_axes = n_axes[valid_mask]
+        valid_norms = norms[valid_mask]
+        #norming the axes
+        normalized_axes = valid_axes / valid_norms[:, np.newaxis]
+        #final count
+        axes_sum = np.sum(normalized_axes, axis=0) 
+        count = len(normalized_axes)
+        #fallback division of zero
+        if count == 0:
+            return None
         #average axis
         avg_axis = axes_sum / count
         #normalize
@@ -598,28 +600,40 @@ class Pursuer(Agent):
             current_axis = self.get_axis_at_time(self.num_iter)
             #synchronization of clocks
             if observed_group_axis is not None:
-                #alignment = np.dot(self.get_axis_at_time(self.num_iter), observed_group_axis)
-                #print(f"Alignment: {alignment:.4f}")
                 #current alignment
-                current_axis = self.get_axis_at_time(self.num_iter)
                 current_alignment = np.dot(current_axis, observed_group_axis)
+                # if alignment < 0.7:
+                #     print(f"Alignment: {current_alignment:.4f}")
                 #bad sync, searching for better
                 if current_alignment < 0.8:
-                    best_t = self.num_iter
-                    best_score = current_alignment
                     #searching through the whole period
-                    search_range = np.linspace(self.num_iter - 15.0, self.num_iter + 15.0, 20)
-                    for t_test in search_range:
-                        axis_test = self.get_axis_at_time(t_test)
-                        score_test = np.dot(axis_test, observed_group_axis)
-                        if score_test > best_score:
-                            best_score = score_test
-                            best_t = t_test
+                    search_range = np.linspace(self.num_iter - 105.0, self.num_iter + 105.0, 100)
+                    #computing axes
+                    time_scaled = search_range * 0.3
+                    x = np.sin(time_scaled)
+                    y = np.cos(time_scaled * 0.7)
+                    z = np.sin(time_scaled * 1.2)
+                    #matrix of axes
+                    axes = np.column_stack((x, y, z))
+                    #norms
+                    norms = np.linalg.norm(axes, axis=1)
+                    #valid norms
+                    valid_mask = norms > 1e-6
+                    #norming the axes
+                    axes[valid_mask] = axes[valid_mask] / norms[valid_mask, np.newaxis]
+                    #too small axes being this default
+                    axes[~valid_mask] = np.array([0.0, 0.0, 1.0])
+                    #dot product of all axes
+                    scores = np.dot(axes, observed_group_axis)
+                    #the best alignment
+                    best_idx = np.argmax(scores)
+                    best_score = scores[best_idx]
+                    best_t = search_range[best_idx]
                     #best time
                     self.num_iter = best_t
                     #if the dot product is very bad, try random jump
                     if best_score < 0.0:
-                         self.num_iter += np.random.uniform(10.0, 50.0)
+                         self.num_iter += np.random.uniform(10.0, 200.0)
                 #fine tuning, axes are very similar
                 else:
                     #smaller jump, testing if setting clocks forward or backward makes better alignment

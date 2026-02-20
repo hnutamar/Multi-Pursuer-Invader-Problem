@@ -18,6 +18,8 @@ class Agent:
         #internal clock
         self.dt = dt
         self.num_iter = num_iter
+        self.low_clock = self.dt - 0.2*self.dt
+        self.high_clock = self.dt + 0.2*self.dt
         #boolean signalling crash
         self.crashed = False
         #only for prime
@@ -25,7 +27,7 @@ class Agent:
 
     def move(self, acc):
         #clock
-        self.num_iter += self.dt
+        self.num_iter += np.random.uniform(low=self.low_clock, high=self.high_clock)
         if self.crashed:
             return
         if self.finished:

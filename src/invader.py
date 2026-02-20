@@ -9,6 +9,7 @@ class Invader(Agent):
         #controller
         self.KP = 10.0
         self.KD = 0.1
+        #collision parameters
         self.coll_obs = 5.0
         
     def evade(self, pursuers, target, obstacles):
@@ -68,11 +69,14 @@ class Invader(Agent):
         dists_center = np.linalg.norm(vecs_to_obs, axis=1)
         #distance from surface to surface
         dists_surface = dists_center - obs_radii - self.my_rad
-        for dist_surf, dist_center, vec in zip(dists_surface, dists_center, vecs_to_obs):
-            if dist_surf < coll and dist_surf > 0.001:
-                push_dir = vec / dist_center
-                #hyperbolic repulsive
-                magnitude = (1.0 / dist_surf - 1.0 / coll) 
-                # magnitude = (coll - dist) / coll
-                rep_dir += push_dir * magnitude
-        return rep_dir 
+        #mask
+        mask = dists_surface < coll
+        #valid data
+        valid_dists_center = dists_center[mask]
+        valid_dists_surface = dists_surface[mask]
+        valid_diffs = vecs_to_obs[mask]
+        #norm and magnitude
+        push_dirs = valid_diffs / valid_dists_center[:, np.newaxis]
+        magnitudes = (1.0 / valid_dists_surface) - (1.0 / coll)
+        #total force
+        return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0)

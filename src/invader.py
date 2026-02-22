@@ -28,7 +28,7 @@ class Invader(Agent):
         obs_vel = self.repulsive_force_obs(self.coll_obs)
         #obs_vel = np.zeros_like(self.position)
         #summing all vectors, making acc out of them
-        v_sum = 5*v_dir + 5*obs_vel
+        v_sum = v_dir + obs_vel
         #norming speed to the possible limit
         sum_norm = np.linalg.norm(v_sum)
         if sum_norm > self.cruise_speed:
@@ -40,7 +40,7 @@ class Invader(Agent):
         dir_ = self.position - purs[idx].position
         if np.linalg.norm(dir_) > 1e-12:
             dir_ = dir_ / np.linalg.norm(dir_)
-        dir_ = dir_ * self.max_speed
+        dir_ = dir_ * self.cruise_speed
         return dir_
     
     def strategy_closest_pursuer(self, puruers):
@@ -57,7 +57,7 @@ class Invader(Agent):
         dir_ = target.position - self.position
         if np.linalg.norm(dir_) > 1e-12:
             dir_ = dir_ / np.linalg.norm(dir_)
-        dir_ = dir_ * self.max_speed
+        dir_ = dir_ * self.cruise_speed
         return dir_
     
     def repulsive_force_obs(self, coll):
@@ -83,4 +83,4 @@ class Invader(Agent):
         push_dirs = valid_diffs / valid_dists_center[:, np.newaxis]
         magnitudes = (1.0 / valid_dists_surface) - (1.0 / coll)
         #total force
-        return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0)
+        return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0) * self.cruise_speed

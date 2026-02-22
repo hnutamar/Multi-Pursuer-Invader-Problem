@@ -17,7 +17,7 @@ class Sim2DConfig:
         self.PURSUER_NUM = purs_num
         self.INVADER_NUM = inv_num
         #visibility of pursuer of other pursuers
-        self.PURS_VIS = 1.0
+        self.PURS_VIS = 2.0
         #vortex fields size
         self.FIELD_RES = 15
         self.FIELD_SIZE = 4

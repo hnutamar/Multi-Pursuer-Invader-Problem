@@ -140,7 +140,7 @@ class SimulationWorld:
                        precalc_data=(all_inv_pos, all_inv_pnums, all_inv_rad, all_purs_pos, all_purs_rad, i, self.obs_centers, self.obs_radii))
             pur.move(purs_acc)
         #prime move
-        prime_acc = self.prime.fly(self.way_point, free_inv, free_purs, Modes.LINE)
+        prime_acc = self.prime.fly(self.way_point, free_inv, free_purs, Modes.LINE, (self.obs_centers, self.obs_radii))
         self.prime.move(prime_acc)
         #number of pursuers pursuing invaders
         for i in free_inv:

@@ -12,11 +12,11 @@ class Pursuer(Agent):
         #repulsive forces
         self.purs = 1.2
         self.form = 0.9
-        self.rep_in_form = 5.0
-        self.rep_in_purs = 6.0
-        self.rep_obs = 1.0
-        self.rep_invs = 20.0
-        self.prime_rep_in_purs = 2.9
+        self.rep_in_form = 2.3
+        self.rep_in_purs = 0.7
+        self.rep_obs = 1.9
+        self.rep_invs = 2.3
+        self.prime_rep_in_purs = 0.3
         #collision radiuses
         self.prime_coll_r = 10.5
         self.collision_r = min(purs_vis, 2.0)
@@ -58,10 +58,6 @@ class Pursuer(Agent):
             self.MAX_PURSUERS = 10
         else:
             self.MAX_PURSUERS = 4
-        #params for obstacle avoidance
-        self.avoid_axis = None
-        self.axis_found = False
-        self.curr_obs = None
         #obstacles centers and radiuses
         self.obs_centers = None
         self.obs_radii = None
@@ -78,16 +74,6 @@ class Pursuer(Agent):
         #if crashed, dont move, you are supposed to be dead
         if self.crashed:
             return tar_vel
-        #computing closest obstacle
-        if self.obs_centers is not None:
-            #searching for closest obstacle
-            curr_obs = self.get_nearest_obstacle(prime_unit)
-            if curr_obs is None:
-                self.curr_obs = None
-            elif self.curr_obs is None or not np.array_equal(curr_obs['center'], self.curr_obs['center']):
-                self.curr_obs = curr_obs
-                self.avoid_axis = None
-                self.axis_found = False
         #previous target captured, back to formation
         if self.target != None and self.target[0].crashed == True:
             self.target = None
@@ -107,9 +93,9 @@ class Pursuer(Agent):
             self.target = None
             self.state = States.FORM
             if len(self.position) == 2:
-                form_vel = self.form_vortex_field_circle(prime_unit, obstacle=self.curr_obs)
+                form_vel = self.form_vortex_field_circle(prime_unit)
             else:
-                form_vel = self.form_vortex_field_sphere(prime_unit, close_purs=pursuers, obstacle=self.curr_obs)
+                form_vel = self.form_vortex_field_sphere(prime_unit, close_purs=pursuers)
         #repulsive dirs to avoid collision
         rep_vel = self.repulsive_force_purs(self.collision_r)
         #repulsive dirs to avoid collision with obstacle
@@ -144,41 +130,7 @@ class Pursuer(Agent):
              return np.empty((0, 3)), np.empty((0,))
         visible_pos = all_pos[mask]
         visible_rad = all_rad[mask]
-        return visible_pos, visible_rad
-    
-    def get_nearest_obstacle(self, prime):
-        #obstacle centers and radiuses
-        obs_centers = self.obs_centers
-        obs_radii = self.obs_radii
-        #vector from prime to obstacle center
-        vecs_to_obs = obs_centers - prime.position
-        #distances center to center
-        dists_center = np.linalg.norm(vecs_to_obs, axis=1)
-        #distance from surface to surface
-        dists_surface = dists_center - obs_radii - prime.my_rad
-        #speed of prime
-        speed_norm = np.linalg.norm(prime.curr_speed)
-        #if prime is moving, interesting are only those obstacles in a way
-        if speed_norm > 0.1:
-            #only those who has positive dot product
-            dot_products = np.sum(prime.curr_speed * vecs_to_obs, axis=1)
-            mask = dot_products > 0
-            #if there is none, not important
-            if not np.any(mask):
-                return None
-            #relevant obstacles
-            relevant_indices = np.where(mask)[0]
-            relevant_dists = dists_surface[mask]
-            #minimum
-            min_idx_local = np.argmin(relevant_dists)
-            real_idx = relevant_indices[min_idx_local]
-            obstacle = {'center': self.obs_centers[real_idx], 'radius': self.obs_radii[real_idx]}
-            return obstacle
-        else:
-            #just the closest
-            min_idx = np.argmin(dists_surface)
-            obstacle = {'center': self.obs_centers[min_idx], 'radius': self.obs_radii[min_idx]}
-            return obstacle  
+        return visible_pos, visible_rad 
              
     def get_avoidance_direction(self, obstacle_pos, obstacle_rad, prime):
         #if prime is too close to obstacle, calculate which direction is better for avoidance, in 2D
@@ -314,7 +266,7 @@ class Pursuer(Agent):
         push_dirs = valid_diffs / valid_dists_center[:, np.newaxis]
         magnitudes = (1.0 / valid_dists_surface) - (1.0 / coll)
         #total force
-        return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0)
+        return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0) * self.cruise_speed
 
     def repulsive_force_prime(self, prime: Prime_unit, coll: float):
         total_force = np.zeros_like(self.position)
@@ -330,7 +282,7 @@ class Pursuer(Agent):
             push_dir = diff/dist_center
             magnitude = (1.0 / dist_surface) - (1.0 / coll)
             total_force = push_dir * magnitude
-        return total_force
+        return total_force * self.cruise_speed
     
     def repulsive_force_obs(self, coll):
         rep_dir = np.zeros_like(self.position)
@@ -355,7 +307,7 @@ class Pursuer(Agent):
         push_dirs = valid_diffs / valid_dists_center[:, np.newaxis]
         magnitudes = (1.0 / valid_dists_surface) - (1.0 / coll)
         #total force
-        return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0)
+        return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0) * self.cruise_speed
     
     def repulsive_inv_force(self, prime, targets):
         rep_dir = np.zeros_like(self.position)
@@ -387,33 +339,6 @@ class Pursuer(Agent):
                 #storing
                 close_targs.extend(surface_points)
                 dists.extend(valid_dists_s)
-        #obstacle dist
-        if self.obs_centers is not None:
-            obs_centers = self.obs_centers
-            obs_radii = self.obs_radii
-            #from prime to obstacle center
-            vecs_to_centers = obs_centers - prime.position
-            #distance center to center
-            dists_center = np.linalg.norm(vecs_to_centers, axis=1)
-            #protection of not devide by zero
-            dists_center[dists_center < 1e-6] = 1e-6
-            #distance surface to surface
-            dists_surface = dists_center - obs_radii - prime.my_rad
-            #only those close enough
-            mask = dists_surface < self.rep_obs_r
-            if np.any(mask):
-                #relevant data
-                valid_centers = obs_centers[mask]
-                valid_radii = obs_radii[mask]
-                valid_vecs = vecs_to_centers[mask]
-                valid_dists_c = dists_center[mask]
-                valid_dists_s = dists_surface[mask]
-                #point on surface
-                dirs_normalized = valid_vecs / valid_dists_c[:, np.newaxis]
-                surface_points = valid_centers - (dirs_normalized * valid_radii[:, np.newaxis])
-                #storing the results
-                close_targs.extend(surface_points)
-                dists.extend(valid_dists_s / 4.0)
         #making weighted center of mass and then repulsive force against
         if close_targs:
             close_targs = np.array(close_targs)
@@ -449,15 +374,13 @@ class Pursuer(Agent):
                 else:
                     magnitude = 0
                 rep_dir = push_dir * magnitude
-        return rep_dir
+        return rep_dir * self.cruise_speed
         
-    
     def sigmoid(self, x):
         #sigmoid function
         return 1 / (1 + np.exp(-x))
     
-    def form_vortex_field_circle(self, unit: Prime_unit, obstacle=None, mock_position=None):
-        self.rep_in_form = 20.0
+    def form_vortex_field_circle(self, unit: Prime_unit, mock_position=None):
         if mock_position is not None:
             my_pos = mock_position
         else:
@@ -475,7 +398,7 @@ class Pursuer(Agent):
         rho = 1 - (dist / form_r)**2
         #inside of circle
         if rho > 0:
-            alpha = 20.0
+            alpha = 2.5 * self.cruise_speed
         #outside of circle
         else:
             alpha = 1.0
@@ -483,17 +406,15 @@ class Pursuer(Agent):
         #circle around center
         tangent_vec = np.array([-rel_unit_pos[1], rel_unit_pos[0]])
         tan_len = np.linalg.norm(tangent_vec)
-        if tan_len > 1e-6 or tan_len > self.circle_tan_max:
+        if tan_len > self.circle_tan_max:
             tangent_vec = (tangent_vec / tan_len) * self.circle_tan_max
+        #feedbackward
         fdbck = alpha * rho * norm_vec
-        #direction is also determined by the position of obstacle
+        #feedforward
         circle_dir = self.circle_dir
-        if obstacle is not None:
-            if self.get_avoidance_direction(obstacle['center'], obstacle['radius'], unit):
-                circle_dir = self.circle_dir_obs
-                self.rep_in_form = 5.0
-        fdwrd = circle_dir * tangent_vec# * self.max_speed
+        fdwrd = circle_dir * tangent_vec
         form_vel = fdbck + fdwrd
+        #normalizing
         if rho < 0:
             form_norm = np.linalg.norm(form_vel)
             if form_norm > self.max_form_speed:
@@ -531,38 +452,6 @@ class Pursuer(Agent):
         if np.linalg.norm(avg_axis) > 1e-6:
             return avg_axis / np.linalg.norm(avg_axis)
         return None
-    
-    def calculate_obstacle_avoidance_axis(self, unit, obstacle_pos, obstacle_rad):
-        #calculating if prime is too close to obstacle
-        vec_to_obs = obstacle_pos - unit.position
-        dist = np.linalg.norm(vec_to_obs) - unit.my_rad - obstacle_rad
-        #prime velocity vector
-        velocity = unit.curr_speed
-        speed = np.linalg.norm(unit.curr_speed)
-        v = np.zeros_like(self.position)
-        if speed > 1e-6:
-            v = velocity/speed
-        vec_to_obs_norm = np.linalg.norm(vec_to_obs)
-        vto_normed = np.zeros_like(self.position)
-        if vec_to_obs_norm > 1e-6:
-            vto_normed = vec_to_obs/vec_to_obs_norm
-        if dist > self.obs_rad or np.dot(v, vto_normed) <= -0.2:
-            self.avoid_axis = None
-            return None
-        elif self.avoid_axis is not None:
-            return self.avoid_axis
-        if np.linalg.norm(velocity) < 0.1:
-            velocity = np.array([0.0, 0.0, 1.0])
-        #axis for avoidance
-        avoidance_axis = np.cross(velocity, vec_to_obs)
-        #if prime flies directly into the obstacle
-        norm = np.linalg.norm(avoidance_axis)
-        if norm < 1e-6:
-            avoidance_axis = np.cross(velocity, np.array([0,0,1]))
-            norm = np.linalg.norm(avoidance_axis)
-        avoidance_axis = -avoidance_axis / norm
-        self.avoid_axis = avoidance_axis
-        return self.avoid_axis
 
     def get_axis_at_time(self, t):
         #school of fish
@@ -572,8 +461,69 @@ class Pursuer(Agent):
         if norm > 1e-6:
             return axis / norm
         return np.array([0.0, 0.0, 1.0])
+    
+    def get_final_axis(self, current_axis, observed_group_axis):
+        #current alignment
+        current_alignment = np.dot(current_axis, observed_group_axis)
+        # if alignment < 0.7:
+        #     print(f"Alignment: {current_alignment:.4f}")
+        #bad sync, searching for better
+        if current_alignment < 0.8:
+            #searching through the whole period
+            search_range = np.linspace(self.num_iter - 105.0, self.num_iter + 105.0, 100)
+            #computing axes
+            time_scaled = search_range * 0.3
+            x = np.sin(time_scaled)
+            y = np.cos(time_scaled * 0.7)
+            z = np.sin(time_scaled * 1.2)
+            #matrix of axes
+            axes = np.column_stack((x, y, z))
+            #norms
+            norms = np.linalg.norm(axes, axis=1)
+            #valid norms
+            valid_mask = norms > 1e-6
+            #norming the axes
+            axes[valid_mask] = axes[valid_mask] / norms[valid_mask, np.newaxis]
+            #too small axes being this default
+            axes[~valid_mask] = np.array([0.0, 0.0, 1.0])
+            #dot product of all axes
+            scores = np.dot(axes, observed_group_axis)
+            #the best alignment
+            best_idx = np.argmax(scores)
+            best_score = scores[best_idx]
+            best_t = search_range[best_idx]
+            #best time
+            self.num_iter = best_t
+            #if the dot product is very bad, try random jump
+            if best_score < 0.0:
+                    self.num_iter += np.random.uniform(10.0, 200.0)
+        #fine tuning, axes are very similar
+        else:
+            #smaller jump, testing if setting clocks forward or backward makes better alignment
+            delta_test = 0.3
+            axis_future = self.get_axis_at_time(self.num_iter + delta_test)
+            axis_past = self.get_axis_at_time(self.num_iter - delta_test)
+            #making dot products
+            score_future = np.dot(axis_future, observed_group_axis)
+            score_past = np.dot(axis_past, observed_group_axis)
+            #setting clocks to better result
+            sync_speed = 0.2
+            if score_future > current_alignment:
+                    self.num_iter += sync_speed
+            elif score_past > current_alignment:
+                    self.num_iter -= sync_speed
+        #new my final axis
+        final_axis = self.get_axis_at_time(self.num_iter)
+        #combination of my axis with the observed one
+        weight = 0.5 
+        final_axis = (1 - weight) * final_axis + weight * observed_group_axis
+        #norm
+        norm = np.linalg.norm(final_axis)
+        if norm > 1e-6:
+            final_axis /= norm
+        return final_axis
 
-    def form_vortex_field_sphere(self, unit: Prime_unit, obstacle=None, mock_position=None, close_purs=None):
+    def form_vortex_field_sphere(self, unit: Prime_unit, mock_position=None, close_purs=None):
         if mock_position is not None:
             my_pos = mock_position
         else:
@@ -591,92 +541,21 @@ class Pursuer(Agent):
         rho = 1 - (dist / form_r)**2
         #alpha, stronger on the inside
         if rho > 0:
-            alpha = 20.0
+            alpha = 2.5 * self.cruise_speed
         else:
             alpha = 1.0
         #normalized vec from prime to pursuer
         normal_vec = rel_unit_pos / np.linalg.norm(rel_unit_pos)
-        final_axis = None
         #observed average axis of neighbors
         observed_group_axis = self.calculate_axis_consensus(close_purs, unit.position)
-        #axis to avoid obstacle
-        if obstacle is not None:
-             final_axis = self.calculate_obstacle_avoidance_axis(unit, obstacle['center'], obstacle['radius'])
-             force_flatten = 0
-        #if obstacle is not close, do school of fish
-        if final_axis is None:
-            self.rep_in_form = 20.0
-            #my axis
-            current_axis = self.get_axis_at_time(self.num_iter)
-            #synchronization of clocks
-            if observed_group_axis is not None:
-                #current alignment
-                current_alignment = np.dot(current_axis, observed_group_axis)
-                # if alignment < 0.7:
-                #     print(f"Alignment: {current_alignment:.4f}")
-                #bad sync, searching for better
-                if current_alignment < 0.8:
-                    #searching through the whole period
-                    search_range = np.linspace(self.num_iter - 105.0, self.num_iter + 105.0, 100)
-                    #computing axes
-                    time_scaled = search_range * 0.3
-                    x = np.sin(time_scaled)
-                    y = np.cos(time_scaled * 0.7)
-                    z = np.sin(time_scaled * 1.2)
-                    #matrix of axes
-                    axes = np.column_stack((x, y, z))
-                    #norms
-                    norms = np.linalg.norm(axes, axis=1)
-                    #valid norms
-                    valid_mask = norms > 1e-6
-                    #norming the axes
-                    axes[valid_mask] = axes[valid_mask] / norms[valid_mask, np.newaxis]
-                    #too small axes being this default
-                    axes[~valid_mask] = np.array([0.0, 0.0, 1.0])
-                    #dot product of all axes
-                    scores = np.dot(axes, observed_group_axis)
-                    #the best alignment
-                    best_idx = np.argmax(scores)
-                    best_score = scores[best_idx]
-                    best_t = search_range[best_idx]
-                    #best time
-                    self.num_iter = best_t
-                    #if the dot product is very bad, try random jump
-                    if best_score < 0.0:
-                         self.num_iter += np.random.uniform(10.0, 200.0)
-                #fine tuning, axes are very similar
-                else:
-                    #smaller jump, testing if setting clocks forward or backward makes better alignment
-                    delta_test = 0.3
-                    axis_future = self.get_axis_at_time(self.num_iter + delta_test)
-                    axis_past = self.get_axis_at_time(self.num_iter - delta_test)
-                    #making dot products
-                    score_future = np.dot(axis_future, observed_group_axis)
-                    score_past = np.dot(axis_past, observed_group_axis)
-                    #setting clocks to better result
-                    sync_speed = 0.2
-                    if score_future > current_alignment:
-                         self.num_iter += sync_speed
-                    elif score_past > current_alignment:
-                         self.num_iter -= sync_speed
-                #new my final axis
-                final_axis = self.get_axis_at_time(self.num_iter)
-                #combination of my axis with the observed one
-                weight = 0.5 
-                final_axis = (1 - weight) * final_axis + weight * observed_group_axis
-                #norm
-                norm = np.linalg.norm(final_axis)
-                if norm > 1e-6:
-                    final_axis /= norm
-            else:
-                #being alone
-                final_axis = current_axis
-            force_flatten = 0
+        #my axis
+        current_axis = self.get_axis_at_time(self.num_iter)
+        #synchronization of clocks
+        if observed_group_axis is not None:
+            final_axis = self.get_final_axis(current_axis, observed_group_axis)
         else:
-            self.rep_in_form = 5.0
-            #force to flatten formation so that the obstacle avoidance would work
-            dist_from_plane = np.dot(rel_unit_pos, final_axis)
-            force_flatten = -final_axis * dist_from_plane * 20.0
+            #being alone
+            final_axis = current_axis
         #resulting tangent
         tangent_vec = np.cross(final_axis, rel_unit_pos)
         tan_len = np.linalg.norm(tangent_vec)
@@ -685,14 +564,14 @@ class Pursuer(Agent):
         #composing the forces into resulting form vector
         fdbck = alpha * rho * normal_vec
         fdwrd = self.circle_dir * tangent_vec * self.max_speed
-        form_vel = fdwrd + fdbck + force_flatten
+        form_vel = fdwrd + fdbck
         if rho < 0:
             form_norm = np.linalg.norm(form_vel)
             if form_norm > self.max_form_speed:
                 form_vel = (form_vel/form_norm)*self.max_form_speed
         return form_vel
     
-    def pursue_target(self, target: list[Invader, int], purs: list[Agent], unit: Prime_unit):
+    def pursue_target(self, target: list[Invader, int], purs: list[Agent], prime: Prime_unit):
         tar_speed = np.linalg.norm(target[0].curr_speed)
         my_speed = self.cruise_speed
         #if target is faster then pursuer, just pure pursue him
@@ -704,14 +583,14 @@ class Pursuer(Agent):
             target[1] = self.purs_types['const_bear']
             return self.pursuit_constant_bearing(target)
         #if more then one is chasing him and he is further from unit, circle him
-        if np.linalg.norm(unit.position - target[0].position) >= self.safe_circle_r:
+        if np.linalg.norm(prime.position - target[0].position) >= self.safe_circle_r:
             # for p in purs:
             #     if p is not self and p.target != None and p.target[0] is target[0]:
             if target[0].purs_num >= 2:
                 if len(self.position) == 2:
                     return self.pursuit_circling(target)
                 else:
-                    return self.pursuit_sphering(target, purs, unit)
+                    return self.pursuit_sphering(target, purs, prime)
         #no one else is chasing him, catch him
         target[1] = self.purs_types['const_bear1']
         return self.pursuit_constant_bearing(target)
@@ -724,8 +603,8 @@ class Pursuer(Agent):
         target[1] = self.purs_types['circling']
         self.prime_coll_r = 10.5
         #strong repulsive force is needed
-        self.rep_in_purs = 25.0
-        self.prime_rep_in_purs = 20.9
+        self.rep_in_purs = 4.8
+        self.prime_rep_in_purs = 4.4
         #the center of the vortex field is not shifted
         rel_pos = my_pos - (target[0].position) #+ target[0].curr_speed * self.dt * self.pred_time)
         dist = np.linalg.norm(rel_pos) - target[0].my_rad - self.my_rad
@@ -734,7 +613,7 @@ class Pursuer(Agent):
         rho = 1 - (dist / self.t_circle)**2
         #inside of circle
         if rho > 0:
-            alpha = 20.0
+            alpha = 2.5 * self.cruise_speed
         #outside of circle
         else:
             alpha = 1.0
@@ -753,25 +632,9 @@ class Pursuer(Agent):
         #normalizing it to not fly that fast, risk of collision
         vel_norm = np.linalg.norm(purs_vel)
         vel_dot = np.dot(target[0].curr_speed, self.curr_speed)
-        if self.t_circle * 8.0 >= dist >= self.t_circle * 3.0 and vel_norm >= 3.0 and vel_dot < 0:
+        if self.t_circle * 9.0 >= dist >= self.t_circle * 3.0 and vel_norm >= 3.0 and vel_dot < 0:
             purs_vel = purs_vel/vel_norm * 0.9
         return purs_vel
-    
-    def calculate_prime_avoidance_axis(self, inv, prime_pos):
-        vec_to_prime = prime_pos - inv.position
-        #inv velocity vector
-        velocity = inv.curr_speed
-        if np.linalg.norm(velocity) < 0.1:
-            velocity = np.array([0.0, 0.0, 1.0])
-        #axis for avoidance
-        avoidance_axis = np.cross(velocity, vec_to_prime)
-        #if inv flies directly into the prime
-        norm = np.linalg.norm(avoidance_axis)
-        if norm < 1e-6:
-            avoidance_axis = np.cross(velocity, np.array([0,0,1]))
-            norm = np.linalg.norm(avoidance_axis)
-        avoidance_axis = -avoidance_axis / norm
-        return avoidance_axis
     
     def pursuit_sphering(self, target: list[Invader, int], purs, prime):
         #other pursuers pursuing same target in visibility region
@@ -782,8 +645,8 @@ class Pursuer(Agent):
         target[1] = self.purs_types['circling']
         #strong repulsive force is needed
         self.prime_coll_r = 10.5
-        self.rep_in_purs = 25.0
-        self.prime_rep_in_purs = 20.9
+        self.rep_in_purs = 4.8
+        self.prime_rep_in_purs = 4.4
         my_pos = self.position
         rel_pos = my_pos - (target[0].position)
         #distance from target
@@ -793,33 +656,21 @@ class Pursuer(Agent):
         rho = 1 - (dist / self.t_circle)**2
         #alpha, stronger on the inside
         if rho > 0:
-            alpha = 20.0
+            alpha = 10.5 * self.cruise_speed
         else:
             alpha = 1.0
         #normalized vec from target to pursuer
         normal_vec = rel_pos / np.linalg.norm(rel_pos)
-        #if prime is too close to target, push target out
-        prime_dist = np.linalg.norm(prime.position - target[0].position) - target[0].my_rad - prime.my_rad
-        if prime_dist < self.prime_coll_r:
-            final_axis = self.calculate_prime_avoidance_axis(target[0], prime.position)
-            #force to flatten formation so that the obstacle avoidance would work
-            dist_from_plane = np.dot(rel_pos, final_axis)
-            force_flatten = -final_axis * dist_from_plane * 20.0
+        #observed average axis of neighbors
+        observed_group_axis = self.calculate_axis_consensus(other_purs, prime.position)
+        #my axis
+        current_axis = self.get_axis_at_time(self.num_iter)
+        #synchronization of clocks
+        if observed_group_axis is not None:
+            final_axis = self.get_final_axis(current_axis, observed_group_axis)
         else:
-            #rotation axis, cool looking
-            t = self.num_iter * 0.3
-            desired_axis = np.array([np.sin(t), np.cos(t * 0.7), np.sin(t * 1.2)])
-            desired_axis = desired_axis / np.linalg.norm(desired_axis)
-            #average axis of all neighbors
-            consensus_axis = self.calculate_axis_consensus(other_purs, target[0].position)
-            #weighted sum of those
-            if consensus_axis is not None:
-                weight = 0.8 
-                final_axis = (1 - weight) * desired_axis + weight * consensus_axis
-                final_axis /= np.linalg.norm(final_axis)
-            else:
-                final_axis = desired_axis
-            force_flatten = 0.0
+            #being alone
+            final_axis = current_axis
         #resulting tangent
         tangent_vec = np.cross(final_axis, rel_pos)
         tan_norm = np.linalg.norm(tangent_vec)
@@ -828,7 +679,7 @@ class Pursuer(Agent):
         #composing the forces into resulting form vector
         fdbck = alpha * rho * normal_vec
         fdwrd = self.circle_dir * tangent_vec
-        purs_vel = fdwrd + fdbck + force_flatten
+        purs_vel = fdwrd + fdbck
         purs_norm = np.linalg.norm(purs_vel)
         if purs_norm > self.cruise_speed:
             purs_vel = (purs_vel/purs_norm)*self.cruise_speed
@@ -837,8 +688,8 @@ class Pursuer(Agent):
     def pursuit_constant_bearing(self, target: list[Invader, int]):
         #target is quite fast, circling is not possible
         self.prime_coll_r = 1.5
-        self.rep_in_purs = 2.0
-        self.prime_rep_in_purs = 12.9
+        self.rep_in_purs = 1.3
+        self.prime_rep_in_purs = 1.5
         v_tar = target[0].curr_speed
         #line of sight
         r = target[0].position - self.position
@@ -862,23 +713,105 @@ class Pursuer(Agent):
         if np.linalg.norm(CB_dir) < 1e-12:
             return np.zeros_like(CB_dir)
         CB_dir = CB_dir / np.linalg.norm(CB_dir)
-        CB_dir = CB_dir * self.max_speed
+        CB_dir = CB_dir * self.cruise_speed
         return CB_dir
     
     def pursuit_pure_pursuit(self, target: list[Invader, int]):
         #target is very fast, pure pursuit
         self.prime_coll_r = 1.5
-        self.rep_in_purs = 2.0
-        self.prime_rep_in_purs = 12.9
+        self.rep_in_purs = 1.3
+        self.prime_rep_in_purs = 1.5
         PP_dir = target[0].position - self.position
         #norming it to the max speed
         if np.linalg.norm(PP_dir) < 1e-12:
             return np.zeros_like(PP_dir)
         PP_dir = PP_dir / np.linalg.norm(PP_dir)
-        PP_dir = PP_dir * self.max_speed
+        PP_dir = PP_dir * self.cruise_speed
         return PP_dir
     
 # =============== CURRENTLY UNUSED CODE ======================
+
+    # def calculate_prime_avoidance_axis(self, inv, prime_pos):
+    #     vec_to_prime = prime_pos - inv.position
+    #     #inv velocity vector
+    #     velocity = inv.curr_speed
+    #     if np.linalg.norm(velocity) < 0.1:
+    #         velocity = np.array([0.0, 0.0, 1.0])
+    #     #axis for avoidance
+    #     avoidance_axis = np.cross(velocity, vec_to_prime)
+    #     #if inv flies directly into the prime
+    #     norm = np.linalg.norm(avoidance_axis)
+    #     if norm < 1e-6:
+    #         avoidance_axis = np.cross(velocity, np.array([0,0,1]))
+    #         norm = np.linalg.norm(avoidance_axis)
+    #     avoidance_axis = -avoidance_axis / norm
+    #     return avoidance_axis
+
+    # def calculate_obstacle_avoidance_axis(self, unit, obstacle_pos, obstacle_rad):
+    #     #calculating if prime is too close to obstacle
+    #     vec_to_obs = obstacle_pos - unit.position
+    #     dist = np.linalg.norm(vec_to_obs) - unit.my_rad - obstacle_rad
+    #     #prime velocity vector
+    #     velocity = unit.curr_speed
+    #     speed = np.linalg.norm(unit.curr_speed)
+    #     v = np.zeros_like(self.position)
+    #     if speed > 1e-6:
+    #         v = velocity/speed
+    #     vec_to_obs_norm = np.linalg.norm(vec_to_obs)
+    #     vto_normed = np.zeros_like(self.position)
+    #     if vec_to_obs_norm > 1e-6:
+    #         vto_normed = vec_to_obs/vec_to_obs_norm
+    #     if dist > self.obs_rad or np.dot(v, vto_normed) <= -0.2:
+    #         self.avoid_axis = None
+    #         return None
+    #     elif self.avoid_axis is not None:
+    #         return self.avoid_axis
+    #     if np.linalg.norm(velocity) < 0.1:
+    #         velocity = np.array([0.0, 0.0, 1.0])
+    #     #axis for avoidance
+    #     avoidance_axis = np.cross(velocity, vec_to_obs)
+    #     #if prime flies directly into the obstacle
+    #     norm = np.linalg.norm(avoidance_axis)
+    #     if norm < 1e-6:
+    #         avoidance_axis = np.cross(velocity, np.array([0,0,1]))
+    #         norm = np.linalg.norm(avoidance_axis)
+    #     avoidance_axis = -avoidance_axis / norm
+    #     self.avoid_axis = avoidance_axis
+    #     return self.avoid_axis
+
+    # def get_nearest_obstacle(self, prime):
+    #     #obstacle centers and radiuses
+    #     obs_centers = self.obs_centers
+    #     obs_radii = self.obs_radii
+    #     #vector from prime to obstacle center
+    #     vecs_to_obs = obs_centers - prime.position
+    #     #distances center to center
+    #     dists_center = np.linalg.norm(vecs_to_obs, axis=1)
+    #     #distance from surface to surface
+    #     dists_surface = dists_center - obs_radii - prime.my_rad
+    #     #speed of prime
+    #     speed_norm = np.linalg.norm(prime.curr_speed)
+    #     #if prime is moving, interesting are only those obstacles in a way
+    #     if speed_norm > 0.1:
+    #         #only those who has positive dot product
+    #         dot_products = np.sum(prime.curr_speed * vecs_to_obs, axis=1)
+    #         mask = dot_products > 0
+    #         #if there is none, not important
+    #         if not np.any(mask):
+    #             return None
+    #         #relevant obstacles
+    #         relevant_indices = np.where(mask)[0]
+    #         relevant_dists = dists_surface[mask]
+    #         #minimum
+    #         min_idx_local = np.argmin(relevant_dists)
+    #         real_idx = relevant_indices[min_idx_local]
+    #         obstacle = {'center': self.obs_centers[real_idx], 'radius': self.obs_radii[real_idx]}
+    #         return obstacle
+    #     else:
+    #         #just the closest
+    #         min_idx = np.argmin(dists_surface)
+    #         obstacle = {'center': self.obs_centers[min_idx], 'radius': self.obs_radii[min_idx]}
+    #         return obstacle 
 
     # def repulsive_force_in_circling_pursuit(self, prime, target):
     #     #calculation rel pos of pursuer, finding out if pursuer is in between prime and center of mass

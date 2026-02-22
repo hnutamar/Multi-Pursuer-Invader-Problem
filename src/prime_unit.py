@@ -9,13 +9,17 @@ class Prime_unit(Agent):
         self.KP = 5.0
         self.KD = 0.1
         #repulsion force from other drones
-        self.rep_force = 0.7
+        self.rep_force = 1.4
+        self.rep_obs = 1.0
         #speed cap according to the speed of pursuers
         self.biggest_poss_speed = self.cruise_speed
         #for circle mode
         self.t_circle = 7.0
+        #collision parameters
+        self.coll_obs = 10.0
         
-    def fly(self, way_point, invaders, pursuers, mode):
+    def fly(self, way_point, invaders, pursuers, mode, obstacles):
+        self.obs_centers, self.obs_radii = obstacles
         if pursuers:
             self.biggest_poss_speed = max(np.sqrt(0.1 / self.CD), 0.15 * pursuers[0].max_form_speed)
         #finished, stay on this point
@@ -25,6 +29,8 @@ class Prime_unit(Agent):
         #repulsive force against all drones
         rep_vel_i = self.repulsive_force(invaders, 3.0, False)
         rep_vel_p = np.zeros_like(self.position)
+        #repulsive dirs to avoid collision with obstacle
+        obs_vel = self.repulsive_force_obs(self.coll_obs)
         if pursuers:
             rep_vel_p = self.repulsive_force(pursuers, pursuers[0].formation_r_min + 0.5, True)
         #direction of the goal
@@ -33,7 +39,7 @@ class Prime_unit(Agent):
         elif mode == Modes.LINE:
             goal_vel = self.goal_force(way_point)
         #summing all the velocities
-        sum_vel = goal_vel + self.rep_force * rep_vel_i + self.rep_force * rep_vel_p
+        sum_vel = goal_vel + self.rep_force * rep_vel_i + self.rep_force * rep_vel_p + self.rep_obs * obs_vel
         #norming speed to the possible limit
         sum_norm = np.linalg.norm(sum_vel)
         if sum_norm > self.biggest_poss_speed:
@@ -81,4 +87,29 @@ class Prime_unit(Agent):
                 magnitude = (1.0 / dist - 1.0 / coll) 
                 # magnitude = (coll - dist) / coll
                 rep_dir += push_dir * magnitude
-        return rep_dir 
+        return rep_dir * self.biggest_poss_speed
+    
+    def repulsive_force_obs(self, coll):
+        rep_dir = np.zeros_like(self.position)
+        if self.obs_centers is None:
+            return rep_dir
+        #obstacle centers and radiuses
+        obs_centers = self.obs_centers
+        obs_radii = self.obs_radii
+        #vector from self to obstacle center
+        vecs_to_obs = self.position - obs_centers
+        #distances center to center
+        dists_center = np.linalg.norm(vecs_to_obs, axis=1)
+        #distance from surface to surface
+        dists_surface = dists_center - obs_radii - self.my_rad
+        #mask
+        mask = dists_surface < coll
+        #valid data
+        valid_dists_center = dists_center[mask]
+        valid_dists_surface = dists_surface[mask]
+        valid_diffs = vecs_to_obs[mask]
+        #norm and magnitude
+        push_dirs = valid_diffs / valid_dists_center[:, np.newaxis]
+        magnitudes = (1.0 / valid_dists_surface) - (1.0 / coll)
+        #total force
+        return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0) * self.cruise_speed

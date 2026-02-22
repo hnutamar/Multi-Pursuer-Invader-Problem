@@ -12,8 +12,8 @@ class Sim3DConfig:
         self.obs_pos = obstacle_pos
         self.obs_rads = obstacle_rad
         #drone radii
-        self.DRONE_RAD = 0.3
-        self.UNIT_RAD = 0.6
+        self.DRONE_RAD = 0.1
+        self.UNIT_RAD = 0.1
         #drone number
         self.PURSUER_NUM = purs_num
         self.INVADER_NUM = inv_num

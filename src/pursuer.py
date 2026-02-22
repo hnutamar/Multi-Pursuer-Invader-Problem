@@ -21,8 +21,11 @@ class Pursuer(Agent):
         self.prime_coll_r = 10.5
         self.collision_r = min(purs_vis, 2.0)
         #formation radiuses
-        self.formation_r = 2.0
-        self.formation_r_min = 1.0
+        self.formation_r = 0.6
+        self.formation_r_min = 0.3
+        # #formation radiuses
+        # self.formation_r = 2.0
+        # self.formation_r_min = 1.0
         #formation direction
         self.circle_dir = 1
         self.circle_dir_obs = 1

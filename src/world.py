@@ -48,7 +48,7 @@ class SimulationWorld:
         speed_prime = prime_speed or 0.5
         acc_prime = prime_acc or 0.1
         if self._3d:
-            pos_u = prime_pos if prime_pos is not None else np.array([3.0, 3.0, 3.0])
+            pos_u = prime_pos if prime_pos is not None else np.array([3.0, 3.0, 7.0])
         else:
             pos_u = prime_pos if prime_pos is not None else np.array([3.0, 3.0])
             
@@ -56,13 +56,13 @@ class SimulationWorld:
         #init positions and acceleration of agents (random)
         if self._3d:
             rnd_points_purs = purs_pos if purs_pos is not None else np.random.uniform(
-                low=[-self.sc.PURSUER_NUM/2 - 2 + pos_u[0], -self.sc.PURSUER_NUM/2 - 2 + pos_u[1], -self.sc.PURSUER_NUM/2 - 2 + pos_u[2]], 
+                low=[-self.sc.PURSUER_NUM/2 - 2 + pos_u[0], -self.sc.PURSUER_NUM/2 - 2 + pos_u[1], pos_u[2]], 
                 high=[self.sc.PURSUER_NUM/2 + 2 + pos_u[0], self.sc.PURSUER_NUM/2 + 2 + pos_u[1], self.sc.PURSUER_NUM/2 + 2 +  pos_u[2]], 
                 size=(self.sc.PURSUER_NUM, 3)
             )
             rnd_points_inv = inv_pos if inv_pos is not None else np.random.uniform(
-                low=[-2*self.sc.WORLD_WIDTH, -2*self.sc.WORLD_HEIGHT, pos_u[2] - 10], 
-                high=[2*self.sc.WORLD_WIDTH, 2*self.sc.WORLD_HEIGHT, pos_u[2] + 10], 
+                low=[-2*self.sc.WORLD_WIDTH, -2*self.sc.WORLD_HEIGHT, pos_u[2]], 
+                high=[2*self.sc.WORLD_WIDTH, 2*self.sc.WORLD_HEIGHT, pos_u[2] + 15], 
                 size=(self.sc.INVADER_NUM, 3)
             )
         else:

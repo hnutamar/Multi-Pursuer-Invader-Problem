@@ -3,3 +3,5 @@ matplotlib
 scipy
 PyQt5
 ipykernel
+pybullet
+gym-pybullet-drones

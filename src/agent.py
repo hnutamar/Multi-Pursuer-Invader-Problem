@@ -6,6 +6,7 @@ class Agent:
         self.my_rad = my_rad
         #drone position
         self.position = np.array(position, dtype=float)
+        self.prev_pos = np.array(position, dtype=float)
         #drone speed and velocity
         self.max_speed = float(max_speed)
         self.max_acc = float(max_acc)
@@ -54,6 +55,7 @@ class Agent:
              final_v = self.clip_angle(final_v, self.dt)
         #changing the states
         self.curr_acc = (final_v - self.curr_speed) / self.dt
+        self.prev_pos = self.position
         self.position += final_v * self.dt
         self.curr_speed = final_v
         #single integrator

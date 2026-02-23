@@ -223,26 +223,42 @@ class SimulationWorld:
         done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
         return self.get_state(), done
 
+    def get_projected_position(self, real_pos, path_start, path_end):
+        #vector of planned path
+        path_vec = path_end - path_start
+        #vector of real path
+        drone_vec = real_pos - path_start
+        #div zero
+        path_len_sq = np.dot(path_vec, path_vec)
+        if path_len_sq < 1e-6:
+            return path_end
+        #dot product and parameter t for projection
+        t = np.dot(drone_vec, path_vec) / path_len_sq
+        #t must be on the right path
+        t = np.clip(t, 0.0, 1.0)
+        #projected position
+        projected_pos = path_start + t * path_vec
+        return projected_pos
+    
     def synchronize_with_reality(self, real_state):
-        look_ahead_time = 0.3
         for i, p_data in enumerate(real_state['pursuers']):
             real_pos = p_data['pos'] 
             real_vel = p_data['vel']
-            if np.linalg.norm(real_pos - self.pursuers[i].position) >= 1.0:
-                self.pursuers[i].position = real_pos + look_ahead_time * real_vel
-                self.pursuers[i].curr_speed = real_vel
+            if np.linalg.norm(real_pos - self.pursuers[i].position) >= 0.5:
+                self.pursuers[i].position = self.get_projected_position(real_pos, self.pursuers[i].prev_pos, self.pursuers[i].position)
+                #self.pursuers[i].curr_speed *= 0.9
         for i, p_data in enumerate(real_state['invaders']):
             real_pos = p_data['pos'] 
             real_vel = p_data['vel']
-            if np.linalg.norm(real_pos - self.invaders[i].position) >= 1.0:
-                self.invaders[i].position = real_pos + look_ahead_time * real_vel
-                self.invaders[i].curr_speed = real_vel
+            if np.linalg.norm(real_pos - self.invaders[i].position) >= 0.5:
+                self.invaders[i].position = self.get_projected_position(real_pos, self.invaders[i].prev_pos, self.invaders[i].position)
+                #self.invaders[i].curr_speed *= 0.9
         prime_data = real_state['prime']
         real_pos = prime_data['pos']
         real_vel = prime_data['vel']
-        if np.linalg.norm(real_pos - self.prime.position) >= 1.0:
-            self.prime.position = real_pos + look_ahead_time * real_vel
-            self.prime.curr_speed = real_vel
+        if np.linalg.norm(real_pos - self.prime.position) >= 0.5:
+            self.prime.position = self.get_projected_position(real_pos, self.prime.prev_pos, self.prime.position)
+            #self.prime.curr_speed *= 0.9
 
     def get_state(self):
         #returns state of the simulation
@@ -251,5 +267,6 @@ class SimulationWorld:
             "pursuers": [p.position.copy() for p in self.pursuers],
             "pursuers_status": [[p.state, p.target] for p in self.pursuers], #for colors
             "invaders": [i.position.copy() for i in self.invaders],
+            "invaders_status": [i.crashed for i in self.invaders], #for colors
             "time": self.time
         }

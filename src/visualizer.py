@@ -82,7 +82,7 @@ class MatplotlibVisualizer:
         
     def _init_plot2D(self):
         self.fig, self.ax = plt.subplots(figsize=(8, 8))
-        
+
         #space size
         self.ax.set_xlim(-1, self.sc.WORLD_WIDTH)
         self.ax.set_ylim(-1, self.sc.WORLD_HEIGHT)

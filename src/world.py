@@ -223,6 +223,27 @@ class SimulationWorld:
         done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
         return self.get_state(), done
 
+    def synchronize_with_reality(self, real_state):
+        look_ahead_time = 0.3
+        for i, p_data in enumerate(real_state['pursuers']):
+            real_pos = p_data['pos'] 
+            real_vel = p_data['vel']
+            if np.linalg.norm(real_pos - self.pursuers[i].position) >= 1.0:
+                self.pursuers[i].position = real_pos + look_ahead_time * real_vel
+                self.pursuers[i].curr_speed = real_vel
+        for i, p_data in enumerate(real_state['invaders']):
+            real_pos = p_data['pos'] 
+            real_vel = p_data['vel']
+            if np.linalg.norm(real_pos - self.invaders[i].position) >= 1.0:
+                self.invaders[i].position = real_pos + look_ahead_time * real_vel
+                self.invaders[i].curr_speed = real_vel
+        prime_data = real_state['prime']
+        real_pos = prime_data['pos']
+        real_vel = prime_data['vel']
+        if np.linalg.norm(real_pos - self.prime.position) >= 1.0:
+            self.prime.position = real_pos + look_ahead_time * real_vel
+            self.prime.curr_speed = real_vel
+
     def get_state(self):
         #returns state of the simulation
         return {

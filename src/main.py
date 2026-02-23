@@ -11,17 +11,17 @@ from mpl_toolkits.mplot3d import Axes3D
 
 def main():
     _3d = True
-    PYBULLET = True
+    PYBULLET = False
     MANUAL_CONTROL = False
     #config
     if _3d:
-        sc = Sim3DConfig(dt=0.02, purs_num=30, inv_num=3, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
+        sc = Sim3DConfig(dt=0.02, purs_num=30, inv_num=0, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
     else:
         sc = Sim2DConfig(dt=0.02, world_height=30, world_width=30, purs_num=5, inv_num=0, obstacle=False, 
                          obstacle_rad=[4.0, 4.0], obstacle_pos=[np.array([17.0, 6.0]), np.array([6.0, 17.0])])
     #world, physics
     inv_pos = np.array([[20.24, 30.15, 25.58]])
-    world = SimulationWorld(sc, _3d=_3d, purs_acc=2.5, inv_acc=2.0, prime_acc=4.3, purs_speed=5.0, inv_speed=5.0, prime_speed=4.5)
+    world = SimulationWorld(sc, _3d=_3d, purs_acc=3.5, inv_acc=2.0, prime_acc=4.3, purs_speed=6.0, inv_speed=5.0, prime_speed=4.5)
     #visualization
     SHOW_VISUALIZATION = True
     vis = None
@@ -40,6 +40,8 @@ def main():
         EPISODE_NUM = 1
     step_counter = 1
     current_episode = 1
+    SYNC_INTERVAL = 20
+    sync_counter = 0
     #loop of the simulator
     running = True
     #memory for graph
@@ -61,11 +63,16 @@ def main():
         #graphics
         if vis and step_counter % RENDER_EVERY == 0:
             if PYBULLET:
-                success = vis.render(state, world_instance=world)
+                sync_counter += 1
+                success, real_state = vis.render(state, world_instance=world)
                 if not success or not vis.is_open:
                     print("Simulation ends!")
                     running = False
                     break
+                #synchronizing reality with virtual world
+                if sync_counter >= SYNC_INTERVAL:
+                    #world.synchronize_with_reality(real_state)
+                    sync_counter = 0
             else:
                 if not vis.is_open:
                     print("Simulation ends!")

@@ -72,17 +72,19 @@ class TorontoVisualizer:
 
     def render(self, state, world_instance=None):
         if not self.is_open:
-            return False
+            return False, None
         #ESC pressed, animation over
         keys = p.getKeyboardEvents(physicsClientId=self.env.CLIENT)
         if 27 in keys and (keys[27] & p.KEY_IS_DOWN):
             self.is_open = False
-            return False
+            return False, None
         #DYNAMIC CAMERA
-        prime_pos = state['prime']
         prime_idx = self.total_drones - 1
-        #prime_pos = state['invaders'][0]
+        prime_pos = self.env.pos[prime_idx].copy()
+        #prime_idx = 0
+        #prime_pos = self.env.pos[0].copy()
         #prime_idx = self.num_pursuers
+        #prime_pos = self.env.pos[prime_idx].copy()
         #pos of prime
         vx = self.env.vel[prime_idx][0]
         vy = self.env.vel[prime_idx][1]
@@ -94,7 +96,7 @@ class TorontoVisualizer:
             self.camera_yaw += yaw_diff * 0.1
         #setting the camera
         p.resetDebugVisualizerCamera(
-            cameraDistance=4.0,
+            cameraDistance=2.0,
             cameraYaw=self.camera_yaw,
             cameraPitch=-15,
             cameraTargetPosition=[prime_pos[0], prime_pos[1], prime_pos[2] if self._3d else 2.0],
@@ -131,7 +133,37 @@ class TorontoVisualizer:
             self._set_color(self.num_pursuers + i, self.C_BLUE)
         #coloring of prime
         self._set_color(self.total_drones - 1, self.C_GREEN)
-        return True
+        # ==========================================================
+        # SBĚR REÁLNÝCH DAT PRO ZPĚTNOU VAZBU
+        # ==========================================================
+        real_state = {
+            'pursuers': [],
+            'invaders': [],
+            'prime': None
+        }
+        
+        # Sběr pro Pursuery
+        for i in range(self.num_pursuers):
+            real_state['pursuers'].append({
+                'pos': self.env.pos[i].copy(),
+                'vel': self.env.vel[i].copy()
+            })
+            
+        # Sběr pro Invadery
+        for i in range(self.num_invaders):
+            idx = self.num_pursuers + i
+            real_state['invaders'].append({
+                'pos': self.env.pos[idx].copy(),
+                'vel': self.env.vel[idx].copy()
+            })
+            
+        # Sběr pro Prime drona
+        prime_idx = self.total_drones - 1
+        real_state['prime'] = {
+            'pos': self.env.pos[prime_idx].copy(),
+            'vel': self.env.vel[prime_idx].copy()
+        }
+        return True, real_state
 
     def _set_color(self, idx, color):
         #only when the color is new

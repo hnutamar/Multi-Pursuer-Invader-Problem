@@ -2,6 +2,7 @@ import numpy as np
 import pybullet as p
 from pursuer_states import States
 import math
+import random
 
 from gym_pybullet_drones.envs.CtrlAviary import CtrlAviary
 from gym_pybullet_drones.control.DSLPIDControl import DSLPIDControl
@@ -69,6 +70,10 @@ class TorontoVisualizer:
                 #no gravity
                 p.createMultiBody(baseMass=0, baseVisualShapeIndex=visual_id, basePosition=pos_3d, 
                     physicsClientId=self.env.CLIENT)
+        #random wind parameters
+        self.wind_active = False
+        self.wind_timer = 0
+        self.current_wind_force = [0.0, 0.0, 0.0]
 
     def render(self, state, world_instance=None):
         if not self.is_open:
@@ -81,10 +86,10 @@ class TorontoVisualizer:
         #DYNAMIC CAMERA
         #prime_idx = self.total_drones - 1
         #prime_pos = self.env.pos[prime_idx].copy()
-        prime_idx = 0
-        prime_pos = self.env.pos[0].copy()
-        #prime_idx = self.num_pursuers
-        #prime_pos = self.env.pos[prime_idx].copy()
+        #prime_idx = 0
+        #prime_pos = self.env.pos[0].copy()
+        prime_idx = self.num_pursuers
+        prime_pos = self.env.pos[prime_idx].copy()
         #pos of prime
         vx = self.env.vel[prime_idx][0]
         vy = self.env.vel[prime_idx][1]
@@ -118,6 +123,26 @@ class TorontoVisualizer:
                 target_pos_3d = np.array([pos[0], pos[1], pos[2] if self._3d else 2.0])
                 self.action[i, :], _, _ = self.ctrl[i].computeControlFromState(control_timestep=self.env.CTRL_TIMESTEP,
                                           state=self.obs[i],target_pos=target_pos_3d)
+            #dynamic wind
+            if not self.wind_active and random.random() < 0.005:
+                self.wind_active = True
+                #length of the wind
+                self.wind_timer = random.randint(20, 60) 
+                #force of the wind
+                fx = random.uniform(-0.1, 0.1)
+                fy = random.uniform(-0.1, 0.1)
+                self.current_wind_force = [fx, fy, 0.0]
+                print(f"Wind: X={fx:.3f} N, Y={fy:.3f} N")
+            #if wind is active, apply on all drones
+            if self.wind_active:
+                for i in range(self.total_drones):
+                    p.applyExternalForce(objectUniqueId=self.env.DRONE_IDS[i], linkIndex=-1, 
+                        forceObj=self.current_wind_force, posObj=[0, 0, 0], flags=p.LINK_FRAME, physicsClientId=self.env.CLIENT)
+                #subtracting the timer
+                self.wind_timer -= 1
+                if self.wind_timer <= 0:
+                    #wind is over
+                    self.wind_active = False
             #doing the physics step
             self.obs, _, _, _, _ = self.env.step(self.action)
         #removing axes at drones

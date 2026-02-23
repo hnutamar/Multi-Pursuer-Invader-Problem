@@ -223,6 +223,41 @@ class SimulationWorld:
         done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
         return self.get_state(), done
 
+    def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):
+        #finds the closest point on the trajectory and compute the lookahead
+        if len(path_points) < 2:
+            #no points, return
+            return path_points[-1] if len(path_points) > 0 else real_pos
+        min_dist = float('inf')
+        best_idx = 0
+        #iterate through every line between two points on the trajectory, find the closest to the real pos
+        for i in range(len(path_points) - 1):
+            #A is beginning, B is end
+            A = path_points[i]
+            B = path_points[i+1]
+            #vectors needed for proj computation
+            path_vec = B - A
+            drone_vec = real_pos - A
+            #squared length of the path
+            path_len_sq = np.dot(path_vec, path_vec)
+            #return if too small
+            if path_len_sq < 1e-6:
+                projected = B
+            #else compute the t
+            else:
+                t = np.dot(drone_vec, path_vec) / path_len_sq
+                t = np.clip(t, 0.0, 1.0)
+                projected = A + t * path_vec
+            #distance between proj and real pos
+            dist = np.linalg.norm(real_pos - projected)
+            #if closest, remember the index
+            if dist < min_dist:
+                min_dist = dist
+                best_idx = i
+        #best point with lookahead distance for tracking
+        target_idx = min(best_idx + lookahead_steps, len(path_points) - 1)
+        return path_points[target_idx]
+    
     def get_projected_position(self, real_pos, path_start, path_end):
         #vector of planned path
         path_vec = path_end - path_start
@@ -246,18 +281,21 @@ class SimulationWorld:
             real_vel = p_data['vel']
             if np.linalg.norm(real_pos - self.pursuers[i].position) >= 0.5:
                 self.pursuers[i].position = self.get_projected_position(real_pos, self.pursuers[i].prev_pos, self.pursuers[i].position)
+                #self.pursuers[i].position = self.get_lookahead_point_on_trajectory(real_pos, self.pursuers[i].path_history)
                 #self.pursuers[i].curr_speed *= 0.9
         for i, p_data in enumerate(real_state['invaders']):
             real_pos = p_data['pos'] 
             real_vel = p_data['vel']
             if np.linalg.norm(real_pos - self.invaders[i].position) >= 0.5:
-                self.invaders[i].position = self.get_projected_position(real_pos, self.invaders[i].prev_pos, self.invaders[i].position)
+                self.invaders[i].position = self.get_projected_position(real_pos, self.invaders[i].prev_pos, self.invaders[i].position) 
+                #self.invaders[i].position = self.get_lookahead_point_on_trajectory(real_pos, self.invaders[i].path_history)
                 #self.invaders[i].curr_speed *= 0.9
         prime_data = real_state['prime']
         real_pos = prime_data['pos']
         real_vel = prime_data['vel']
         if np.linalg.norm(real_pos - self.prime.position) >= 0.5:
             self.prime.position = self.get_projected_position(real_pos, self.prime.prev_pos, self.prime.position)
+            #self.prime.position = self.get_lookahead_point_on_trajectory(real_pos, self.prime.path_history)
             #self.prime.curr_speed *= 0.9
 
     def get_state(self):

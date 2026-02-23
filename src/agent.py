@@ -1,4 +1,5 @@
 import numpy as np
+from collections import deque
 
 class Agent:
     def __init__(self, position, max_speed, max_acc, max_omega, dt, my_rad, num_iter=0):
@@ -7,6 +8,7 @@ class Agent:
         #drone position
         self.position = np.array(position, dtype=float)
         self.prev_pos = np.array(position, dtype=float)
+        self.path_history = deque(maxlen=20)
         #drone speed and velocity
         self.max_speed = float(max_speed)
         self.max_acc = float(max_acc)
@@ -58,6 +60,7 @@ class Agent:
         self.prev_pos = self.position
         self.position += final_v * self.dt
         self.curr_speed = final_v
+        self.path_history.append(self.position.copy())
         #single integrator
         #if dist != 0:
         #    if dist < 1:

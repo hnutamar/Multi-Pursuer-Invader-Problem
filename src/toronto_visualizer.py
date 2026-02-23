@@ -79,25 +79,27 @@ class TorontoVisualizer:
             self.is_open = False
             return False
         #DYNAMIC CAMERA
-        # prime_pos = state['prime']
-        # prime_idx = self.total_drones - 1
-        # #pos of prime
-        # vx = self.env.vel[prime_idx][0]
-        # vy = self.env.vel[prime_idx][1]
-        # speed = math.hypot(vx, vy)
-        # #only when drone moves forward
-        # if speed > 0.5:
-        #     target_yaw = math.degrees(math.atan2(vy, vx))
-        #     yaw_diff = (target_yaw - self.camera_yaw + 180) % 360 - 180
-        #     self.camera_yaw += yaw_diff * 0.1
-        # #setting the camera
-        # p.resetDebugVisualizerCamera(
-        #     cameraDistance=3.0,
-        #     cameraYaw=self.camera_yaw,
-        #     cameraPitch=-15,
-        #     cameraTargetPosition=[prime_pos[0], prime_pos[1], prime_pos[2] if self._3d else 2.0],
-        #     physicsClientId=self.env.CLIENT
-        # )
+        prime_pos = state['prime']
+        prime_idx = self.total_drones - 1
+        #prime_pos = state['invaders'][0]
+        #prime_idx = self.num_pursuers
+        #pos of prime
+        vx = self.env.vel[prime_idx][0]
+        vy = self.env.vel[prime_idx][1]
+        speed = math.hypot(vx, vy)
+        #only when drone moves forward
+        if speed > 0.5:
+            target_yaw = math.degrees(math.atan2(vy, vx)) - 90
+            yaw_diff = (target_yaw - self.camera_yaw + 180) % 360 - 180
+            self.camera_yaw += yaw_diff * 0.1
+        #setting the camera
+        p.resetDebugVisualizerCamera(
+            cameraDistance=4.0,
+            cameraYaw=self.camera_yaw,
+            cameraPitch=-15,
+            cameraTargetPosition=[prime_pos[0], prime_pos[1], prime_pos[2] if self._3d else 2.0],
+            physicsClientId=self.env.CLIENT
+        )
         #lists of drone positions
         target_positions = []
         target_positions.extend(state['pursuers'])
@@ -114,7 +116,6 @@ class TorontoVisualizer:
                 target_pos_3d = np.array([pos[0], pos[1], pos[2] if self._3d else 2.0])
                 self.action[i, :], _, _ = self.ctrl[i].computeControlFromState(control_timestep=self.env.CTRL_TIMESTEP,
                                           state=self.obs[i],target_pos=target_pos_3d)
-            
             #doing the physics step
             self.obs, _, _, _, _ = self.env.step(self.action)
         #removing axes at drones

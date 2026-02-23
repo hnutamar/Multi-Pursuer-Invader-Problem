@@ -16,16 +16,16 @@ class Pursuer(Agent):
         self.rep_in_purs = 0.7
         self.rep_obs = 1.9
         self.rep_invs = 2.3
-        self.prime_rep_in_purs = 0.3
+        self.prime_rep_in_purs = 2.5
         #collision radiuses
         self.prime_coll_r = 10.5
         self.collision_r = min(purs_vis, 2.0)
         #formation radiuses
-        self.formation_r = 0.6
-        self.formation_r_min = 0.3
-        # #formation radiuses
-        # self.formation_r = 2.0
-        # self.formation_r_min = 1.0
+        #self.formation_r = 0.6
+        #self.formation_r_min = 0.3
+        #formation radiuses
+        self.formation_r = 2.0
+        self.formation_r_min = 1.0
         #formation direction
         self.circle_dir = 1
         self.circle_dir_obs = 1
@@ -692,7 +692,7 @@ class Pursuer(Agent):
         #target is quite fast, circling is not possible
         self.prime_coll_r = 1.5
         self.rep_in_purs = 1.3
-        self.prime_rep_in_purs = 1.5
+        self.prime_rep_in_purs = 2.5
         v_tar = target[0].curr_speed
         #line of sight
         r = target[0].position - self.position
@@ -723,7 +723,7 @@ class Pursuer(Agent):
         #target is very fast, pure pursuit
         self.prime_coll_r = 1.5
         self.rep_in_purs = 1.3
-        self.prime_rep_in_purs = 1.5
+        self.prime_rep_in_purs = 2.5
         PP_dir = target[0].position - self.position
         #norming it to the max speed
         if np.linalg.norm(PP_dir) < 1e-12:

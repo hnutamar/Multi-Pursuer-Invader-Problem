@@ -100,13 +100,8 @@ class TorontoVisualizer:
             yaw_diff = (target_yaw - self.camera_yaw + 180) % 360 - 180
             self.camera_yaw += yaw_diff * 0.1
         #setting the camera
-        p.resetDebugVisualizerCamera(
-            cameraDistance=2.0,
-            cameraYaw=self.camera_yaw,
-            cameraPitch=-15,
-            cameraTargetPosition=[prime_pos[0], prime_pos[1], prime_pos[2] if self._3d else 2.0],
-            physicsClientId=self.env.CLIENT
-        )
+        p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=self.camera_yaw, cameraPitch=-15,
+            cameraTargetPosition=[prime_pos[0], prime_pos[1], prime_pos[2] if self._3d else 2.0], physicsClientId=self.env.CLIENT)
         #lists of drone positions
         target_positions = []
         target_positions.extend(state['pursuers'])
@@ -121,10 +116,14 @@ class TorontoVisualizer:
                 #having the target position, computing the control
                 pos = target_positions[i]
                 target_pos_3d = np.array([pos[0], pos[1], pos[2] if self._3d else 2.0])
+                #adding noise
+                noisy_obs = self.obs[i].copy()
+                noisy_obs[0:3] += np.random.normal(0, 0.05, size=3)   # Position: 5 cm
+                noisy_obs[10:13] += np.random.normal(0, 0.1, size=3) # Velocity: 10 cm/s
                 self.action[i, :], _, _ = self.ctrl[i].computeControlFromState(control_timestep=self.env.CTRL_TIMESTEP,
-                                          state=self.obs[i],target_pos=target_pos_3d)
+                                          state=noisy_obs,target_pos=target_pos_3d)
             #dynamic wind
-            if not self.wind_active and random.random() < 0.005:
+            if not self.wind_active and random.random() < 0.002:
                 self.wind_active = True
                 #length of the wind
                 self.wind_timer = random.randint(20, 60) 
@@ -163,17 +162,23 @@ class TorontoVisualizer:
         self._set_color(self.total_drones - 1, self.C_GREEN)
         #real state for sync
         real_state = {'pursuers': [], 'invaders': [], 'prime': None}
-        POS_NOISE_STD = 0.05
+        POS_NOISE_STD = 0.5  # Position: 50 cm
+        VEL_NOISE_STD = 0.5  # Velocity: 50 cm/s
+        #local function for computing noisy data
+        def get_noisy_state(drone_idx):
+            noisy_pos = self.env.pos[drone_idx].copy() + np.random.normal(0, POS_NOISE_STD, 3)
+            noisy_vel = self.env.vel[drone_idx].copy() + np.random.normal(0, VEL_NOISE_STD, 3)
+            return {'pos': noisy_pos, 'vel': noisy_vel}
         #Pursuers
         for i in range(self.num_pursuers):
-            real_state['pursuers'].append({'pos': self.env.pos[i].copy(),'vel': self.env.vel[i].copy()})
+            real_state['pursuers'].append(get_noisy_state(i))
         #Invaders
         for i in range(self.num_invaders):
             idx = self.num_pursuers + i
-            real_state['invaders'].append({'pos': self.env.pos[idx].copy(),'vel': self.env.vel[idx].copy()})
+            real_state['invaders'].append(get_noisy_state(idx))
         #Prime
         prime_idx = self.total_drones - 1
-        real_state['prime'] = {'pos': self.env.pos[prime_idx].copy(),'vel': self.env.vel[prime_idx].copy()}
+        real_state['prime'] = get_noisy_state(prime_idx)
         return True, real_state
 
     def _set_color(self, idx, color):

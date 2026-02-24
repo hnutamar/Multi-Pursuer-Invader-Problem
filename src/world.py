@@ -112,7 +112,7 @@ class SimulationWorld:
         #in case of pursuers
         tar = np.zeros(len(agents))
         if not inv:
-            tar = [a.target[0] if a.target is not None else None for a in agents]
+            tar = [a.target["target"] if a.target is not None else None for a in agents]
         return pos, vel, rad, p_nums, tar
 
     def step(self, manual_invader_vel=None):
@@ -150,7 +150,7 @@ class SimulationWorld:
             i.purs_num = 0
         for p in free_purs:
             if p.target is not None:
-                p.target[0].purs_num += 1
+                p.target["target"].purs_num += 1
         #Prime data
         prime_pos = self.prime.position[np.newaxis, :]
         prime_rad = self.prime.my_rad
@@ -223,7 +223,7 @@ class SimulationWorld:
             for idx in np.where(swarm_crash_mask)[0]:
                 free_purs[idx].crashed = True
         #ending check
-        done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
+        done = self.prime.crashed #or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
         return self.get_state(), done
 
     def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):
@@ -306,7 +306,7 @@ class SimulationWorld:
         return {
             "prime": self.prime.position.copy(),
             "pursuers": [p.position.copy() for p in self.pursuers],
-            "pursuers_status": [[p.state, [p.target[0], p.target[-1]] if p.target else None] for p in self.pursuers], #for colors
+            "pursuers_status": [[p.state, [p.target["target"], p.target["purs_type"]] if p.target else None] for p in self.pursuers], #for colors
             "invaders": [i.position.copy() for i in self.invaders],
             "invaders_status": [i.crashed for i in self.invaders], #for colors
             "time": self.time

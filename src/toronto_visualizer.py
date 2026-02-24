@@ -163,6 +163,7 @@ class TorontoVisualizer:
         self._set_color(self.total_drones - 1, self.C_GREEN)
         #real state for sync
         real_state = {'pursuers': [], 'invaders': [], 'prime': None}
+        POS_NOISE_STD = 0.05
         #Pursuers
         for i in range(self.num_pursuers):
             real_state['pursuers'].append({'pos': self.env.pos[i].copy(),'vel': self.env.vel[i].copy()})

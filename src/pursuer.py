@@ -3,6 +3,7 @@ from agent import Agent
 from invader import Invader
 from prime_unit import Prime_unit
 from pursuer_states import States
+import copy
 
 class Pursuer(Agent):
     def __init__(self, position, max_speed, max_acc, max_omega, my_rad, purs_num, purs_vis, dt):
@@ -21,8 +22,8 @@ class Pursuer(Agent):
         self.prime_coll_r = 10.5
         self.collision_r = min(purs_vis, 2.0)
         #formation radiuses
-        self.formation_r = 0.6
-        self.formation_r_min = 0.3
+        self.formation_r = 0.9
+        self.formation_r_min = 0.6
         #formation radiuses
         #self.formation_r = 2.0
         #self.formation_r_min = 1.0
@@ -66,11 +67,26 @@ class Pursuer(Agent):
         self.obs_radii = None
         self.coll_obs = 5.0
         self.max_form_speed = 3.0
+        #gauss noise
+        self.base_pos = 0.01
+        self.k_pos = 0.02
+        self.base_vel = 0.1
+        self.k_vel = 0.05
+        self.base_rad = 0.02
+        self.k_rad = 0.02
         
-    def pursue(self, targets: list[Invader], pursuers: list[Agent], prime_unit: Prime_unit, precalc_data):
+    def pursue(self, targets: list[Invader], prime_vel, prime_rad, prime_pos, all_purs_tars, precalc_data):
         #precalculated data, faster this way
-        self.all_inv_pos, self.all_inv_purs_num, self.all_inv_rads, all_purs_pos, all_purs_rads, self.my_index, self.obs_centers, self.obs_radii = precalc_data
-        self.all_purs_pos, self.all_purs_rads = self.get_visible_neighbors_data(all_purs_pos, all_purs_rads)
+        self.prime_rad = prime_rad
+        self.all_purs_tars = all_purs_tars
+        all_inv_pos, all_inv_vel, self.all_inv_purs_num, all_inv_rads, all_purs_pos, all_purs_vel, all_purs_rads, self.my_index, obs_centers, obs_radii = precalc_data
+        self.copy_data(prime_vel, prime_pos, all_inv_pos, all_inv_vel, all_inv_rads, all_purs_pos, all_purs_vel, obs_centers, obs_radii)
+        self.all_purs_pos, self.all_purs_vel, self.all_purs_rads = self.get_visible_neighbors_data(all_purs_pos.copy(), all_purs_vel.copy(), all_purs_rads.copy(), gaussian=True)
+        #update target
+        if self.target:
+            self.update_target()
+        #adding realistic gaussian noise
+        self.gauss_noise()
         #init directions
         tar_vel = np.zeros_like(self.position)
         form_vel = np.zeros_like(self.position)
@@ -83,22 +99,22 @@ class Pursuer(Agent):
             self.state = States.FORM
         #pursuer having no target, finding target, if found, pursue it
         if self.target == None:
-            if self.strategy_capture_cone(targets, prime_unit, self.num_iter, cooldown=self.capture_cooldown*self.dt):
-                tar_vel = self.pursue_target(self.target, pursuers, prime_unit)
+            if self.strategy_capture_cone(targets, self.num_iter, cooldown=self.capture_cooldown*self.dt):
+                tar_vel = self.pursue_target(self.target)
             elif self.strategy_target_close(targets):
-                tar_vel = self.pursue_target(self.target, pursuers, prime_unit)
+                tar_vel = self.pursue_target(self.target)
         #pursuer having target -> pursue it
         elif self.target != None and self.target[0].crashed == False:
-            if not (self.target[1] != self.purs_types["circling"] and np.linalg.norm(self.position - prime_unit.position) > self.capture_max):
-                tar_vel = self.pursue_target(self.target, pursuers, prime_unit) 
+            if not (self.target[-1] != self.purs_types["circling"] and np.linalg.norm(self.position - self.prime_pos) > self.capture_max):
+                tar_vel = self.pursue_target(self.target) 
         #if target dir is zero, pursuer has no target -> keep the formation
         if np.array_equal(tar_vel, form_vel):
             self.target = None
             self.state = States.FORM
-            if len(self.position) == 2:
-                form_vel = self.form_vortex_field_circle(prime_unit)
+            if self.pos_length == 2:
+                form_vel = self.form_vortex_field_circle()
             else:
-                form_vel = self.form_vortex_field_sphere(prime_unit, close_purs=pursuers)
+                form_vel = self.form_vortex_field_sphere()
         #repulsive dirs to avoid collision
         rep_vel = self.repulsive_force_purs(self.collision_r)
         #repulsive dirs to avoid collision with obstacle
@@ -106,10 +122,10 @@ class Pursuer(Agent):
         #returning sum of those
         if not np.array_equal(form_vel, np.zeros_like(form_vel)):
             #pushing whole formation away from invaders and obstacle
-            invs_rep_vel = self.repulsive_inv_force(prime_unit, targets)
+            invs_rep_vel = self.repulsive_inv_force(targets)
             sum_vel = self.rep_in_form*rep_vel + self.form*form_vel + self.rep_obs*obs_vel + self.rep_invs*invs_rep_vel
         else:
-            prime_rep_vel = self.repulsive_force_prime(prime_unit, self.prime_coll_r)
+            prime_rep_vel = self.repulsive_force_prime(self.prime_coll_r)
             sum_vel = self.purs*tar_vel + self.rep_in_purs*rep_vel + self.prime_rep_in_purs*prime_rep_vel + self.rep_obs*obs_vel
         #norming speed to the possible limit
         sum_norm = np.linalg.norm(sum_vel)
@@ -119,10 +135,73 @@ class Pursuer(Agent):
         new_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
         return new_acc
     
-    def get_visible_neighbors_data(self, all_pos, all_rad):
+    def copy_data(self, prime_vel, prime_pos, all_inv_pos, all_inv_vel, all_inv_rads, all_purs_pos, all_purs_vel, obs_centers, obs_radii):
+        #copies all data, that are going to be modified
+        self.prime_vel = prime_vel.copy()
+        self.prime_pos = prime_pos.copy()
+        self.all_inv_pos = all_inv_pos.copy()
+        self.all_inv_vel = all_inv_vel.copy()
+        self.all_inv_rads = all_inv_rads.copy()
+        self.every_purs_pos = all_purs_pos.copy()
+        self.every_purs_vel = all_purs_vel.copy()
+        if obs_radii is not None:
+            self.obs_centers = obs_centers.copy()
+            self.obs_radii = obs_radii.copy()
+        
+    
+    def update_target(self):
+        #updates parameters of target
+        self.target[1] = self.target[0].position.copy()
+        self.target[3] = self.target[0].my_rad
+        self.target[2] = self.target[0].curr_speed.copy()
+    
+    def gauss_noise(self):
+        #apply gauss
+        if len(self.all_inv_pos) != 0:
+            self.apply_gaussian_noise(self.all_inv_pos, self.all_inv_rads, self.all_inv_vel)    
+        if self.obs_centers is not None and len(self.obs_centers) > 0:
+            self.apply_gaussian_noise(self.obs_centers, rads=self.obs_radii)    
+        if len(self.every_purs_pos) != 0:
+            self.apply_gaussian_noise(self.every_purs_pos, velocities=self.every_purs_vel)
+        #target
+        if self.target is not None:
+            dist = np.linalg.norm(self.position - self.target[1])
+            self.target[1] += np.random.normal(0.0, self.base_pos + self.k_pos * dist, self.pos_length)
+            self.target[2] += np.random.normal(0.0, self.base_vel + self.k_vel * dist, self.pos_length)
+            new_rad = self.target[3] + np.random.normal(0.0, self.base_rad + self.k_rad * dist)
+            self.target[3] = max(0.01, float(new_rad))    
+        #Prime
+        dist = np.linalg.norm(self.position - self.prime_pos)
+        self.prime_pos += np.random.normal(0.0, self.base_pos + self.k_pos * dist, self.pos_length)
+        self.prime_vel += np.random.normal(0.0, self.base_vel + self.k_vel * dist, self.pos_length)
+        new_rad = self.prime_rad + np.random.normal(0.0, self.base_rad + self.k_rad * dist)
+        self.prime_rad = max(0.01, float(new_rad))
+    
+    def apply_gaussian_noise(self, positions, rads=None, velocities=None):
+        #all dists at once
+        diffs = positions - self.position
+        dists_center = np.linalg.norm(diffs, axis=1)
+        #sigmas
+        sigmas_pos = self.base_pos + self.k_pos * dists_center
+        #pos noise
+        positions += np.random.normal(loc=0.0, scale=sigmas_pos[:, np.newaxis], size=positions.shape)
+        #rads
+        if rads is not None:
+            sigmas_rad = self.base_rad + self.k_rad * dists_center
+            noise_rad = np.random.normal(loc=0.0, scale=sigmas_rad)
+            rads[:] = np.clip(rads + noise_rad, a_min=0.01, a_max=None)
+        #velocity
+        if velocities is not None:
+            sigmas_vel = self.base_vel + self.k_vel * dists_center
+            velocities += np.random.normal(loc=0.0, scale=sigmas_vel[:, np.newaxis], size=velocities.shape)
+        return positions, rads, velocities
+    
+    def get_visible_neighbors_data(self, all_pos, all_vel, all_rad, gaussian=False):
         #dists to all
         diffs = all_pos - self.position
         dists_center = np.linalg.norm(diffs, axis=1)
+        if gaussian:
+            all_pos, all_rad, all_vel = self.apply_gaussian_noise(all_pos, all_rad, all_vel)
         #trick, my distance is infinity
         dists_center[self.my_index] = np.inf
         #mask visibility
@@ -130,10 +209,11 @@ class Pursuer(Agent):
         mask = dists_surface < self.vis_range
         #only those visible
         if not np.any(mask):
-             return np.empty((0, 3)), np.empty((0,))
+             return np.empty((0, 3)), np.empty((0, 3)), np.empty((0,))
         visible_pos = all_pos[mask]
         visible_rad = all_rad[mask]
-        return visible_pos, visible_rad 
+        visible_vel = all_vel[mask]
+        return visible_pos, visible_vel, visible_rad 
              
     def get_avoidance_direction(self, obstacle_pos, obstacle_rad, prime):
         #if prime is too close to obstacle, calculate which direction is better for avoidance, in 2D
@@ -155,7 +235,7 @@ class Pursuer(Agent):
             return True
         return False
     
-    def strategy_capture_cone(self, targets: list[Invader], unit: Prime_unit, sim_time: float, cooldown: float = 10.0):
+    def strategy_capture_cone(self, targets: list[Invader], sim_time: float, cooldown: float = 10.0):
         if not targets:
             return False
         if not hasattr(self, "ignored_targs"):
@@ -163,7 +243,7 @@ class Pursuer(Agent):
         #invader pos
         t_pos = self.all_inv_pos
         #those invaders, that are close enough to unit
-        near_mask = np.linalg.norm(t_pos - unit.position, axis=1) < self.capture_r
+        near_mask = np.linalg.norm(t_pos - self.prime_pos, axis=1) < self.capture_r
         #those invaders, that are forward to pursuer
         forward_mask = np.dot(t_pos - self.position, self.curr_speed) > 0.0
         #combo of both, choosing from these targets
@@ -174,7 +254,7 @@ class Pursuer(Agent):
             if inv not in targets:
                 to_remove.append(inv)
             else:
-                dist = np.linalg.norm(inv.position - unit.position)
+                dist = np.linalg.norm(inv.position - self.prime_pos)
                 if (sim_time - t_last) > cooldown and dist >= self.capture_r:
                     to_remove.append(inv)
         for inv in to_remove:
@@ -198,7 +278,7 @@ class Pursuer(Agent):
             return False
         #choosing best candidate
         cand_t_pos = t_pos[cand_t_idxs]
-        unit_vec = unit.position - self.position
+        unit_vec = self.prime_pos - self.position
         unit_dist = np.linalg.norm(unit_vec) + 1e-9
         angles = np.dot(cand_t_pos - self.position, unit_vec) / (
             np.linalg.norm(cand_t_pos - self.position, axis=1) * unit_dist
@@ -211,7 +291,7 @@ class Pursuer(Agent):
             masked_angles[~mask] = np.inf
             best_local_idx = np.argmin(masked_angles)
             best_idx = cand_t_idxs[best_local_idx]
-            self.target = [targets[best_idx], self.purs_types['circling']]
+            self.target = [targets[best_idx], self.all_inv_pos[best_idx], self.all_inv_vel[best_idx],self.all_inv_rads[best_idx], self.purs_types['circling']]
             self.state = States.PURSUE
             #clearing ignore list, not needed now, because pursuer has target
             self.ignored_targs.clear()
@@ -243,7 +323,7 @@ class Pursuer(Agent):
             # valid_indices = np.where(mask)[0]
             # local_min_idx = np.argmin(dists_surface[valid_indices])
             # idx = valid_indices[local_min_idx]
-            self.target = [targets[idx], self.purs_types['circling']]
+            self.target = [targets[idx], self.all_inv_pos[idx], self.all_inv_vel[idx], self.all_inv_rads[idx], self.purs_types['circling']]
             self.state = States.PURSUE
             self.ignored_targs.clear()
             return True
@@ -271,15 +351,15 @@ class Pursuer(Agent):
         #total force
         return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0) * self.cruise_speed
 
-    def repulsive_force_prime(self, prime: Prime_unit, coll: float):
+    def repulsive_force_prime(self, coll: float):
         total_force = np.zeros_like(self.position)
         #distance center to center
-        diff = self.position - prime.position
+        diff = self.position - self.prime_pos
         dist_center = np.linalg.norm(diff)
         if dist_center < 1e-6:
             dist_center = 1e-6
         #distance of surfaces
-        dist_surface = dist_center - self.my_rad - prime.my_rad
+        dist_surface = dist_center - self.my_rad - self.prime_rad
         #computing the force, if close enough
         if dist_surface < coll:
             push_dir = diff/dist_center
@@ -312,7 +392,7 @@ class Pursuer(Agent):
         #total force
         return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0) * self.cruise_speed
     
-    def repulsive_inv_force(self, prime, targets):
+    def repulsive_inv_force(self, targets):
         rep_dir = np.zeros_like(self.position)
         close_targs = []
         dists = []
@@ -321,12 +401,12 @@ class Pursuer(Agent):
             t_pos = self.all_inv_pos
             t_rad = self.all_inv_rads
             #dists center to center
-            vecs_to_t = t_pos - prime.position
+            vecs_to_t = t_pos - self.prime_pos
             dists_c = np.linalg.norm(vecs_to_t, axis=1)
             #zero div protection
             dists_c[dists_c < 1e-6] = 1e-6
             #dists surface to surface
-            dists_s = dists_c - t_rad - prime.my_rad
+            dists_s = dists_c - t_rad - self.prime_rad
             #mask
             mask = dists_s < self.rep_invs_r
             if np.any(mask):
@@ -351,8 +431,8 @@ class Pursuer(Agent):
             weights = exp_dists / np.sum(exp_dists)
             w_center_of_mass = np.sum(close_targs * weights[:, np.newaxis], axis=0)
             #calculation rel pos of pursuer, finding out if pursuer is in between prime and center of mass
-            vec_prime_to_pursuer = self.position - prime.position
-            vec_prime_to_com = w_center_of_mass - prime.position
+            vec_prime_to_pursuer = self.position - self.prime_pos
+            vec_prime_to_com = w_center_of_mass - self.prime_pos
             norm_p2u = np.linalg.norm(vec_prime_to_pursuer)
             norm_u2com = np.linalg.norm(vec_prime_to_com)
             if norm_p2u > 1e-6 and norm_u2com > 1e-6 and norm_p2u < norm_u2com:
@@ -366,7 +446,7 @@ class Pursuer(Agent):
             else:
                 return rep_dir
             #calculating rep dir
-            diff = prime.position - w_center_of_mass
+            diff = self.prime_pos - w_center_of_mass
             dist = np.linalg.norm(diff)
             if dist > 0.001:
                 push_dir = diff / dist
@@ -383,19 +463,19 @@ class Pursuer(Agent):
         #sigmoid function
         return 1 / (1 + np.exp(-x))
     
-    def form_vortex_field_circle(self, unit: Prime_unit, mock_position=None):
+    def form_vortex_field_circle(self, mock_position=None):
         if mock_position is not None:
             my_pos = mock_position
         else:
             my_pos = self.position
-        unit_pos = unit.position
-        unit_vel = unit.curr_speed
+        unit_pos = self.prime_pos
+        unit_vel = self.prime_vel
         #the center of the vortex directly at prime
         rel_unit_pos = my_pos - unit_pos
         #radius is combination of two according to prime fly direction
         sigm = self.sigmoid(np.dot(unit_vel, rel_unit_pos))
         form_r = sigm * self.formation_r + (1 - sigm) * self.formation_r_min
-        dist = np.linalg.norm(rel_unit_pos) - unit.my_rad - self.my_rad
+        dist = np.linalg.norm(rel_unit_pos) - self.prime_rad - self.my_rad
         if dist < 1e-6:
             return np.zeros_like(my_pos)
         rho = 1 - (dist / form_r)**2
@@ -424,13 +504,13 @@ class Pursuer(Agent):
                 form_vel = (form_vel/form_norm)*self.max_form_speed
         return form_vel
     
-    def calculate_axis_consensus(self, neighbors, center_pos):
-        if not neighbors:
+    def calculate_axis_consensus(self, nei_pos, nei_vel, center_pos):
+        if len(nei_pos) == 0:
             return None
         #sum of all axes
         #positions and speeds from everyone
-        n_pos = np.vstack([n.position for n in neighbors])
-        n_speed = np.vstack([n.curr_speed for n in neighbors])
+        n_pos = nei_pos
+        n_speed = nei_vel
         #relative position
         n_rel_pos = n_pos - center_pos
         #cross product
@@ -526,19 +606,19 @@ class Pursuer(Agent):
             final_axis /= norm
         return final_axis
 
-    def form_vortex_field_sphere(self, unit: Prime_unit, mock_position=None, close_purs=None):
+    def form_vortex_field_sphere(self, mock_position=None):
         if mock_position is not None:
             my_pos = mock_position
         else:
             my_pos = self.position
-        unit_pos = unit.position
-        unit_vel = unit.curr_speed
+        unit_pos = self.prime_pos
+        unit_vel = self.prime_vel
         rel_unit_pos = my_pos - unit_pos
         #the radius is according to the position of pursuer w.r.t. prime's velocity vector
         sigm = self.sigmoid(np.dot(unit_vel, rel_unit_pos))
         form_r = sigm * self.formation_r + (1 - sigm) * self.formation_r_min
         #distance from prime
-        dist = np.linalg.norm(rel_unit_pos) - unit.my_rad - self.my_rad
+        dist = np.linalg.norm(rel_unit_pos) - self.prime_rad - self.my_rad
         if dist < 1e-6:
             return np.zeros_like(my_pos)
         rho = 1 - (dist / form_r)**2
@@ -550,7 +630,7 @@ class Pursuer(Agent):
         #normalized vec from prime to pursuer
         normal_vec = rel_unit_pos / np.linalg.norm(rel_unit_pos)
         #observed average axis of neighbors
-        observed_group_axis = self.calculate_axis_consensus(close_purs, unit.position)
+        observed_group_axis = self.calculate_axis_consensus(self.all_purs_pos, self.all_purs_vel, unit_pos)
         #my axis
         current_axis = self.get_axis_at_time(self.num_iter)
         #synchronization of clocks
@@ -574,43 +654,43 @@ class Pursuer(Agent):
                 form_vel = (form_vel/form_norm)*self.max_form_speed
         return form_vel
     
-    def pursue_target(self, target: list[Invader, int], purs: list[Agent], prime: Prime_unit):
-        tar_speed = np.linalg.norm(target[0].curr_speed)
+    def pursue_target(self, target: list[Invader, int]):
+        tar_speed = np.linalg.norm(target[2])
         my_speed = self.cruise_speed
         #if target is faster then pursuer, just pure pursue him
-        if tar_speed >= my_speed or target[1] == self.purs_types['pure_pursuit']:
-            target[1] = self.purs_types['pure_pursuit']
+        if tar_speed >= my_speed or target[-1] == self.purs_types['pure_pursuit']:
+            target[-1] = self.purs_types['pure_pursuit']
             return self.pursuit_pure_pursuit(target)
         #still too fast for encirclement, CB him
-        elif tar_speed >= my_speed/1.2 or target[1] == self.purs_types['const_bear']:
-            target[1] = self.purs_types['const_bear']
+        elif tar_speed >= my_speed/1.2 or target[-1] == self.purs_types['const_bear']:
+            target[-1] = self.purs_types['const_bear']
             return self.pursuit_constant_bearing(target)
         #if more then one is chasing him and he is further from unit, circle him
-        if np.linalg.norm(prime.position - target[0].position) >= self.safe_circle_r:
+        if np.linalg.norm(self.prime_pos - target[1]) >= self.safe_circle_r:
             # for p in purs:
             #     if p is not self and p.target != None and p.target[0] is target[0]:
             if target[0].purs_num >= 2:
                 if len(self.position) == 2:
                     return self.pursuit_circling(target)
                 else:
-                    return self.pursuit_sphering(target, purs, prime)
+                    return self.pursuit_sphering(target)
         #no one else is chasing him, catch him
-        target[1] = self.purs_types['const_bear1']
+        target[-1] = self.purs_types['const_bear1']
         return self.pursuit_constant_bearing(target)
     
-    def pursuit_circling(self, target: list[Invader, int], mock_position=None):
+    def pursuit_circling(self, target, mock_position=None):
         if mock_position is not None:
             my_pos = mock_position
         else:
             my_pos = self.position
-        target[1] = self.purs_types['circling']
+        target[-1] = self.purs_types['circling']
         self.prime_coll_r = 10.5
         #strong repulsive force is needed
         self.rep_in_purs = 4.8
         self.prime_rep_in_purs = 4.4
         #the center of the vortex field is not shifted
-        rel_pos = my_pos - (target[0].position) #+ target[0].curr_speed * self.dt * self.pred_time)
-        dist = np.linalg.norm(rel_pos) - target[0].my_rad - self.my_rad
+        rel_pos = my_pos - (target[1]) #+ target[0].curr_speed * self.dt * self.pred_time)
+        dist = np.linalg.norm(rel_pos) - target[3] - self.my_rad
         if dist < 1e-6:
             return np.zeros_like(my_pos)
         rho = 1 - (dist / self.t_circle)**2
@@ -634,26 +714,28 @@ class Pursuer(Agent):
             purs_vel = (purs_vel/purs_norm)*self.cruise_speed
         #normalizing it to not fly that fast, risk of collision
         vel_norm = np.linalg.norm(purs_vel)
-        vel_dot = np.dot(target[0].curr_speed, self.curr_speed)
+        vel_dot = np.dot(target[2], self.curr_speed)
         if self.t_circle * 9.0 >= dist >= self.t_circle * 3.0 and vel_norm >= 3.0 and vel_dot < 0:
             purs_vel = purs_vel/vel_norm * 0.9
         return purs_vel
     
-    def pursuit_sphering(self, target: list[Invader, int], purs, prime):
+    def pursuit_sphering(self, target):
         #other pursuers pursuing same target in visibility region
-        other_purs = []
-        for p in purs:
-            if p is not self and p.target != None and p.target[0] is target[0]:
-                other_purs.append(p)
-        target[1] = self.purs_types['circling']
+        other_purs_pos = []
+        other_purs_vel = []
+        for i, tar in enumerate(self.all_purs_tars):
+            if self.my_index != i and tar is not None and tar is target[0]:
+                other_purs_pos.append(self.every_purs_pos[i])
+                other_purs_vel.append(self.every_purs_vel[i])
+        target[-1] = self.purs_types['circling']
         #strong repulsive force is needed
         self.prime_coll_r = 10.5
         self.rep_in_purs = 4.8
         self.prime_rep_in_purs = 4.4
         my_pos = self.position
-        rel_pos = my_pos - (target[0].position)
+        rel_pos = my_pos - (target[1])
         #distance from target
-        dist = np.linalg.norm(rel_pos) - target[0].my_rad - self.my_rad
+        dist = np.linalg.norm(rel_pos) - target[3] - self.my_rad
         if dist < 1e-6:
             return np.zeros_like(my_pos)
         rho = 1 - (dist / self.t_circle)**2
@@ -665,7 +747,7 @@ class Pursuer(Agent):
         #normalized vec from target to pursuer
         normal_vec = rel_pos / np.linalg.norm(rel_pos)
         #observed average axis of neighbors
-        observed_group_axis = self.calculate_axis_consensus(other_purs, prime.position)
+        observed_group_axis = self.calculate_axis_consensus(np.array(other_purs_pos), np.array(other_purs_vel), self.prime_pos)
         #my axis
         current_axis = self.get_axis_at_time(self.num_iter)
         #synchronization of clocks
@@ -688,14 +770,14 @@ class Pursuer(Agent):
             purs_vel = (purs_vel/purs_norm)*self.cruise_speed
         return purs_vel
         
-    def pursuit_constant_bearing(self, target: list[Invader, int]):
+    def pursuit_constant_bearing(self, target):
         #target is quite fast, circling is not possible
         self.prime_coll_r = 1.5
         self.rep_in_purs = 1.3
         self.prime_rep_in_purs = 2.5
-        v_tar = target[0].curr_speed
+        v_tar = target[2]
         #line of sight
-        r = target[0].position - self.position
+        r = target[1] - self.position
         #coeficients of quadratic equation
         a, b, c = np.dot(r, r), -2*np.dot(v_tar, r), np.dot(v_tar, v_tar) - self.cruise_speed**2
         #discriminant
@@ -719,12 +801,12 @@ class Pursuer(Agent):
         CB_dir = CB_dir * self.cruise_speed
         return CB_dir
     
-    def pursuit_pure_pursuit(self, target: list[Invader, int]):
+    def pursuit_pure_pursuit(self, target):
         #target is very fast, pure pursuit
         self.prime_coll_r = 1.5
         self.rep_in_purs = 1.3
         self.prime_rep_in_purs = 2.5
-        PP_dir = target[0].position - self.position
+        PP_dir = target[1] - self.position
         #norming it to the max speed
         if np.linalg.norm(PP_dir) < 1e-12:
             return np.zeros_like(PP_dir)

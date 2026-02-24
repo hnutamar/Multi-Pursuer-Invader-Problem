@@ -9,6 +9,7 @@ class Agent:
         self.position = np.array(position, dtype=float)
         self.prev_pos = np.array(position, dtype=float)
         self.path_history = deque(maxlen=20)
+        self.pos_length = len(self.position)
         #drone speed and velocity
         self.max_speed = float(max_speed)
         self.max_acc = float(max_acc)

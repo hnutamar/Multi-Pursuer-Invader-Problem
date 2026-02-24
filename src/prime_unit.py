@@ -21,7 +21,7 @@ class Prime_unit(Agent):
     def fly(self, way_point, invaders, pursuers, mode, obstacles):
         self.obs_centers, self.obs_radii = obstacles
         if pursuers:
-            self.biggest_poss_speed = 0.4 * pursuers[0].max_form_speed
+            self.biggest_poss_speed = 0.2 * pursuers[0].max_form_speed
         #finished, stay on this point
         if np.sum((self.position - way_point)**2) < 0.25 or self.finished:
             self.finished = True

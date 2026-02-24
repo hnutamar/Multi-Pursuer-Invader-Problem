@@ -95,22 +95,25 @@ class SimulationWorld:
             inv = Invader(position=rnd_points_inv[i], max_speed=speed_inv, max_acc=acc_inv, max_omega=1.5, my_rad=self.sc.DRONE_RAD, dt=self.sc.DT)
             self.invaders.append(inv)
 
-    def _get_safe_agent_data(self, agents):
+    def _get_safe_agent_data(self, agents, inv=False):
         dim = 3 if self._3d else 2
         #no one is alive
         if not agents:
-            return (np.empty((0, dim)), 
-                    np.empty((0,)), 
-                    np.empty((0,)))
+            return (np.empty((0, dim)), np.empty((0, dim)), np.empty((0,)), np.empty((0,)), np.empty((0,)))
         #living
         pos = np.vstack([a.position for a in agents])
+        vel = np.vstack([a.curr_speed for a in agents])
         rad = np.array([a.my_rad for a in agents])
         #in case of invaders
         try:
             p_nums = np.array([a.purs_num for a in agents])
         except AttributeError:
             p_nums = np.zeros(len(agents)) #fallback    
-        return pos, rad, p_nums
+        #in case of pursuers
+        tar = np.zeros(len(agents))
+        if not inv:
+            tar = [a.target[0] if a.target is not None else None for a in agents]
+        return pos, vel, rad, p_nums, tar
 
     def step(self, manual_invader_vel=None):
         #counter
@@ -118,8 +121,8 @@ class SimulationWorld:
         #filtering living drones
         free_inv = [inv for inv in self.invaders if not inv.crashed]
         free_purs = [pur for pur in self.pursuers if not pur.crashed]
-        all_inv_pos, all_inv_rad, all_inv_pnums = self._get_safe_agent_data(free_inv)
-        all_purs_pos, all_purs_rad, _ = self._get_safe_agent_data(free_purs)
+        all_inv_pos, all_inv_vel, all_inv_rad, all_inv_pnums, _ = self._get_safe_agent_data(free_inv, inv=True)
+        all_purs_pos, all_purs_vel, all_purs_rad, _, all_purs_targets = self._get_safe_agent_data(free_purs, inv=False)
         #invader move
         for i, inv in enumerate(self.invaders):
             #manual control
@@ -135,9 +138,9 @@ class SimulationWorld:
             inv.move(inv_acc)
         #pursuer move
         for i, pur in enumerate(free_purs):
-            close_purs = [p for p in free_purs if (np.linalg.norm(p.position - pur.position) - p.my_rad - pur.my_rad) <= self.sc.PURS_VIS]
-            purs_acc = pur.pursue(free_inv, close_purs, self.prime, 
-                       precalc_data=(all_inv_pos, all_inv_pnums, all_inv_rad, all_purs_pos, all_purs_rad, i, self.obs_centers, self.obs_radii))
+            #close_purs = [p for p in free_purs if (np.linalg.norm(p.position - pur.position) - p.my_rad - pur.my_rad) <= self.sc.PURS_VIS]
+            purs_acc = pur.pursue(free_inv, self.prime.curr_speed, self.prime.my_rad, self.prime.position, all_purs_targets, precalc_data=(all_inv_pos, all_inv_vel, all_inv_pnums, 
+                       all_inv_rad, all_purs_pos, all_purs_vel, all_purs_rad, i, self.obs_centers, self.obs_radii))
             pur.move(purs_acc)
         #prime move
         prime_acc = self.prime.fly(self.way_point, free_inv, free_purs, Modes.LINE, (self.obs_centers, self.obs_radii))
@@ -303,7 +306,7 @@ class SimulationWorld:
         return {
             "prime": self.prime.position.copy(),
             "pursuers": [p.position.copy() for p in self.pursuers],
-            "pursuers_status": [[p.state, p.target] for p in self.pursuers], #for colors
+            "pursuers_status": [[p.state, [p.target[0], p.target[-1]] if p.target else None] for p in self.pursuers], #for colors
             "invaders": [i.position.copy() for i in self.invaders],
             "invaders_status": [i.crashed for i in self.invaders], #for colors
             "time": self.time

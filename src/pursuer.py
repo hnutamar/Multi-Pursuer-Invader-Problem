@@ -8,6 +8,7 @@ import copy
 class Pursuer(Agent):
     def __init__(self, position, max_speed, max_acc, max_omega, my_rad, purs_num, purs_vis, dt):
         super().__init__(position, max_speed, max_acc, max_omega, dt, my_rad, num_iter=purs_num)
+        self.is_rl_controlled = False
         #visibility range
         self.vis_range = purs_vis
         #repulsive forces
@@ -98,7 +99,7 @@ class Pursuer(Agent):
             self.target = None
             self.state = States.FORM
         #pursuer having no target, finding target, if found, pursue it
-        if self.target == None:
+        if self.target == None and not self.is_rl_controlled:
             if self.strategy_capture_cone(targets, self.num_iter, cooldown=self.capture_cooldown*self.dt):
                 tar_vel = self.pursue_target(self.target)
             elif self.strategy_target_close(targets):
@@ -134,6 +135,98 @@ class Pursuer(Agent):
         #converting to acceleration
         new_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
         return new_acc
+    
+    def get_closest_invaders(self, all_invaders, max_count=2):
+        if not all_invaders:
+            return []
+        #distances
+        dists = [np.linalg.norm(inv.position - self.position) for inv in all_invaders]
+        # Získáme indexy seřazené od nejmenší vzdálenosti po největší
+        sorted_indices = np.argsort(dists)
+        # Vrátíme objekty invaderů (zajištěno slicingem, nespadne to)
+        return [all_invaders[i] for i in sorted_indices[:max_count]]
+    
+    def get_observation(self):
+        #my state
+        my_obs = np.concatenate([self.position, self.curr_speed]) 
+        #prime state
+        prime_obs = np.concatenate([self.prime_pos - self.position, self.prime_vel])
+        #pursuers
+        pursuers_obs = np.zeros(18, dtype=np.float32)
+        density = 0
+        if len(self.all_purs_pos) > 0:
+            #distances
+            dists = np.linalg.norm(self.all_purs_pos - self.position, axis=1)
+            #density
+            density = len(self.all_purs_pos)
+            #sorting to closest
+            sorted_indices = np.argsort(dists)
+            closest_indices = sorted_indices[:3]
+            #array filling
+            for i, idx in enumerate(closest_indices):
+                start = i * 6
+                pursuers_obs[start : start+3] = self.all_purs_pos[idx] - self.position
+                pursuers_obs[start+3 : start+6] = self.all_purs_vel[idx]    
+        density_obs = np.array([density], dtype=np.float32)
+        #invaders
+        invaders_obs = np.zeros(12, dtype=np.float32)
+        if len(self.all_inv_pos) > 0:
+            inv_dists = np.linalg.norm(self.all_inv_pos - self.position, axis=1)
+            sorted_inv_indices = np.argsort(inv_dists)
+            closest_inv_indices = sorted_inv_indices[:2] # Max 2 closest
+            for i, idx in enumerate(closest_inv_indices):
+                start = i * 6
+                invaders_obs[start : start+3] = self.all_inv_pos[idx] - self.position
+                invaders_obs[start+3 : start+6] = self.all_inv_vel[idx]
+        #final observation
+        final_obs = np.concatenate([
+            my_obs,         # 6
+            prime_obs,      # 6
+            density_obs,    # 1
+            pursuers_obs,   # 18
+            invaders_obs    # 12
+        ]).astype(np.float32)
+        return final_obs
+    
+    def set_rl_action(self, action_array, visible_invaders):
+        self.is_rl_controlled = True
+        #repulsive forces
+        self.purs = np.interp(action_array[0], [-1, 1], [0.0, 5.0])
+        self.form = np.interp(action_array[1], [-1, 1], [0.0, 5.0])
+        self.rep_in_form = np.interp(action_array[2], [-1, 1], [0.0, 5.0])
+        self.rep_in_purs = np.interp(action_array[3], [-1, 1], [0.0, 5.0])
+        self.rep_obs = np.interp(action_array[4], [-1, 1], [0.0, 5.0])
+        self.rep_invs = np.interp(action_array[5], [-1, 1], [0.0, 5.0])
+        self.prime_rep_in_purs = np.interp(action_array[6], [-1, 1], [0.0, 5.0])
+        #radiuses
+        self.formation_r = np.interp(action_array[7], [-1, 1], [1.0, 5.0])
+        self.formation_r_min = np.interp(action_array[8], [-1, 1], [0.5, self.formation_r]) 
+        self.rep_obs_r = np.interp(action_array[9], [-1, 1], [2.0, 15.0])
+        self.coll_obs = np.interp(action_array[10], [-1, 1], [1.0, 10.0])
+        self.prime_coll_r = np.interp(action_array[11], [-1, 1], [1.0, 15.0])
+        #speed
+        self.cruise_speed = np.interp(action_array[12], [-1, 1], [1.0, self.max_speed*0.75])
+        #decision making
+        attack_intent = action_array[13] > 0.0 # a[12] > 0 means attack
+        if attack_intent and len(visible_invaders) > 0:
+            #choosing target
+            target_idx = 0 if action_array[14] < 0.0 else min(1, len(visible_invaders) - 1)
+            #choosing strategy
+            strat_val = action_array[15]
+            if strat_val < -0.33:
+                chosen_strategy = self.purs_types["circling"]
+            elif strat_val < 0.33:
+                chosen_strategy = self.purs_types["const_bear"]
+            else:
+                chosen_strategy = self.purs_types["pure_pursuit"]
+            tar = visible_invaders[target_idx]
+            #setting the target
+            self.target = {"target": tar, "tar_pos": tar.position, 
+                           "tar_vel": tar.curr_speed,"tar_rad": tar.my_rad, "purs_type": chosen_strategy}
+            self.state = States.PURSUE
+        else:
+            self.target = None
+            self.state = States.FORM
     
     def copy_data(self, prime_vel, prime_pos, all_inv_pos, all_inv_vel, all_inv_rads, all_purs_pos, all_purs_vel, obs_centers, obs_radii):
         #copies all data, that are going to be modified
@@ -214,26 +307,6 @@ class Pursuer(Agent):
         visible_rad = all_rad[mask]
         visible_vel = all_vel[mask]
         return visible_pos, visible_vel, visible_rad 
-             
-    def get_avoidance_direction(self, obstacle_pos, obstacle_rad, prime):
-        #if prime is too close to obstacle, calculate which direction is better for avoidance, in 2D
-        if np.linalg.norm(obstacle_pos - prime.position) - prime.my_rad - obstacle_rad <= self.obs_rad:
-            if self.axis_found:
-                return True
-            vel = prime.curr_speed[:2]
-            if np.linalg.norm(vel) < 0.1:
-                return
-            vec_to_obs = (obstacle_pos - prime.position)[:2]
-            #2D cross product
-            cross_z = vel[0] * vec_to_obs[1] - vel[1] * vec_to_obs[0]
-            if cross_z > 0:
-                self.axis_found = True
-                self.circle_dir_obs = -1
-            else:
-                self.axis_found = True
-                self.circle_dir_obs = 1
-            return True
-        return False
     
     def strategy_capture_cone(self, targets: list[Invader], sim_time: float, cooldown: float = 10.0):
         if not targets:
@@ -690,10 +763,11 @@ class Pursuer(Agent):
         else:
             my_pos = self.position
         target["purs_type"] = self.purs_types['circling']
-        self.prime_coll_r = 10.5
         #strong repulsive force is needed
-        self.rep_in_purs = 4.8
-        self.prime_rep_in_purs = 4.4
+        if not self.is_rl_controlled:
+            self.prime_coll_r = 10.5
+            self.rep_in_purs = 4.8
+            self.prime_rep_in_purs = 4.4
         #the center of the vortex field is not shifted
         rel_pos = my_pos - (target["tar_pos"]) #+ target[0].curr_speed * self.dt * self.pred_time)
         dist = np.linalg.norm(rel_pos) - target["tar_rad"] - self.my_rad
@@ -735,9 +809,10 @@ class Pursuer(Agent):
                 other_purs_vel.append(self.every_purs_vel[i])
         target["purs_type"] = self.purs_types['circling']
         #strong repulsive force is needed
-        self.prime_coll_r = 10.5
-        self.rep_in_purs = 4.8
-        self.prime_rep_in_purs = 4.4
+        if not self.is_rl_controlled:
+            self.prime_coll_r = 10.5
+            self.rep_in_purs = 4.8
+            self.prime_rep_in_purs = 4.4
         my_pos = self.position
         rel_pos = my_pos - (target["tar_pos"])
         #distance from target
@@ -778,9 +853,10 @@ class Pursuer(Agent):
         
     def pursuit_constant_bearing(self, target):
         #target is quite fast, circling is not possible
-        self.prime_coll_r = 1.5
-        self.rep_in_purs = 1.3
-        self.prime_rep_in_purs = 2.5
+        if not self.is_rl_controlled:
+            self.prime_coll_r = 1.5
+            self.rep_in_purs = 1.3
+            self.prime_rep_in_purs = 2.5
         v_tar = target["tar_vel"]
         #line of sight
         r = target["tar_pos"] - self.position
@@ -809,9 +885,10 @@ class Pursuer(Agent):
     
     def pursuit_pure_pursuit(self, target):
         #target is very fast, pure pursuit
-        self.prime_coll_r = 1.5
-        self.rep_in_purs = 1.3
-        self.prime_rep_in_purs = 2.5
+        if not self.is_rl_controlled:
+            self.prime_coll_r = 1.5
+            self.rep_in_purs = 1.3
+            self.prime_rep_in_purs = 2.5
         PP_dir = target["tar_pos"] - self.position
         #norming it to the max speed
         if np.linalg.norm(PP_dir) < 1e-12:
@@ -821,6 +898,26 @@ class Pursuer(Agent):
         return PP_dir
     
 # =============== CURRENTLY UNUSED CODE ======================
+
+    # def get_avoidance_direction(self, obstacle_pos, obstacle_rad, prime):
+    #     #if prime is too close to obstacle, calculate which direction is better for avoidance, in 2D
+    #     if np.linalg.norm(obstacle_pos - prime.position) - prime.my_rad - obstacle_rad <= self.obs_rad:
+    #         if self.axis_found:
+    #             return True
+    #         vel = prime.curr_speed[:2]
+    #         if np.linalg.norm(vel) < 0.1:
+    #             return
+    #         vec_to_obs = (obstacle_pos - prime.position)[:2]
+    #         #2D cross product
+    #         cross_z = vel[0] * vec_to_obs[1] - vel[1] * vec_to_obs[0]
+    #         if cross_z > 0:
+    #             self.axis_found = True
+    #             self.circle_dir_obs = -1
+    #         else:
+    #             self.axis_found = True
+    #             self.circle_dir_obs = 1
+    #         return True
+    #     return False
 
     # def calculate_prime_avoidance_axis(self, inv, prime_pos):
     #     vec_to_prime = prime_pos - inv.position

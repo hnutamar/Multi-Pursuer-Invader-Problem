@@ -59,7 +59,7 @@ class Pursuer(Agent):
                            "const_bear": 4,
                            "pure_pursuit": 5}
         self.capture_cooldown = 100
-        if len(self.position) == 3:
+        if self.pos_length == 3:
             self.MAX_PURSUERS = 10
         else:
             self.MAX_PURSUERS = 4
@@ -67,6 +67,7 @@ class Pursuer(Agent):
         self.obs_centers = None
         self.obs_radii = None
         self.coll_obs = 5.0
+        #max speed in formation
         self.max_form_speed = 3.0
         #gauss noise
         self.base_pos = 0.01
@@ -79,10 +80,9 @@ class Pursuer(Agent):
     def pursue(self, targets: list[Invader], prime_vel, prime_rad, prime_pos, all_purs_tars, precalc_data):
         #precalculated data, faster this way
         self.prime_rad = prime_rad
-        self.all_purs_tars = all_purs_tars
         all_inv_pos, all_inv_vel, self.all_inv_purs_num, all_inv_rads, all_purs_pos, all_purs_vel, all_purs_rads, self.my_index, obs_centers, obs_radii = precalc_data
         self.copy_data(prime_vel, prime_pos, all_inv_pos, all_inv_vel, all_inv_rads, all_purs_pos, all_purs_vel, obs_centers, obs_radii)
-        self.all_purs_pos, self.all_purs_vel, self.all_purs_rads = self.get_visible_neighbors_data(all_purs_pos.copy(), all_purs_vel.copy(), all_purs_rads.copy(), gaussian=True)
+        self.all_purs_pos, self.all_purs_vel, self.all_purs_rads, self.all_purs_tars = self.get_visible_neighbors_data(all_purs_pos.copy(), all_purs_vel.copy(), all_purs_rads.copy(), all_purs_tars, gaussian=True)
         #update target
         if self.target:
             self.update_target()
@@ -141,9 +141,9 @@ class Pursuer(Agent):
             return []
         #distances
         dists = [np.linalg.norm(inv.position - self.position) for inv in all_invaders]
-        # Získáme indexy seřazené od nejmenší vzdálenosti po největší
+        #sorted distances
         sorted_indices = np.argsort(dists)
-        # Vrátíme objekty invaderů (zajištěno slicingem, nespadne to)
+        #closest invaders
         return [all_invaders[i] for i in sorted_indices[:max_count]]
     
     def get_observation(self):
@@ -235,8 +235,8 @@ class Pursuer(Agent):
         self.all_inv_pos = all_inv_pos.copy()
         self.all_inv_vel = all_inv_vel.copy()
         self.all_inv_rads = all_inv_rads.copy()
-        self.every_purs_pos = all_purs_pos.copy()
-        self.every_purs_vel = all_purs_vel.copy()
+        #self.every_purs_pos = all_purs_pos.copy()
+        #self.every_purs_vel = all_purs_vel.copy()
         if obs_radii is not None:
             self.obs_centers = obs_centers.copy()
             self.obs_radii = obs_radii.copy()
@@ -254,8 +254,8 @@ class Pursuer(Agent):
             self.apply_gaussian_noise(self.all_inv_pos, self.all_inv_rads, self.all_inv_vel)    
         if self.obs_centers is not None and len(self.obs_centers) > 0:
             self.apply_gaussian_noise(self.obs_centers, rads=self.obs_radii)    
-        if len(self.every_purs_pos) != 0:
-            self.apply_gaussian_noise(self.every_purs_pos, velocities=self.every_purs_vel)
+        #if len(self.every_purs_pos) != 0:
+        #    self.apply_gaussian_noise(self.every_purs_pos, velocities=self.every_purs_vel)
         #target
         if self.target is not None:
             dist = np.linalg.norm(self.position - self.target["tar_pos"])
@@ -289,7 +289,7 @@ class Pursuer(Agent):
             velocities += np.random.normal(loc=0.0, scale=sigmas_vel[:, np.newaxis], size=velocities.shape)
         return positions, rads, velocities
     
-    def get_visible_neighbors_data(self, all_pos, all_vel, all_rad, gaussian=False):
+    def get_visible_neighbors_data(self, all_pos, all_vel, all_rad, all_tars, gaussian=False):
         #dists to all
         diffs = all_pos - self.position
         dists_center = np.linalg.norm(diffs, axis=1)
@@ -302,11 +302,12 @@ class Pursuer(Agent):
         mask = dists_surface < self.vis_range
         #only those visible
         if not np.any(mask):
-             return np.empty((0, self.pos_length)), np.empty((0, self.pos_length)), np.empty((0,))
+             return np.empty((0, self.pos_length)), np.empty((0, self.pos_length)), np.empty((0,)), []
         visible_pos = all_pos[mask]
         visible_rad = all_rad[mask]
         visible_vel = all_vel[mask]
-        return visible_pos, visible_vel, visible_rad 
+        visible_tar = [tar for tar, m in zip(all_tars, mask) if m]
+        return visible_pos, visible_vel, visible_rad, visible_tar 
     
     def strategy_capture_cone(self, targets: list[Invader], sim_time: float, cooldown: float = 10.0):
         if not targets:
@@ -749,7 +750,7 @@ class Pursuer(Agent):
             # for p in purs:
             #     if p is not self and p.target != None and p.target[0] is target[0]:
             if target["target"].purs_num >= 2:
-                if len(self.position) == 2:
+                if self.pos_length == 2:
                     return self.pursuit_circling(target)
                 else:
                     return self.pursuit_sphering(target)
@@ -804,9 +805,9 @@ class Pursuer(Agent):
         other_purs_pos = []
         other_purs_vel = []
         for i, tar in enumerate(self.all_purs_tars):
-            if self.my_index != i and tar is not None and tar is target["target"]:
-                other_purs_pos.append(self.every_purs_pos[i])
-                other_purs_vel.append(self.every_purs_vel[i])
+            if tar is not None and tar is target["target"]:
+                other_purs_pos.append(self.all_purs_pos[i])
+                other_purs_vel.append(self.all_purs_vel[i])
         target["purs_type"] = self.purs_types['circling']
         #strong repulsive force is needed
         if not self.is_rl_controlled:

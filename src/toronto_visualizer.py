@@ -27,6 +27,7 @@ class TorontoVisualizer:
         self.C_GREEN = [0.06, 0.92, 0.13, 1.0]
         self.C_YELLOW = [1.0, 0.93, 0.0, 1.0]
         self.C_BLACK = [0.0, 0.0, 0.0, 1.0]
+        self.C_GREY = [0.5, 0.5, 0.5, 0.8]
         self.current_colors = [None] * self.total_drones
         #starting positions
         target_positions = []
@@ -56,8 +57,6 @@ class TorontoVisualizer:
         self.obs, _, _, _, _ = self.env.step(self.action)
         #create obstacles
         if self.sc.obstacle:
-            #grey color
-            self.C_GREY = [0.5, 0.5, 0.5, 0.8]
             #every obstacle
             for i in range(len(self.sc.obs_rads)):
                 pos = self.sc.obs_pos[i]
@@ -84,12 +83,12 @@ class TorontoVisualizer:
             self.is_open = False
             return False, None
         #DYNAMIC CAMERA
-        #prime_idx = self.total_drones - 1
-        #prime_pos = self.env.pos[prime_idx].copy()
+        prime_idx = self.total_drones - 1
+        prime_pos = self.env.pos[prime_idx].copy()
         #prime_idx = 0
         #prime_pos = self.env.pos[0].copy()
-        prime_idx = self.num_pursuers
-        prime_pos = self.env.pos[prime_idx].copy()
+        #prime_idx = self.num_pursuers
+        #prime_pos = self.env.pos[prime_idx].copy()
         #pos of prime
         vx = self.env.vel[prime_idx][0]
         vy = self.env.vel[prime_idx][1]
@@ -100,8 +99,8 @@ class TorontoVisualizer:
             yaw_diff = (target_yaw - self.camera_yaw + 180) % 360 - 180
             self.camera_yaw += yaw_diff * 0.1
         #setting the camera
-        p.resetDebugVisualizerCamera(cameraDistance=2.0, cameraYaw=self.camera_yaw, cameraPitch=-15,
-            cameraTargetPosition=[prime_pos[0], prime_pos[1], prime_pos[2] if self._3d else 2.0], physicsClientId=self.env.CLIENT)
+        # p.resetDebugVisualizerCamera(cameraDistance=3.0, cameraYaw=self.camera_yaw, cameraPitch=-15,
+        #     cameraTargetPosition=[prime_pos[0], prime_pos[1], prime_pos[2] if self._3d else 2.0], physicsClientId=self.env.CLIENT)
         #lists of drone positions
         target_positions = []
         target_positions.extend(state['pursuers'])
@@ -122,7 +121,7 @@ class TorontoVisualizer:
                 noisy_obs[10:13] += np.random.normal(0, 0.1, size=3) # Velocity: 10 cm/s
                 self.action[i, :], _, _ = self.ctrl[i].computeControlFromState(control_timestep=self.env.CTRL_TIMESTEP,
                                           state=noisy_obs,target_pos=target_pos_3d)
-            #dynamic wind
+            # #dynamic wind
             if not self.wind_active and random.random() < 0.002:
                 self.wind_active = True
                 #length of the wind

@@ -8,17 +8,18 @@ from scipy.spatial.distance import cdist
 
 class SimulationWorld:
     def __init__(self, sc_config, _3d=False, purs_acc=None, purs_speed=None, prime_acc=None, prime_speed=None, inv_acc=None, inv_speed=None,
-                 prime_pos=None, inv_pos=None, purs_pos=None, purs_num=None):
+                 prime_pos=None, inv_pos=None, purs_pos=None, purs_num=None, herding=False):
         self.sc = sc_config
         self._3d = _3d
-        #parameters for reset
+        self.herding = herding
+        self.reset(purs_acc=purs_acc, purs_speed=purs_speed, prime_acc=prime_acc, prime_speed=prime_speed, inv_acc=inv_acc, inv_speed=inv_speed,
+                 prime_pos=prime_pos, inv_pos=inv_pos, purs_pos=purs_pos, purs_num=purs_num)
+
+    def reset(self, purs_acc=None, purs_speed=None, prime_acc=None, prime_speed=None, inv_acc=None, inv_speed=None,
+                 prime_pos=None, inv_pos=None, purs_pos=None, purs_num=None):
         self.init_params = {
             'purs_acc': purs_acc, 'purs_speed': purs_speed, 'prime_acc': prime_acc, 'prime_speed': prime_speed, 'inv_acc': inv_acc, 'inv_speed': inv_speed,
-            'prime_pos': prime_pos, 'inv_pos': inv_pos, 'purs_pos': purs_pos, 'purs_num': purs_num
-        }
-        self.reset()
-
-    def reset(self):
+            'prime_pos': prime_pos, 'inv_pos': inv_pos, 'purs_pos': purs_pos, 'purs_num': purs_num}
         #resets to initial state
         self.time = 0.0
         self.captured_count = 0
@@ -56,8 +57,8 @@ class SimulationWorld:
         #init positions and acceleration of agents (random)
         if self._3d:
             rnd_points_purs = purs_pos if purs_pos is not None else np.random.uniform(
-                low=[-self.sc.PURSUER_NUM/2 - 2 + pos_u[0], -self.sc.PURSUER_NUM/2 - 2 + pos_u[1], pos_u[2]], 
-                high=[self.sc.PURSUER_NUM/2 + 2 + pos_u[0], self.sc.PURSUER_NUM/2 + 2 + pos_u[1], self.sc.PURSUER_NUM/2 + 2 +  pos_u[2]], 
+                low=[-self.sc.PURSUER_NUM/2 - 1 + pos_u[0], -self.sc.PURSUER_NUM/2 - 1 + pos_u[1], pos_u[2]], 
+                high=[self.sc.PURSUER_NUM/2 + 1 + pos_u[0], self.sc.PURSUER_NUM/2 + 1 + pos_u[1], self.sc.PURSUER_NUM/2 + 1 +  pos_u[2]], 
                 size=(self.sc.PURSUER_NUM, 3)
             )
             rnd_points_inv = inv_pos if inv_pos is not None else np.random.uniform(
@@ -140,7 +141,7 @@ class SimulationWorld:
         for i, pur in enumerate(free_purs):
             #close_purs = [p for p in free_purs if (np.linalg.norm(p.position - pur.position) - p.my_rad - pur.my_rad) <= self.sc.PURS_VIS]
             purs_acc = pur.pursue(free_inv, self.prime.curr_speed, self.prime.my_rad, self.prime.position, all_purs_targets, precalc_data=(all_inv_pos, all_inv_vel, all_inv_pnums, 
-                       all_inv_rad, all_purs_pos, all_purs_vel, all_purs_rad, i, self.obs_centers, self.obs_radii))
+                        all_inv_rad, all_purs_pos, all_purs_vel, all_purs_rad, i, self.obs_centers, self.obs_radii))
             pur.move(purs_acc)
         #prime move
         prime_acc = self.prime.fly(self.way_point, free_inv, free_purs, Modes.LINE, (self.obs_centers, self.obs_radii))
@@ -223,7 +224,7 @@ class SimulationWorld:
             for idx in np.where(swarm_crash_mask)[0]:
                 free_purs[idx].crashed = True
         #ending check
-        done = self.prime.crashed #or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
+        done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
         return self.get_state(), done
 
     def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):

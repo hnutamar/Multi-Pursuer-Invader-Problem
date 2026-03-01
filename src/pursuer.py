@@ -24,7 +24,7 @@ class Pursuer(Agent):
         self.collision_r = min(purs_vis, 2.0)
         #formation radiuses
         #self.formation_r = 0.9
-        #self.formation_r_min = 0.6
+        #self.formation_r_min = 0.4
         #formation radiuses
         self.formation_r = 2.0
         self.formation_r_min = 1.0
@@ -76,6 +76,11 @@ class Pursuer(Agent):
         self.k_vel = 0.01
         self.base_rad = 0.02
         self.k_rad = 0.02
+        self.new_acc_vector = None
+        
+    def herding(self, acc_vector):
+        #getting the vector, nothing else
+        self.new_acc_vector = acc_vector
         
     def pursue(self, targets: list[Invader], prime_vel, prime_rad, prime_pos, all_purs_tars, precalc_data):
         #precalculated data, faster this way
@@ -94,6 +99,8 @@ class Pursuer(Agent):
         #if crashed, dont move, you are supposed to be dead
         if self.crashed:
             return tar_vel
+        if self.new_acc_vector is not None:
+            return self.new_acc_vector
         #previous target captured, back to formation
         if self.target != None and self.target["target"].crashed == True:
             self.target = None
@@ -145,6 +152,63 @@ class Pursuer(Agent):
         sorted_indices = np.argsort(dists)
         #closest invaders
         return [all_invaders[i] for i in sorted_indices[:max_count]]
+    
+    def get_observation_herding(self):
+        #observation for herding NN, everything normalized
+        MAX_COORD = 30.0       #world
+        MAX_DIST = 40.0        #max possible distance
+        MAX_SPEED = self.max_speed        #max speed
+        MAX_DENSITY = 20.0     #max pursuer density
+        MAX_RADIUS = 10.0      #max obstacle radius
+        
+        FAR_AWAY = 150.0 / MAX_DIST  #far away, bigger number
+        #my state
+        my_obs = np.concatenate([self.position / MAX_COORD, self.curr_speed / MAX_SPEED]) 
+        #prime state
+        prime_obs = np.concatenate([(self.prime_pos - self.position) / MAX_DIST, self.prime_vel / MAX_SPEED])
+        #pursuer state + density
+        pursuers_obs = np.full(18, FAR_AWAY, dtype=np.float32) 
+        for i in range(3):
+            pursuers_obs[i*6 + 3 : i*6 + 6] = 0.0
+        density = 0
+        if len(self.all_purs_pos) > 0:
+            dists = np.linalg.norm(self.all_purs_pos - self.position, axis=1)
+            density = len(self.all_purs_pos)
+            closest_indices = np.argsort(dists)[:3]
+            #iterating from closest indeces
+            for i, idx in enumerate(closest_indices):
+                start = i * 6
+                #normalization
+                pursuers_obs[start : start+3] = (self.all_purs_pos[idx] - self.position) / MAX_DIST
+                pursuers_obs[start+3 : start+6] = self.all_purs_vel[idx] / MAX_SPEED
+        
+        density_obs = np.array([density / MAX_DENSITY], dtype=np.float32)
+        #invader state
+        inv_rel_pos = (self.target["tar_pos"] - self.position) / MAX_DIST
+        inv_norm_vel = self.target["tar_vel"] / MAX_SPEED
+        invaders_obs = np.concatenate([inv_rel_pos, inv_norm_vel]) 
+        #closest obstacles
+        obstacles_obs = np.full(8, FAR_AWAY, dtype=np.float32)
+        obstacles_obs[3] = 0.0 
+        obstacles_obs[7] = 0.0 
+        if self.obs_centers is not None and len(self.obs_centers) > 0:
+            obs_dists = np.linalg.norm(self.obs_centers - self.position, axis=1)
+            closest_obs_indices = np.argsort(obs_dists)[:2]
+            #iterating from closest obstacles
+            for i, idx in enumerate(closest_obs_indices):
+                start = i * 4
+                obstacles_obs[start : start+3] = (self.obs_centers[idx] - self.position) / MAX_DIST
+                obstacles_obs[start+3] = self.obs_radii[idx] / MAX_RADIUS
+        #final vector
+        final_obs = np.concatenate([
+            my_obs,         # 6
+            prime_obs,      # 6
+            density_obs,    # 1
+            pursuers_obs,   # 18
+            invaders_obs,   # 6
+            obstacles_obs   # 8
+        ]).astype(np.float32)
+        return final_obs
     
     def get_observation(self):
         #my state
@@ -739,10 +803,10 @@ class Pursuer(Agent):
             return self.pursuit_pure_pursuit(target)
         #still too fast for encirclement, CB him
         elif tar_speed >= my_speed/1.2 or target["purs_type"] == self.purs_types['const_bear']:
-            if tar_speed >= my_speed/1.2:
-                print("my speed " + str(my_speed))
-                print(tar_speed)
-                print(np.linalg.norm(target["target"].curr_speed))
+            #if tar_speed >= my_speed/1.2:
+                # print("my speed " + str(my_speed))
+                # print(tar_speed)
+                # print(np.linalg.norm(target["target"].curr_speed))
             target["purs_type"] = self.purs_types['const_bear']
             return self.pursuit_constant_bearing(target)
         #if more then one is chasing him and he is further from unit, circle him

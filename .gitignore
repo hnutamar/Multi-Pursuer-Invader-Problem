@@ -1,8 +1,7 @@
-# Virtuální prostředí
+#venvs
 venv/
 .env/
-
-# Soubory editorů / OS
+#editor files
 __pycache__/
 *.pyc
 *.pyo
@@ -11,6 +10,11 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
-
-# Notebook outputy
+# Notebook outputs
 *.ipynb_checkpoints/
+#tensorboard
+ppo_drone_tensorboard/
+#models
+models_checkpoints/
+#final MLP
+*.zip

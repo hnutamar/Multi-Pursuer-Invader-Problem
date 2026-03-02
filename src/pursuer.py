@@ -160,10 +160,9 @@ class Pursuer(Agent):
         MAX_SPEED = self.max_speed        #max speed
         MAX_DENSITY = 20.0     #max pursuer density
         MAX_RADIUS = 10.0      #max obstacle radius
-        
-        FAR_AWAY = 150.0 / MAX_DIST  #far away, bigger number
+        FAR_AWAY = 100.0 / MAX_DIST  #far away, bigger number
         #my state
-        my_obs = np.concatenate([self.position / MAX_COORD, self.curr_speed / MAX_SPEED]) 
+        my_obs = np.concatenate([self.curr_speed / MAX_SPEED]) 
         #prime state
         prime_obs = np.concatenate([(self.prime_pos - self.position) / MAX_DIST, self.prime_vel / MAX_SPEED])
         #pursuer state + density
@@ -186,7 +185,9 @@ class Pursuer(Agent):
         #invader state
         inv_rel_pos = (self.target["tar_pos"] - self.position) / MAX_DIST
         inv_norm_vel = self.target["tar_vel"] / MAX_SPEED
-        invaders_obs = np.concatenate([inv_rel_pos, inv_norm_vel]) 
+        inv_to_prime_vec = (self.prime_pos - self.target["tar_pos"]) / MAX_DIST
+        inv_to_prime_dist = np.array([np.linalg.norm(inv_to_prime_vec)], dtype=np.float32)
+        invaders_obs = np.concatenate([inv_rel_pos, inv_norm_vel, inv_to_prime_vec, inv_to_prime_dist]) 
         #closest obstacles
         obstacles_obs = np.full(8, FAR_AWAY, dtype=np.float32)
         obstacles_obs[3] = 0.0 
@@ -201,11 +202,11 @@ class Pursuer(Agent):
                 obstacles_obs[start+3] = self.obs_radii[idx] / MAX_RADIUS
         #final vector
         final_obs = np.concatenate([
-            my_obs,         # 6
+            my_obs,         # 3
             prime_obs,      # 6
             density_obs,    # 1
             pursuers_obs,   # 18
-            invaders_obs,   # 6
+            invaders_obs,   # 10
             obstacles_obs   # 8
         ]).astype(np.float32)
         return final_obs

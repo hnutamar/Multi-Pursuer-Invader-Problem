@@ -83,12 +83,12 @@ class HerdingEnv(gym.Env):
         #action space - acc vector
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
         #obs space
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(45,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(46,), dtype=np.float32)
         #episode limits
         self.max_steps = 1000
         self.current_step = 0
         if test:
-            self.episode_num = 800000
+            self.episode_num = np.inf
         else:
             self.episode_num = 1
         #needed for reward
@@ -100,20 +100,26 @@ class HerdingEnv(gym.Env):
         #random max speeds
         new_purs_speed = random.uniform(6.0, 8.0)
         self.new_purs_acc = random.uniform(new_purs_speed/4, new_purs_speed/2)
-        if 600000 > self.episode_num > 50000:
-            new_inv_speed = max((6.0 / 600000) * self.episode_num, 0.5)
-        elif 600000 < self.episode_num < 1000000:
-            new_inv_speed = random.uniform(2.0, new_purs_speed + 2.0)
-        elif self.episode_num > 1000000:
-            new_inv_speed = random.uniform(2.0, new_purs_speed + 4.0)
+        #phase one, invader is basically on a spot
+        if self.episode_num <= 800000:
+            new_inv_speed = 0.1
+        #phase two, invader is slowly moving
+        elif 800000 < self.episode_num <= 2000000:
+            new_inv_speed = max((2.0 / 2000000) * self.episode_num, 0.1)
+        #phase three, small change in speed
+        elif 2000000 < self.episode_num <= 4000000:
+            progress = (self.episode_num - 2000000) / 2000000.0    
+            max_allowed_speed = 2.0 + progress * (new_purs_speed - 1.0 - 2.0)    
+            new_inv_speed = random.uniform(2.0, max_allowed_speed)
+        #phase four, hardcore
         else:
-            new_inv_speed = 0.5
+            new_inv_speed = random.uniform(2.0, new_purs_speed + 1.0)
         new_inv_acc = random.uniform(new_inv_speed/4, new_inv_speed/2)
         inv_pos = self.get_random_invader_start()
         purs_pos = self.get_random_pursuer_start()
         #brave new world
-        self.world.reset(purs_acc=self.new_purs_acc, prime_acc=0.5, purs_pos=[purs_pos],
-            inv_acc=new_inv_acc, purs_speed=new_purs_speed, inv_speed=new_inv_speed, prime_speed=1.0, inv_pos=[inv_pos])
+        self.world.reset(purs_acc=self.new_purs_acc, prime_acc=0.1, purs_pos=[purs_pos],
+            inv_acc=new_inv_acc, purs_speed=new_purs_speed, inv_speed=new_inv_speed, prime_speed=0.2, inv_pos=[inv_pos])
         #setting to pursue state
         self.world.pursuers[0].state = States.PURSUE
         self.world.pursuers[0].target = {"target": self.world.invaders[0], "tar_pos": self.world.invaders[0].position, 
@@ -123,14 +129,14 @@ class HerdingEnv(gym.Env):
         obs = self.world.pursuers[0].get_observation_herding()
         #reseting steps
         self.current_step = 0
-        self.last_inv_prime_dist = 0.0
+        self.last_inv_prime_dist = np.linalg.norm(self.world.prime.position - self.world.invaders[0].position)
         self.last_dist_to_inv = np.linalg.norm(self.world.pursuers[0].position - self.world.invaders[0].position)
         return obs, {}
 
     def get_random_invader_start(self):
         #random pos of invader, not too far or too close
         prime_pos = np.array([3.0, 3.0, 7.0])
-        dist = np.random.uniform(15.0, 20.0)
+        dist = np.random.uniform(12.0, 17.0)
         dir = np.random.randn(3)
         dir[2] = abs(dir[2]) 
         dir = dir / np.linalg.norm(dir)
@@ -174,37 +180,40 @@ class HerdingEnv(gym.Env):
         reward = 0.0
         terminated = False
         #time penalization
-        reward -= 1.0 
+        reward -= 0.1 
         curr_dist_to_inv = np.linalg.norm(pursuer.position - invader.position)
         #navigating penalty to invader
-        distance_penalty = curr_dist_to_inv * 0.1 
+        distance_penalty = curr_dist_to_inv * 0.01 
         reward -= distance_penalty
-        #penalty for pushing invader away (zero from same distance)
-        SAFE_RADIUS = 25.0
-        invader_threat_level = max(0.0, SAFE_RADIUS - current_inv_prime_dist)
-        reward -= invader_threat_level * 0.5
+        #penalty for pushing invader away (zero from certain distance)
+        # SAFE_RADIUS = 20.0
+        # invader_threat_level = max(0.0, SAFE_RADIUS - current_inv_prime_dist)
+        # reward -= invader_threat_level * 0.2
         #updating for next step
         self.last_dist_to_inv = curr_dist_to_inv
         # #reward for pushing invader away
-        # diff = current_inv_prime_dist - self.last_inv_prime_dist
-        # #reward, positive if invader is further away from prime
-        # reward += diff * 10.0  
+        diff = current_inv_prime_dist - self.last_inv_prime_dist
+        #reward, positive if invader is further away from prime
+        if current_inv_prime_dist < 20.0:
+            reward += diff * 5.0  
         #if invader crashed, it is good, but better to push him away
         if invader.crashed:
             reward += 2.0
             terminated = True
         #penalization for crash
         if pursuer.crashed:
-            reward -= 500.0
+            reward -= 1000.0
             terminated = True
         #penalization for breaking the defense
-        elif current_inv_prime_dist < 3.0: 
-            reward -= 500.0
+        if current_inv_prime_dist < 2.0: 
+            reward -= 2000.0
             terminated = True
         #reward for getting invader far
-        elif current_inv_prime_dist > 25.0:
-            reward += 500.0
-            terminated = True
+        elif current_inv_prime_dist > 20.0:
+            reward += 0.5
+        #whole game won
+        if truncated:
+            reward += min(50.0 * current_inv_prime_dist, 1000.0)
         self.last_inv_prime_dist = current_inv_prime_dist    
         obs = self._get_obs()
         return obs, reward, terminated, truncated, {}

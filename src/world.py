@@ -12,14 +12,16 @@ class SimulationWorld:
         self.sc = sc_config
         self._3d = _3d
         self.herding = herding
-        self.reset(purs_acc=purs_acc, purs_speed=purs_speed, prime_acc=prime_acc, prime_speed=prime_speed, inv_acc=inv_acc, inv_speed=inv_speed,
-                 prime_pos=prime_pos, inv_pos=inv_pos, purs_pos=purs_pos, purs_num=purs_num)
-
-    def reset(self, purs_acc=None, purs_speed=None, prime_acc=None, prime_speed=None, inv_acc=None, inv_speed=None,
-                 prime_pos=None, inv_pos=None, purs_pos=None, purs_num=None):
         self.init_params = {
             'purs_acc': purs_acc, 'purs_speed': purs_speed, 'prime_acc': prime_acc, 'prime_speed': prime_speed, 'inv_acc': inv_acc, 'inv_speed': inv_speed,
-            'prime_pos': prime_pos, 'inv_pos': inv_pos, 'purs_pos': purs_pos, 'purs_num': purs_num}
+            'prime_pos': prime_pos, 'inv_pos': inv_pos, 'purs_pos': purs_pos, 'purs_num': purs_num
+        }
+        self.reset()
+
+    def reset(self, **kwargs):
+        for key, value in kwargs.items():
+            if value is not None and key in self.init_params:
+                self.init_params[key] = value
         #resets to initial state
         self.time = 0.0
         self.captured_count = 0

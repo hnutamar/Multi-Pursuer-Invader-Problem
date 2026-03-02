@@ -41,7 +41,7 @@ def test_herding_model():
         vis.render(state, world_instance=world)
         #restarting episode
         if terminated or truncated:
-            print(f"Epizoda skončila! Poslední odměna: {reward:.1f}. Restartuji...")
+            print(f"Episode over! Last reward: {reward:.1f}.")
             plt.pause(1.0)
             obs, info = env.reset()
 

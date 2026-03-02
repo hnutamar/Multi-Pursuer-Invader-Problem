@@ -86,7 +86,7 @@ def main():
             if EPISODE_NUM == current_episode:
                 running = False
                 break
-            world.reset()
+            world.reset(purs_acc=3.5, inv_acc=2.0, prime_acc=1.3, purs_speed=6.0, inv_speed=4.0, prime_speed=3.5)
             step_counter = 1
             current_episode += 1
     if vis and PYBULLET:

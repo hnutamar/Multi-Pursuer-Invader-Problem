@@ -36,7 +36,7 @@ def make_env(env_rank, seed=0):
     
     return _init
 
-def main():
+def main_defense():
     #init
     _3d = True
     sc = Sim3DConfig(dt=0.02, purs_num=20, inv_num=1, obstacle=False, obstacle_rad=[3.0, 4.0], 
@@ -74,15 +74,15 @@ def main_herding():
     #model
     custom_policy = dict(activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]))
     print("Creating custom AI model...")
-    #model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy,verbose=1, 
-    #    tensorboard_log="./ppo_drone_tensorboard/")
-    model = PPO.load("first_decent_herding_brain", env=vec_env, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
-    save_freq = 300000/num_cpu
+    model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy,verbose=1, 
+        tensorboard_log="./ppo_drone_tensorboard/")
+    #model = PPO.load("first_decent_herding_brain", env=vec_env, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
+    save_freq = 500000/num_cpu
     checkpoint_callback = CheckpointCallback(save_freq=save_freq, save_path='./models_checkpoints/',
         name_prefix='herding_brain')
     #train
     print("Starting training...")
-    model.learn(total_timesteps=1_500_000, callback=checkpoint_callback, reset_num_timesteps=False)
+    model.learn(total_timesteps=2_500_000, callback=checkpoint_callback)
     #saving result
     print("Training done...")
     model.save("drone_herding_brain_gen1")

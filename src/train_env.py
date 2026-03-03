@@ -103,26 +103,26 @@ class HerdingEnv(gym.Env):
         super().reset(seed=seed)
         #random max speeds
         new_purs_speed = random.uniform(4.0, 8.0)
-        self.new_purs_acc = random.uniform(new_purs_speed/4, new_purs_speed/2)
+        self.new_purs_acc = random.uniform(new_purs_speed/2, new_purs_speed/1.3)
         #phase one, invader is basically on a spot
-        if self.episode_num <= 300000:
-            new_inv_speed = 0.5
+        if self.episode_num <= 600000:
+            new_inv_speed = random.uniform(1.0, 2.0)
             new_prime_speed = 0.05
         #phase two, invader is slowly moving
-        elif 300000 < self.episode_num <= 800000:
-            new_inv_speed = max((2.0 / 800000) * self.episode_num, 0.5)
-            new_prime_speed = max((1.0 / 800000) * self.episode_num, 0.05)
+        elif 600000 < self.episode_num <= 1300000:
+            new_inv_speed = random.uniform(2.0, (new_purs_speed / 1300000) * self.episode_num)
+            new_prime_speed = max((1.0 / 1300000) * self.episode_num, 0.05)
         #phase three, small change in speed
-        elif 800000 < self.episode_num <= 1300000:
-            progress = (self.episode_num - 800000) / 500000.0    
-            max_allowed_speed = 2.0 + progress * (new_purs_speed - 1.0 - 1.0)    
-            new_inv_speed = random.uniform(2.0, max_allowed_speed)
-            new_prime_speed = 1.0
+        # elif 800000 < self.episode_num <= 1300000:
+        #     progress = (self.episode_num - 800000) / 500000.0    
+        #     max_allowed_speed = 2.0 + progress * (new_purs_speed - 1.0 - 1.0)    
+        #     new_inv_speed = random.uniform(2.0, max_allowed_speed)
+        #     new_prime_speed = 1.0
         #phase four, hardcore
         else:
             new_inv_speed = random.uniform(2.0, new_purs_speed + 2.0)
             new_prime_speed = 1.0
-        new_inv_acc = random.uniform(new_inv_speed/4, new_inv_speed/2)
+        new_inv_acc = random.uniform(new_inv_speed/2, new_inv_speed/1.3)
         new_prime_acc = random.uniform(new_prime_speed/4, new_prime_speed/2)
         inv_pos = self.get_random_invader_start()
         purs_pos = self.get_random_pursuer_start()
@@ -192,6 +192,9 @@ class HerdingEnv(gym.Env):
         truncated = self.current_step >= self.max_steps
         reward = 0.0
         terminated = False
+        #gass leak
+        action_penalty = np.sum(np.square(action)) * 0.01 
+        reward -= action_penalty
         #time penalization
         #reward -= 0.1 
         #curr_dist_to_inv = np.linalg.norm(pursuer_pos - invader_pos)
@@ -225,9 +228,9 @@ class HerdingEnv(gym.Env):
         safe_distance = min(current_inv_prime_dist, 20.0)
         safety_ratio = safe_distance / 20.0
         reward += safety_ratio * 0.05
-        
-        inv_diff = np.linalg.norm(self.last_inv_pos - invader_pos)
-        reward -= inv_diff * 0.1
+        if current_inv_prime_dist > 15:
+            inv_diff = np.linalg.norm(self.last_inv_pos - invader_pos)
+            reward -= inv_diff * 0.05
         self.last_inv_pos = invader_pos
         # elif current_inv_prime_dist > 20.0:
         #     reward += 0.5

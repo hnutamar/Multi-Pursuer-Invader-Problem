@@ -18,6 +18,7 @@ def test_herding_model():
     #visualizer
     vis = MatplotlibVisualizer(sc_config=new_sc, _3d=True, quiver=False)
     #loading the model
+    #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
     model_path = "drone_herding_brain_gen1" 
     print(f"Loading MLP: {model_path} ...")
     model = PPO.load(model_path)
@@ -25,11 +26,13 @@ def test_herding_model():
     print("Start")
     #running forever
     running = True
+    whole_reward = 0
     while running:
         #AI action
         action, _states = model.predict(obs, deterministic=True)
         #step
         obs, reward, terminated, truncated, info = env.step(action)
+        whole_reward += reward
         world = env.world
         state = world.get_state()
         #controlling visualizer window
@@ -41,7 +44,8 @@ def test_herding_model():
         vis.render(state, world_instance=world)
         #restarting episode
         if terminated or truncated:
-            print(f"Episode over! Last reward: {reward:.1f}.")
+            print(f"Episode over! Reward: {whole_reward:.1f}.")
+            whole_reward = 0
             plt.pause(1.0)
             obs, info = env.reset()
 

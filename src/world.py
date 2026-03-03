@@ -25,8 +25,6 @@ class SimulationWorld:
         #resets to initial state
         self.time = 0.0
         self.captured_count = 0
-        self.purs_crash = False
-        self.prime_crashed = False
         #inits of agents
         self._init_agents(**self.init_params)
         return self.get_state()
@@ -226,7 +224,7 @@ class SimulationWorld:
             for idx in np.where(swarm_crash_mask)[0]:
                 free_purs[idx].crashed = True
         #ending check
-        done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
+        done = self.prime.crashed #or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
         return self.get_state(), done
 
     def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):

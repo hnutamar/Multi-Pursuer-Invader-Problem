@@ -11,6 +11,7 @@ class Invader(Agent):
         self.KD = 0.1
         #collision parameters
         self.coll_obs = 5.0
+        self.coll_gr = 2.0
         
     def evade(self, pursuers, target, obstacles):
         v_dir = np.zeros_like(self.position)
@@ -26,9 +27,10 @@ class Invader(Agent):
             v_dir = self.pursuit_pure_pursuit(target)
         #repulsive dirs to avoid collision with obstacle
         obs_vel = self.repulsive_force_obs(self.coll_obs)
+        ground_vel = self.repulsive_force_ground(self.coll_gr)
         #obs_vel = np.zeros_like(self.position)
         #summing all vectors, making acc out of them
-        v_sum = v_dir + obs_vel
+        v_sum = v_dir + obs_vel + ground_vel
         #norming speed to the possible limit
         sum_norm = np.linalg.norm(v_sum)
         if sum_norm > self.cruise_speed:
@@ -59,6 +61,17 @@ class Invader(Agent):
             dir_ = dir_ / np.linalg.norm(dir_)
         dir_ = dir_ * self.cruise_speed
         return dir_
+    
+    def repulsive_force_ground(self, coll):
+        total_force = np.zeros_like(self.position)
+        if len(total_force) == 2:
+            return total_force
+        if self.position[2] - self.my_rad < coll:
+            magnitude = (1.0 / self.position[2]) - (1.0 / coll)
+            rep_dir = np.array([0, 0, 1])
+            total_force = rep_dir * magnitude * self.cruise_speed
+        #total force
+        return total_force
     
     def repulsive_force_obs(self, coll):
         rep_dir = np.zeros_like(self.position)

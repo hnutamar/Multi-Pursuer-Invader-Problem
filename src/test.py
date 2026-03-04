@@ -13,20 +13,21 @@ def test_herding_model():
     print("Creating world for testing...")
     #setting env
     new_sc = Sim3DConfig(dt=0.02, purs_num=1, inv_num=1, obstacle=False)
-    world = SimulationWorld(new_sc, _3d=True, herding=True) 
+    world = SimulationWorld(new_sc, _3d=True, herding=True, purs_speed=[4.0], purs_acc=[3.0]) 
     env = HerdingEnv(world_instance=world, sc=new_sc, test=True)
-    #visualizer
-    vis = MatplotlibVisualizer(sc_config=new_sc, _3d=True, quiver=False)
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
-    model_path = "drone_herding_brain_gen1" 
+    model_path = "drone_herding_brain_gen2" 
     print(f"Loading MLP: {model_path} ...")
     model = PPO.load(model_path)
+    env.load_teammate_brain(model_path)
     obs, info = env.reset()
     print("Start")
     #running forever
     running = True
     whole_reward = 0
+    #visualizer
+    vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
     while running:
         #AI action
         action, _states = model.predict(obs, deterministic=True)
@@ -48,6 +49,8 @@ def test_herding_model():
             whole_reward = 0
             plt.pause(1.0)
             obs, info = env.reset()
+            #visualizer
+            vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
 
 if __name__ == "__main__":
     test_herding_model()

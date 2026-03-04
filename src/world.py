@@ -81,14 +81,16 @@ class SimulationWorld:
         rnd_acc_inv = np.full(self.sc.INVADER_NUM, inv_acc) if inv_acc is not None else np.random.uniform(1.3, 1.5, self.sc.INVADER_NUM)
         acc_inv = inv_acc or 1.0
         speed_inv = inv_speed or 5.0
-        acc_purs = purs_acc or 1.0
-        speed_purs = purs_speed or 5.0
+        #acc_purs = purs_acc or 1.0
+        rnd_purs_acc = purs_acc
+        rnd_speed_purs = purs_speed
+        #speed_purs = purs_speed or 5.0
         #pursuer init
         self.pursuers = []
         for i in range(self.sc.PURSUER_NUM):
             p_num = purs_num[i] if purs_num is not None else np.random.randint(0, 1001)
-            p = Pursuer(position=rnd_points_purs[i], max_speed=speed_purs,
-                max_acc=acc_purs, max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=p_num, purs_vis=self.sc.PURS_VIS, dt=self.sc.DT)
+            p = Pursuer(position=rnd_points_purs[i], max_speed=rnd_speed_purs[i],
+                max_acc=rnd_purs_acc[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=p_num, purs_vis=self.sc.PURS_VIS, dt=self.sc.DT)
             self.pursuers.append(p)
         #invader init
         self.invaders = []
@@ -173,6 +175,23 @@ class SimulationWorld:
                 dist_p_o = cdist(prime_pos, self.obs_centers)[0]
                 if np.any(dist_p_o < prime_rad + self.obs_radii):
                     self.prime.crashed = True
+            #Prime vs Ground
+            if self._3d and prime_pos[0][2] < prime_rad:
+                self.prime.crashed = True
+        #Agents vs Ground
+        if self._3d:
+            #Invaders vs Ground
+            if len(all_inv_pos) > 0:
+                # Vybere všechny Z-tové souřadnice (sloupec s indexem 2) a porovná je s poloměrem
+                crashed_inv_ground_mask = all_inv_pos[:, 2] < all_inv_rad
+                for idx in np.where(crashed_inv_ground_mask)[0]:
+                    free_inv[idx].crashed = True        
+            #Pursuers vs Ground
+            if len(all_purs_pos) > 0:
+                # To samé pro vaše agenty
+                crashed_purs_ground_mask = all_purs_pos[:, 2] < all_purs_rad
+                for idx in np.where(crashed_purs_ground_mask)[0]:
+                    free_purs[idx].crashed = True
         #Agents vs Obstacles
         if self.obs_centers is not None:
             #Invaders vs Obstacles

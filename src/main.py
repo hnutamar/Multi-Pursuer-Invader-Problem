@@ -15,13 +15,13 @@ def main():
     MANUAL_CONTROL = False
     #config
     if _3d:
-        sc = Sim3DConfig(dt=0.02, purs_num=10, inv_num=0, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
+        sc = Sim3DConfig(dt=0.02, purs_num=15, inv_num=3, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
     else:
         sc = Sim2DConfig(dt=0.02, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=True, 
                          obstacle_rad=[4.0, 4.0], obstacle_pos=[np.array([17.0, 6.0]), np.array([6.0, 17.0])])
     #world, physics
     inv_pos = np.array([[25.24, 20.15, 15.58]])
-    world = SimulationWorld(sc, _3d=_3d, purs_acc=3.5, inv_acc=2.0, prime_acc=1.3, purs_speed=6.0, inv_speed=4.0, prime_speed=3.5)
+    world = SimulationWorld(sc, _3d=_3d, purs_acc=3.5, inv_acc=6.0, prime_acc=1.3, purs_speed=4.0, inv_speed=8.0, prime_speed=3.5)
     #visualization
     SHOW_VISUALIZATION = True
     vis = None
@@ -56,9 +56,9 @@ def main():
         #physics step
         state, done = world.step(manual_invader_vel=manual_action)
         #for graph
-        history_p.append(np.array(state['pursuers']))
-        history_i.append(np.array(state['invaders']))
-        history_u.append(np.array(state['prime']))
+        #history_p.append(np.array(state['pursuers']))
+        #history_i.append(np.array(state['invaders']))
+        #history_u.append(np.array(state['prime']))
         step_counter += 1
         #graphics
         if vis and step_counter % RENDER_EVERY == 0:

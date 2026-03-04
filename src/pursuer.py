@@ -17,11 +17,13 @@ class Pursuer(Agent):
         self.rep_in_form = 2.3
         self.rep_in_purs = 0.7
         self.rep_obs = 1.9
+        self.rep_gr = 1.9
         self.rep_invs = 2.3
         self.prime_rep_in_purs = 2.5
         #collision radiuses
         self.prime_coll_r = 10.5
         self.collision_r = min(purs_vis, 2.0)
+        self.coll_gr = 2.0
         #formation radiuses
         #self.formation_r = 0.9
         #self.formation_r_min = 0.4
@@ -127,14 +129,16 @@ class Pursuer(Agent):
         rep_vel = self.repulsive_force_purs(self.collision_r)
         #repulsive dirs to avoid collision with obstacle
         obs_vel = self.repulsive_force_obs(self.coll_obs)
+        #repulsive force to avoid ground
+        ground_vel = self.repulsive_force_ground(self.coll_gr)
         #returning sum of those
         if not np.array_equal(form_vel, np.zeros_like(form_vel)):
             #pushing whole formation away from invaders and obstacle
             invs_rep_vel = self.repulsive_inv_force(targets)
-            sum_vel = self.rep_in_form*rep_vel + self.form*form_vel + self.rep_obs*obs_vel + self.rep_invs*invs_rep_vel
+            sum_vel = self.rep_in_form*rep_vel + self.form*form_vel + self.rep_obs*obs_vel + self.rep_invs*invs_rep_vel + self.rep_gr * ground_vel
         else:
             prime_rep_vel = self.repulsive_force_prime(self.prime_coll_r)
-            sum_vel = self.purs*tar_vel + self.rep_in_purs*rep_vel + self.prime_rep_in_purs*prime_rep_vel + self.rep_obs*obs_vel
+            sum_vel = self.purs*tar_vel + self.rep_in_purs*rep_vel + self.prime_rep_in_purs*prime_rep_vel + self.rep_obs*obs_vel + self.rep_gr * ground_vel
         #norming speed to the possible limit
         sum_norm = np.linalg.norm(sum_vel)
         if sum_norm > self.cruise_speed:
@@ -159,17 +163,24 @@ class Pursuer(Agent):
         MAX_DIST = 40.0        #max possible distance
         MAX_SPEED = self.max_speed        #max speed
         MAX_DENSITY = 20.0     #max pursuer density
-        MAX_RADIUS = 10.0      #max obstacle radius
+        MAX_RADIUS = 5.0      #max obstacle radius
+        MAX_DRONE_RAD = 0.7
         FAR_AWAY = 100.0 / MAX_DIST  #far away, bigger number
         MAX_ACC = self.max_acc
         #my state
-        my_obs = np.concatenate([self.curr_speed / MAX_SPEED, self.curr_acc / MAX_ACC]) 
-        #prime state
-        prime_obs = np.concatenate([(self.prime_pos - self.position) / MAX_DIST, self.prime_vel / MAX_SPEED])
+        my_obs = np.concatenate([self.curr_speed / MAX_SPEED, self.curr_acc / MAX_ACC, [self.position[2] / MAX_COORD], [self.my_rad / MAX_DRONE_RAD]]) 
+        # prime state
+        prime_rad_obs = np.array([self.prime_rad / MAX_DRONE_RAD], dtype=np.float32)
+        prime_obs = np.concatenate([
+            (self.prime_pos - self.position) / MAX_DIST, 
+            self.prime_vel / MAX_SPEED,
+            prime_rad_obs
+        ])
         #pursuer state + density
-        pursuers_obs = np.full(18, FAR_AWAY, dtype=np.float32) 
+        pursuers_obs = np.full(21, FAR_AWAY, dtype=np.float32)
         for i in range(3):
-            pursuers_obs[i*6 + 3 : i*6 + 6] = 0.0
+            pursuers_obs[i*7 + 3 : i*7 + 6] = 0.0
+            pursuers_obs[i*7 + 6] = 0.0
         density = 0
         if len(self.all_purs_pos) > 0:
             dists = np.linalg.norm(self.all_purs_pos - self.position, axis=1)
@@ -181,14 +192,17 @@ class Pursuer(Agent):
                 #normalization
                 pursuers_obs[start : start+3] = (self.all_purs_pos[idx] - self.position) / MAX_DIST
                 pursuers_obs[start+3 : start+6] = self.all_purs_vel[idx] / MAX_SPEED
-        
+                pursuers_obs[start+6] = self.all_purs_rads[idx] / MAX_DRONE_RAD
         density_obs = np.array([density / MAX_DENSITY], dtype=np.float32)
-        #invader state
+        # invader state
         inv_rel_pos = (self.target["tar_pos"] - self.position) / MAX_DIST
         inv_norm_vel = self.target["tar_vel"] / MAX_SPEED
         inv_to_prime_vec = (self.prime_pos - self.target["tar_pos"]) / MAX_DIST
         inv_to_prime_dist = np.array([np.linalg.norm(inv_to_prime_vec)], dtype=np.float32)
-        invaders_obs = np.concatenate([inv_rel_pos, inv_norm_vel, inv_to_prime_vec, inv_to_prime_dist]) 
+        #radius
+        inv_rad_obs = np.array([self.target["tar_rad"] / MAX_DRONE_RAD], dtype=np.float32)
+        invaders_obs = np.concatenate([inv_rel_pos, inv_norm_vel, inv_to_prime_vec, inv_to_prime_dist,
+                       inv_rad_obs])
         #closest obstacles
         obstacles_obs = np.full(8, FAR_AWAY, dtype=np.float32)
         obstacles_obs[3] = 0.0 
@@ -203,11 +217,11 @@ class Pursuer(Agent):
                 obstacles_obs[start+3] = self.obs_radii[idx] / MAX_RADIUS
         #final vector
         final_obs = np.concatenate([
-            my_obs,         # 6
-            prime_obs,      # 6
+            my_obs,         # 8
+            prime_obs,      # 7
             density_obs,    # 1
-            pursuers_obs,   # 18
-            invaders_obs,   # 10
+            pursuers_obs,   # 21
+            invaders_obs,   # 11
             obstacles_obs   # 8
         ]).astype(np.float32)
         return final_obs
@@ -470,6 +484,17 @@ class Pursuer(Agent):
             self.ignored_targs.clear()
             return True
         return False 
+    
+    def repulsive_force_ground(self, coll):
+        total_force = np.zeros_like(self.position)
+        if len(total_force) == 2:
+            return total_force
+        if self.position[2] - self.my_rad < coll:
+            magnitude = (1.0 / self.position[2]) - (1.0 / coll)
+            rep_dir = np.array([0, 0, 1])
+            total_force = rep_dir * magnitude * self.cruise_speed
+        #total force
+        return total_force
     
     def repulsive_force_purs(self, coll: float):
         if len(self.all_purs_pos) == 0:

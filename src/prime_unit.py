@@ -17,6 +17,7 @@ class Prime_unit(Agent):
         self.t_circle = 7.0
         #collision parameters
         self.coll_obs = 10.0
+        self.coll_gr = 5.0
         
     def fly(self, way_point, invaders, pursuers, mode, obstacles):
         self.obs_centers, self.obs_radii = obstacles
@@ -31,6 +32,7 @@ class Prime_unit(Agent):
         rep_vel_p = np.zeros_like(self.position)
         #repulsive dirs to avoid collision with obstacle
         obs_vel = self.repulsive_force_obs(self.coll_obs)
+        ground_vel = self.repulsive_force_ground(self.coll_gr)
         if pursuers:
             rep_vel_p = self.repulsive_force(pursuers, pursuers[0].formation_r_min + 0.1, True)
         #direction of the goal
@@ -39,7 +41,7 @@ class Prime_unit(Agent):
         elif mode == Modes.LINE:
             goal_vel = self.goal_force(way_point)
         #summing all the velocities
-        sum_vel = goal_vel + self.rep_force * rep_vel_i + self.rep_force * rep_vel_p + self.rep_obs * obs_vel
+        sum_vel = goal_vel + self.rep_force * rep_vel_i + self.rep_force * rep_vel_p + self.rep_obs * obs_vel + ground_vel
         #norming speed to the possible limit
         sum_norm = np.linalg.norm(sum_vel)
         if sum_norm > self.biggest_poss_speed:
@@ -113,3 +115,14 @@ class Prime_unit(Agent):
         magnitudes = (1.0 / valid_dists_surface) - (1.0 / coll)
         #total force
         return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0) * self.cruise_speed
+    
+    def repulsive_force_ground(self, coll):
+        total_force = np.zeros_like(self.position)
+        if len(total_force) == 2:
+            return total_force
+        if self.position[2] - self.my_rad < coll:
+            magnitude = (1.0 / self.position[2]) - (1.0 / coll)
+            rep_dir = np.array([0, 0, 1])
+            total_force = rep_dir * magnitude * self.cruise_speed
+        #total force
+        return total_force

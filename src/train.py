@@ -18,28 +18,43 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3 import PPO
 
+import glob
+
 class UpdateSwarmCallback(BaseCallback):
-    #callback for updating the brain
-    def __init__(self, env, update_freq=100000, verbose=0):
+    def __init__(self, env, update_freq=500000, verbose=0):
         super().__init__(verbose)
         self.env = env
         self.update_freq = update_freq
         self.next_update = 0
-        #absolute paths
-        self.save_dir = os.path.abspath("./models")
+        self.save_dir = os.path.abspath("./models/history")
         os.makedirs(self.save_dir, exist_ok=True) 
-        self.temp_path = os.path.join(self.save_dir, "temp_swarm_brain")
+        # Uložíme si Gen1 jako úplně první historii
+        self.generation = 1
     def _on_training_start(self) -> None:
-        #finding out the start step
         start_step = self.model.num_timesteps
-        #computing next milestone
         zbytek = start_step % self.update_freq
         self.next_update = start_step + (self.update_freq - zbytek)
     def _on_step(self) -> bool:
         if self.num_timesteps >= self.next_update:
-            print(f"\n[INFO] Step {self.num_timesteps}: updating brain!")
-            self.model.save(self.temp_path)
-            self.env.env_method("load_teammate_brain", self.temp_path)
+            self.generation += 1
+            print(f"\n[INFO] Step {self.num_timesteps}: Making gen {self.generation}!")        
+            # 1. Uložíme novou generaci do archivu
+            new_brain_path = os.path.join(self.save_dir, f"gen_{self.generation}")
+            self.model.save(new_brain_path)        
+            # 2. Najdeme všechny dosavadní generace v archivu
+            all_brains = glob.glob(os.path.join(self.save_dir, "gen_*.zip"))        
+            # 3. NÁHODNÝ VÝBĚR: Místo nejnovějšího mozku nabereme náhodnou minulou verzi!
+            # Tím zabráníme tomu, aby všichni letěli jen dozadu nebo jen dopředu.
+            if all_brains:
+                rnd_num = np.random.randint(0, 3)
+                if rnd_num == 0:
+                    selected_brain = random.choice(all_brains)
+                else:
+                    selected_brain = all_brains[0]
+                # Odřízneme .zip, protože SB3 load si to přidává samo
+                selected_brain_clean = selected_brain.replace('.zip', '') 
+                print(f"[INFO] New brain: {os.path.basename(selected_brain_clean)}")            
+                self.env.env_method("load_teammate_brain", selected_brain_clean)    
             self.next_update += self.update_freq    
         return True
 
@@ -86,24 +101,26 @@ def main_herding():
     num_cpu = 6
     #vectorized env
     vec_env = SubprocVecEnv([make_env(i) for i in range(num_cpu)], start_method="spawn")
-    vec_env.env_method("load_teammate_brain", "drone_herding_brain_gen1.zip")
     #model
     custom_policy = dict(activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]))
     print("Creating custom AI model...")
-    #model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy,verbose=1, 
-    #    tensorboard_log="./ppo_drone_tensorboard/")
-    custom_objects = {
-        "ent_coef": 0.05,
-        "learning_rate": 0.0003
-    }
-    model = PPO.load("drone_herding_brain_gen1", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
+    model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy,verbose=1, 
+        tensorboard_log="./ppo_drone_tensorboard/")
+    init_brain_path = "./models/history/g_0"
+    model.save(init_brain_path)
+    vec_env.env_method("load_teammate_brain", init_brain_path)
+    # custom_objects = {
+    #     "ent_coef": 0.005,
+    #     "learning_rate": 0.0003
+    # }
+    # model = PPO.load("drone_herding_brain_gen1", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
     save_freq = 500000/num_cpu
     checkpoint_callback = CheckpointCallback(save_freq=save_freq, save_path='./models_checkpoints/',
         name_prefix='herding_brain')
     #train
     print("Starting training...")
-    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=100000)
-    model.learn(total_timesteps=1_500_000, callback=swarm_callback, reset_num_timesteps=False, tb_log_name="PPO_Herd_Phase_2")
+    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=200000)
+    model.learn(total_timesteps=2_500_000, callback=swarm_callback, tb_log_name="PPO_Gen2_from_scratch_v2.0")
     #saving result
     print("Training done...")
     model.save("drone_herding_brain_gen2")

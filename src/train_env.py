@@ -128,9 +128,10 @@ class HerdingEnv(gym.Env):
             all_agents_pos = np.vstack([inv_pos, purs_positions,np.array([3.0, 3.0, 7.0])])
             all_agents_rad = np.concatenate([[drone_rad],np.full(new_purs_num, drone_rad), [prime_rad]])
             #obs centers and radii
-            obs_centers, obs_rads = self.generate_safe_obstacles(num_obs, all_agents_pos, all_agents_rad, 15, True)
+            obs_centers, obs_rads = self.generate_safe_obstacles(num_obs, all_agents_pos, all_agents_rad, 20, True)
             self.world.sc.obs_pos = obs_centers
             self.world.sc.obs_rads = obs_rads
+            self.world.sc.obstacle = True
         else:
             self.world.sc.obstacle = False
         #brave new world
@@ -155,7 +156,7 @@ class HerdingEnv(gym.Env):
         #updating the brain
         self.teammate_brain = PPO.load(model_path, device="cpu")
 
-    def generate_safe_obstacles(self, num_obs, agent_positions, agent_radii, max_coord, is_3d, min_r=1.0, max_r=5.0, safe_margin=2.0):
+    def generate_safe_obstacles(self, num_obs, agent_positions, agent_radii, max_coord, is_3d, min_r=1.0, max_r=5.0, safe_margin=1.5):
         #arrays
         centers = []
         radii = []
@@ -221,7 +222,9 @@ class HerdingEnv(gym.Env):
         #safe clip
         positions[:, 2] = np.clip(positions[:, 2], 1.0, np.inf)
         #so that learning pursuer is not always by prime
-        np.random.shuffle(positions)
+        rnd_num = np.random.randint(0, 4)
+        if rnd_num != 1:
+            np.random.shuffle(positions)
         return positions
 
     def step(self, action):
@@ -232,7 +235,7 @@ class HerdingEnv(gym.Env):
         if hasattr(self, 'teammate_brain') and self.teammate_brain is not None:
             for i in range(1, len(self.world.pursuers)):
                 obs_i = self.world.pursuers[i].get_observation_herding() 
-                action_i, _ = self.teammate_brain.predict(obs_i, deterministic=False)
+                action_i, _ = self.teammate_brain.predict(obs_i, deterministic=True)
                 all_raw_actions.append(action_i)
         else:
             #does nothing, if there is no brain
@@ -264,15 +267,22 @@ class HerdingEnv(gym.Env):
         truncated = self.current_step >= self.max_steps
         reward = 0.0
         terminated = False
+        pursuer_positions = np.array([p.position for p in self.world.pursuers if not p.crashed])
         #penalty for getting too close to other pursuer
         colleague_penalty = 0.0
-        safe_drone_dist = 1.0
+        safe_drone_dist = 2.0
         for i in range(1, len(self.world.pursuers)):
             dist_to_colleague = np.linalg.norm(pursuer_pos - self.world.pursuers[i].position) - pursuer_rad - self.world.pursuers[i].my_rad
             #technically repulsive force
             if dist_to_colleague < safe_drone_dist:
-                colleague_penalty -= (safe_drone_dist - dist_to_colleague) * 0.75        
+                colleague_penalty -= (safe_drone_dist - dist_to_colleague) * 0.3        
         reward += colleague_penalty
+        #invader in center of mass reward
+        if len(pursuer_positions) > 1:
+            center_of_mass = np.mean(pursuer_positions, axis=0)
+            invader_com_dist = np.linalg.norm(center_of_mass - invader_pos)
+            com_reward = max(0.0, 5.0 - invader_com_dist) * 0.02
+            reward += com_reward
         # #reward for pushing invader away
         diff = current_inv_prime_dist - self.last_inv_prime_dist
         #reward, positive if invader is further away from prime

@@ -17,7 +17,8 @@ def test_herding_model():
     env = HerdingEnv(world_instance=world, sc=new_sc, test=True)
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
-    model_path = "drone_herding_brain_gen2" 
+    #model_path = "drone_herding_brain_gen1" 
+    model_path = "./models/history/gen_2" 
     print(f"Loading MLP: {model_path} ...")
     model = PPO.load(model_path)
     env.load_teammate_brain(model_path)
@@ -49,6 +50,8 @@ def test_herding_model():
             whole_reward = 0
             plt.pause(1.0)
             obs, info = env.reset()
+            #if hasattr(vis, 'is_open') and not vis.is_open:
+            #    vis.is_open = False
             #visualizer
             vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
 

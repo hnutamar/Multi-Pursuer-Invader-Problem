@@ -161,7 +161,7 @@ class Pursuer(Agent):
         #observation for herding NN, everything normalized
         MAX_COORD = 30.0       #world
         MAX_DIST = 40.0        #max possible distance
-        MAX_SPEED = self.max_speed        #max speed
+        MAX_SPEED = self.cruise_speed        #max speed
         MAX_DENSITY = 20.0     #max pursuer density
         MAX_RADIUS = 5.0      #max obstacle radius
         MAX_DRONE_RAD = 0.7

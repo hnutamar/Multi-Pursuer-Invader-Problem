@@ -166,9 +166,9 @@ class MatplotlibVisualizer:
             #color according to the state
             if p_state[0] == States.PURSUE:
                 if p_state[1][1] == 1:
-                    p_dot.set_color("#000000")
-                else:
                     p_dot.set_color("#FFEE00")
+                else:
+                    p_dot.set_color("#000000")
             else:
                 p_dot.set_color('#d62728')
                 

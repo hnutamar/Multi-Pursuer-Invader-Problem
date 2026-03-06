@@ -162,7 +162,7 @@ class Pursuer(Agent):
         MAX_COORD = 30.0       #world
         MAX_DIST = 40.0        #max possible distance
         MAX_SPEED = self.cruise_speed        #max speed
-        MAX_DENSITY = 20.0     #max pursuer density
+        MAX_DENSITY = 6.0     #max pursuer density
         MAX_RADIUS = 5.0      #max obstacle radius
         MAX_DRONE_RAD = 0.7
         FAR_AWAY = 100.0 / MAX_DIST  #far away, bigger number
@@ -188,7 +188,7 @@ class Pursuer(Agent):
             closest_indices = np.argsort(dists)[:3]
             #iterating from closest indeces
             for i, idx in enumerate(closest_indices):
-                start = i * 6
+                start = i * 7
                 #normalization
                 pursuers_obs[start : start+3] = (self.all_purs_pos[idx] - self.position) / MAX_DIST
                 pursuers_obs[start+3 : start+6] = self.all_purs_vel[idx] / MAX_SPEED

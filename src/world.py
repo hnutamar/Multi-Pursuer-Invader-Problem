@@ -124,6 +124,7 @@ class SimulationWorld:
         #filtering living drones
         free_inv = [inv for inv in self.invaders if not inv.crashed]
         free_purs = [pur for pur in self.pursuers if not pur.crashed]
+        self.free_purs = free_purs
         all_inv_pos, all_inv_vel, all_inv_rad, all_inv_pnums, _ = self._get_safe_agent_data(free_inv, inv=True)
         all_purs_pos, all_purs_vel, all_purs_rad, _, all_purs_targets = self._get_safe_agent_data(free_purs, inv=False)
         #invader move

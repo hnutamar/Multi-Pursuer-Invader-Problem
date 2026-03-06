@@ -17,7 +17,7 @@ from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3 import PPO
-
+from typing import Callable
 import glob
 
 class UpdateSwarmCallback(BaseCallback):
@@ -28,35 +28,41 @@ class UpdateSwarmCallback(BaseCallback):
         self.next_update = 0
         self.save_dir = os.path.abspath("./models/history")
         os.makedirs(self.save_dir, exist_ok=True) 
-        # Uložíme si Gen1 jako úplně první historii
+        #gen1
         self.generation = 1
     def _on_training_start(self) -> None:
         start_step = self.model.num_timesteps
-        zbytek = start_step % self.update_freq
-        self.next_update = start_step + (self.update_freq - zbytek)
+        rest = start_step % self.update_freq
+        self.next_update = start_step + (self.update_freq - rest)
     def _on_step(self) -> bool:
         if self.num_timesteps >= self.next_update:
             self.generation += 1
             print(f"\n[INFO] Step {self.num_timesteps}: Making gen {self.generation}!")        
-            # 1. Uložíme novou generaci do archivu
+            #new generation
             new_brain_path = os.path.join(self.save_dir, f"gen_{self.generation}")
             self.model.save(new_brain_path)        
-            # 2. Najdeme všechny dosavadní generace v archivu
+            #every brain in archive
             all_brains = glob.glob(os.path.join(self.save_dir, "gen_*.zip"))        
-            # 3. NÁHODNÝ VÝBĚR: Místo nejnovějšího mozku nabereme náhodnou minulou verzi!
-            # Tím zabráníme tomu, aby všichni letěli jen dozadu nebo jen dopředu.
+            #random pick
             if all_brains:
-                rnd_num = np.random.randint(0, 3)
-                if rnd_num == 0:
-                    selected_brain = random.choice(all_brains)
-                else:
-                    selected_brain = all_brains[0]
-                # Odřízneme .zip, protože SB3 load si to přidává samo
-                selected_brain_clean = selected_brain.replace('.zip', '') 
-                print(f"[INFO] New brain: {os.path.basename(selected_brain_clean)}")            
-                self.env.env_method("load_teammate_brain", selected_brain_clean)    
+                latest_brain_path = os.path.join(self.save_dir, f"gen_{self.generation}.zip")
+                #every env
+                for env_idx in range(self.env.num_envs):
+                    if random.random() < 0.4:
+                        selected_brain = random.choice(all_brains)
+                    else:
+                        selected_brain = latest_brain_path    
+                    selected_brain_clean = selected_brain.replace('.zip', '')
+                    print(f"[INFO] Env {env_idx} new brain: {os.path.basename(selected_brain_clean)}")
+                    #loading only to one env
+                    self.env.env_method("load_teammate_brain", selected_brain_clean, indices=[env_idx])   
             self.next_update += self.update_freq    
         return True
+    
+def linear_schedule(initial_value: float) -> Callable[[float], float]:
+    def func(progress_remaining: float) -> float:
+        return progress_remaining * initial_value
+    return func
 
 def make_env(env_rank, seed=0):
     def _init():
@@ -98,29 +104,29 @@ def main_defense():
     model.save("drone_swarm_brain_gen1")
     
 def main_herding():
-    num_cpu = 6
+    num_cpu = 10
     #vectorized env
     vec_env = SubprocVecEnv([make_env(i) for i in range(num_cpu)], start_method="spawn")
     #model
     custom_policy = dict(activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]))
     print("Creating custom AI model...")
     model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy,verbose=1, 
-        tensorboard_log="./ppo_drone_tensorboard/")
+        tensorboard_log="./ppo_drone_tensorboard/", ent_coef=0.005, learning_rate=linear_schedule(0.0003))
     init_brain_path = "./models/history/g_0"
     model.save(init_brain_path)
     vec_env.env_method("load_teammate_brain", init_brain_path)
     # custom_objects = {
-    #     "ent_coef": 0.005,
-    #     "learning_rate": 0.0003
+    #      "ent_coef": 0.03,
+    #      "learning_rate": 0.0003
     # }
-    # model = PPO.load("drone_herding_brain_gen1", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
-    save_freq = 500000/num_cpu
-    checkpoint_callback = CheckpointCallback(save_freq=save_freq, save_path='./models_checkpoints/',
-        name_prefix='herding_brain')
+    #model = PPO.load("the_best_gen2", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
+    #save_freq = 500000/num_cpu
+    #checkpoint_callback = CheckpointCallback(save_freq=save_freq, save_path='./models_checkpoints/',
+    #    name_prefix='herding_brain')
     #train
     print("Starting training...")
-    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=200000)
-    model.learn(total_timesteps=2_500_000, callback=swarm_callback, tb_log_name="PPO_Gen2_from_scratch_v2.0")
+    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=350000)
+    model.learn(total_timesteps=20_500_000, callback=swarm_callback, tb_log_name="PPO_Marathon")
     #saving result
     print("Training done...")
     model.save("drone_herding_brain_gen2")

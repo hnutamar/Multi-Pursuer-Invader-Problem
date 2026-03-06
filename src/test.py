@@ -18,7 +18,7 @@ def test_herding_model():
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
     #model_path = "drone_herding_brain_gen1" 
-    model_path = "./models/history/gen_2" 
+    model_path = "./models/history/gen_9" 
     print(f"Loading MLP: {model_path} ...")
     model = PPO.load(model_path)
     env.load_teammate_brain(model_path)

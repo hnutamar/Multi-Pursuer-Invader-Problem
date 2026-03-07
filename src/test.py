@@ -18,7 +18,7 @@ def test_herding_model():
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
     #model_path = "drone_herding_brain_gen1" 
-    model_path = "./models/history/gen_9" 
+    model_path = "./models/history/gen_14" 
     print(f"Loading MLP: {model_path} ...")
     model = PPO.load(model_path)
     env.load_teammate_brain(model_path)
@@ -28,7 +28,7 @@ def test_herding_model():
     running = True
     whole_reward = 0
     #visualizer
-    vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
+    #vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
     while running:
         #AI action
         action, _states = model.predict(obs, deterministic=True)
@@ -36,24 +36,24 @@ def test_herding_model():
         obs, reward, terminated, truncated, info = env.step(action)
         whole_reward += reward
         world = env.world
-        state = world.get_state()
+        #state = world.get_state()
         #controlling visualizer window
-        if hasattr(vis, 'is_open') and not vis.is_open:
-            print("Window closed, ending...")
-            running = False
-            break
+        # if hasattr(vis, 'is_open') and not vis.is_open:
+        #     print("Window closed, ending...")
+        #     running = False
+        #     break
         #rendering
-        vis.render(state, world_instance=world)
+        #vis.render(state, world_instance=world)
         #restarting episode
         if terminated or truncated:
             print(f"Episode over! Reward: {whole_reward:.1f}.")
             whole_reward = 0
-            plt.pause(1.0)
+            #plt.pause(1.0)
             obs, info = env.reset()
             #if hasattr(vis, 'is_open') and not vis.is_open:
             #    vis.is_open = False
             #visualizer
-            vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
+            #vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
 
 if __name__ == "__main__":
     test_herding_model()

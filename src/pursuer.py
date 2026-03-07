@@ -161,68 +161,105 @@ class Pursuer(Agent):
         #observation for herding NN, everything normalized
         MAX_COORD = 30.0       #world
         MAX_DIST = 40.0        #max possible distance
-        MAX_SPEED = self.cruise_speed        #max speed
+        MAX_SPEED = 8.5        #max speed
         MAX_DENSITY = 6.0     #max pursuer density
         MAX_RADIUS = 5.0      #max obstacle radius
         MAX_DRONE_RAD = 0.7
-        FAR_AWAY = 100.0 / MAX_DIST  #far away, bigger number
-        MAX_ACC = self.max_acc
+        FAR_AWAY = 3.0  #far away, bigger number
+        MAX_ACC = 8.0
         #my state
-        my_obs = np.concatenate([self.curr_speed / MAX_SPEED, self.curr_acc / MAX_ACC, [self.position[2] / MAX_COORD], [self.my_rad / MAX_DRONE_RAD]]) 
+        my_obs = np.concatenate([self.curr_speed / MAX_SPEED, self.curr_acc / MAX_ACC, [self.position[2] / MAX_COORD], 
+                                 [self.my_rad / MAX_DRONE_RAD], [self.cruise_speed / MAX_SPEED], [self.max_acc / MAX_ACC]]) 
         # prime state
         prime_rad_obs = np.array([self.prime_rad / MAX_DRONE_RAD], dtype=np.float32)
+        prime_rel_vel = self.prime_vel - self.curr_speed
+        prime_pos = (self.prime_pos - self.position) / MAX_DIST
+        prime_purs_dist = np.linalg.norm(prime_pos)
         prime_obs = np.concatenate([
-            (self.prime_pos - self.position) / MAX_DIST, 
-            self.prime_vel / MAX_SPEED,
-            prime_rad_obs
+            prime_pos, 
+            prime_rel_vel / (MAX_SPEED * 2.0),
+            prime_rad_obs,
+            [prime_purs_dist]
         ])
         #pursuer state + density
-        pursuers_obs = np.full(21, FAR_AWAY, dtype=np.float32)
+        # Zvětšeno na 24, protože máme 3 kolegy * 8 informací (nově přidána vzdálenost)
+        pursuers_obs = np.full(24, FAR_AWAY, dtype=np.float32)
+        # Nastavení defaultních nul pro rychlosti a poloměry (pozice a vzdálenost zůstanou FAR_AWAY)
         for i in range(3):
-            pursuers_obs[i*7 + 3 : i*7 + 6] = 0.0
-            pursuers_obs[i*7 + 6] = 0.0
+            start = i * 8
+            pursuers_obs[start+3 : start+6] = 0.0  # defaultní relativní rychlost
+            pursuers_obs[start+6] = 0.0            # defaultní poloměr
         density = 0
         if len(self.all_purs_pos) > 0:
-            dists = np.linalg.norm(self.all_purs_pos - self.position, axis=1)
             density = len(self.all_purs_pos)
-            closest_indices = np.argsort(dists)[:3]
-            #iterating from closest indeces
+            # 1. KROK: Nejdřív rovnou spočítáme normalizované vektory pro VŠECHNY kolegy naráz!
+            # (Tím si ušetříme dělení později v cyklu)
+            norm_rel_positions = (self.all_purs_pos - self.position) / self.vis_range
+            # 2. KROK: A teď z těch už zkrácených šipek spočítáme tu explicitní vzdálenost (váš trik)
+            norm_dists = np.linalg.norm(norm_rel_positions, axis=1)
+            # 3. KROK: Seřadíme podle těch normalizovaných vzdáleností
+            closest_indices = np.argsort(norm_dists)[:3]
+            #iterating from closest indices
             for i, idx in enumerate(closest_indices):
-                start = i * 7
-                #normalization
-                pursuers_obs[start : start+3] = (self.all_purs_pos[idx] - self.position) / MAX_DIST
-                pursuers_obs[start+3 : start+6] = self.all_purs_vel[idx] / MAX_SPEED
-                pursuers_obs[start+6] = self.all_purs_rads[idx] / MAX_DRONE_RAD
+                start = i * 8  # <-- Nový multiplikátor 8!    
+                # Relativní pozice (použijeme to, co už jsme spočítali nahoře)
+                pursuers_obs[start : start+3] = norm_rel_positions[idx]    
+                # Relativní rychlost (nezapomeňte dělit 2x maximálkou, jak jsme řešili)
+                rel_vel = self.all_purs_vel[idx] - self.curr_speed
+                pursuers_obs[start+3 : start+6] = rel_vel / (MAX_SPEED * 2.0)    
+                # Poloměr kolegy
+                pursuers_obs[start+6] = self.all_purs_rads[idx] / MAX_DRONE_RAD    
+                # NOVÉ: Explicitní normalizovaná vzdálenost jako červený maják pro síť!
+                pursuers_obs[start+7] = norm_dists[idx]
         density_obs = np.array([density / MAX_DENSITY], dtype=np.float32)
-        # invader state
+        #invader state
         inv_rel_pos = (self.target["tar_pos"] - self.position) / MAX_DIST
-        inv_norm_vel = self.target["tar_vel"] / MAX_SPEED
+        inv_rel_vel = self.target["tar_vel"] - self.curr_speed
         inv_to_prime_vec = (self.prime_pos - self.target["tar_pos"]) / MAX_DIST
         inv_to_prime_dist = np.array([np.linalg.norm(inv_to_prime_vec)], dtype=np.float32)
+        inv_purs_dist = np.array([np.linalg.norm(inv_rel_pos)], dtype=np.float32)
         #radius
         inv_rad_obs = np.array([self.target["tar_rad"] / MAX_DRONE_RAD], dtype=np.float32)
-        invaders_obs = np.concatenate([inv_rel_pos, inv_norm_vel, inv_to_prime_vec, inv_to_prime_dist,
-                       inv_rad_obs])
+        invaders_obs = np.concatenate([inv_rel_pos, inv_rel_vel / (MAX_SPEED * 2.0), inv_to_prime_vec, inv_to_prime_dist,
+                       inv_rad_obs, inv_purs_dist])
         #closest obstacles
-        obstacles_obs = np.full(8, FAR_AWAY, dtype=np.float32)
+        obstacles_obs = np.full(10, FAR_AWAY, dtype=np.float32)
+        # Defaultní nulový poloměr pro prázdná místa (indexy 3 a 8)
         obstacles_obs[3] = 0.0 
-        obstacles_obs[7] = 0.0 
+        obstacles_obs[8] = 0.0 
         if self.obs_centers is not None and len(self.obs_centers) > 0:
-            obs_dists = np.linalg.norm(self.obs_centers - self.position, axis=1)
-            closest_obs_indices = np.argsort(obs_dists)[:2]
-            #iterating from closest obstacles
-            for i, idx in enumerate(closest_obs_indices):
-                start = i * 4
-                obstacles_obs[start : start+3] = (self.obs_centers[idx] - self.position) / MAX_DIST
-                obstacles_obs[start+3] = self.obs_radii[idx] / MAX_RADIUS
+            # 1. Vzdálenost k centrům
+            center_dists = np.linalg.norm(self.obs_centers - self.position, axis=1)
+            # 2. Vzdálenost k povrchu (odečteme poloměr překážky)
+            edge_dists = center_dists - self.obs_radii
+            # 3. Vyfiltrujeme jen ty, jejichž povrch je v našem zorném poli
+            visible_mask = edge_dists <= self.vis_range
+            visible_indices = np.where(visible_mask)[0]
+            if len(visible_indices) > 0:
+                # 4. Získáme vzdálenosti k povrchu POUZE pro viditelné překážky
+                visible_edge_dists = edge_dists[visible_indices]
+                # 5. Seřadíme je od nejbližšího POVRCHU a vezmeme max 2
+                sorted_local_indices = np.argsort(visible_edge_dists)[:2]
+                # 6. Převedeme lokální pořadí zpět na reálné indexy v self.obs_centers
+                closest_obs_indices = visible_indices[sorted_local_indices]
+                # 7. Zápis do observation space
+                for i, idx in enumerate(closest_obs_indices):
+                    start = i * 5  # <--- Změna bloku na 5!
+                    # Pozici předáváme jako vektor ke středu dělený dohledem radaru
+                    obs_pos = (self.obs_centers[idx] - self.position) / self.vis_range
+                    obstacles_obs[start : start+3] = obs_pos
+                    # Poloměr překážky
+                    obstacles_obs[start+3] = self.obs_radii[idx] / MAX_RADIUS
+                    # NOVÉ: Explicitní vzdálenost (znovu využijeme váš trik s normou!)
+                    obstacles_obs[start+4] = np.linalg.norm(obs_pos)
         #final vector
         final_obs = np.concatenate([
-            my_obs,         # 8
-            prime_obs,      # 7
+            my_obs,         # 10
+            prime_obs,      # 8
             density_obs,    # 1
-            pursuers_obs,   # 21
-            invaders_obs,   # 11
-            obstacles_obs   # 8
+            pursuers_obs,   # 24
+            invaders_obs,   # 12
+            obstacles_obs   # 10
         ]).astype(np.float32)
         return final_obs
     

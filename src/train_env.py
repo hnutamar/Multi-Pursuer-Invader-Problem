@@ -6,6 +6,7 @@ from world import SimulationWorld
 from sim_config3D import Sim3DConfig
 from stable_baselines3 import PPO
 from pursuer_states import States
+import torch
 
 class FastWorldEnv(gym.Env):
     def __init__(self, world_instance: SimulationWorld, previous_model_path=None):
@@ -83,7 +84,7 @@ class HerdingEnv(gym.Env):
         #action space - acc vector
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
         #obs space
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(56,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(65,), dtype=np.float32)
         #episode limits
         self.current_step = 0
         if test:
@@ -108,11 +109,10 @@ class HerdingEnv(gym.Env):
         self.new_purs_accs = np.random.uniform(low=new_purs_speeds / 2.0, high=new_purs_speeds / 1.3)
         max_purs_speed = np.max(new_purs_speeds)
         #invaders
-        new_inv_speed = np.random.uniform(2.0, max_purs_speed + 2.0)
-        new_prime_speed = 1.0
+        new_inv_speed = np.random.uniform(2.0, max_purs_speed * 0.85)
         new_inv_acc = np.random.uniform(new_inv_speed / 2.0, new_inv_speed / 1.3)
         #prime
-        #new_prime_speed = 1.0
+        new_prime_speed = 1.0
         new_prime_acc = np.random.uniform(new_prime_speed / 4.0, new_prime_speed / 2.0)
         #positions
         inv_pos = self.get_random_invader_start()
@@ -160,6 +160,8 @@ class HerdingEnv(gym.Env):
     def load_teammate_brain(self, model_path):
         #updating the brain
         self.teammate_brain = PPO.load(model_path, device="cpu")
+        with torch.no_grad():
+            self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -2.1)
 
     def generate_safe_obstacles(self, num_obs, agent_positions, agent_radii, max_coord, is_3d, min_r=1.0, max_r=5.0, safe_margin=1.5):
         #arrays
@@ -240,7 +242,7 @@ class HerdingEnv(gym.Env):
         if hasattr(self, 'teammate_brain') and self.teammate_brain is not None:
             for i in range(1, len(self.world.pursuers)):
                 obs_i = self.world.pursuers[i].get_observation_herding() 
-                action_i, _ = self.teammate_brain.predict(obs_i, deterministic=False)
+                action_i, _ = self.teammate_brain.predict(obs_i, deterministic=True)
                 all_raw_actions.append(action_i)
         else:
             #does nothing, if there is no brain
@@ -278,18 +280,18 @@ class HerdingEnv(gym.Env):
         curr_dist_to_inv = np.linalg.norm(pursuer_pos - invader_pos) - 5.0
         #navigating penalty to invader
         if curr_dist_to_inv > 0:
-            distance_penalty = curr_dist_to_inv * 0.02
+            distance_penalty = curr_dist_to_inv * 0.03
             reward -= distance_penalty
         pursuer_positions = np.array([p.position for p in self.world.free_purs])
-        #penalty for getting too close to other pursuer
+        #pursuer penalty
         colleague_penalty = 0.0
-        safe_drone_dist = 1.5
+        safe_drone_dist = 3.0
         other_rads = np.array([p.my_rad for p in self.world.free_purs[1:]])
         other_pos = pursuer_positions[1:]
         if len(other_pos) > 0:
             distances = np.linalg.norm(other_pos - pursuer_pos, axis=1) - pursuer_rad - other_rads
             violations = safe_drone_dist - distances
-            colleague_penalty = -np.sum(violations[violations > 0]) * 0.3
+            colleague_penalty = -np.sum(violations[violations > 0]) * 0.1
             reward += colleague_penalty
         #obstacle penalty
         if len(self.obs_centers) > 0:
@@ -297,34 +299,41 @@ class HerdingEnv(gym.Env):
             obs_rads_arr = self.obs_rads
             obs_distances = np.linalg.norm(obs_centers_arr - pursuer_pos, axis=1) - pursuer_rad - obs_rads_arr
             obs_violations = safe_drone_dist - obs_distances
-            obs_penalty = -np.sum(obs_violations[obs_violations > 0]) * 0.15
+            obs_penalty = -np.sum(obs_violations[obs_violations > 0]) * 0.1
             reward += obs_penalty
         #ground penalty
         ground_dist = pursuer_pos[2] - pursuer_rad
         if ground_dist < safe_drone_dist:
-            ground_penalty = (safe_drone_dist - ground_dist) * 0.15 
+            ground_penalty = (safe_drone_dist - ground_dist) * 0.1
             reward -= ground_penalty
-        #invader in center of mass reward
+        #prime penalty
+        dist_to_prime = np.linalg.norm(pursuer_pos - self.world.prime.position) - pursuer_rad - self.world.prime.my_rad
+        if dist_to_prime < safe_drone_dist:
+            prime_violation = safe_drone_dist - dist_to_prime
+            reward -= prime_violation * 0.2
+        #COM reward
         if len(pursuer_positions) > 1:
             center_of_mass = np.mean(pursuer_positions, axis=0)
             invader_com_dist = np.linalg.norm(center_of_mass - invader_pos)
-            com_reward = max(0.0, 5.0 - invader_com_dist) * 0.05
+            com_reward = max(0.0, 5.0 - invader_com_dist) * 0.1
             reward += com_reward
         # #reward for pushing invader away
         diff = current_inv_prime_dist - self.last_inv_prime_dist
         #reward, positive if invader is further away from prime
         if current_inv_prime_dist < 20.0: # and diff > 0:
-            reward += diff * 0.1  
+            reward += diff * 0.1
         #if invader crashed, it is good, but better to push him away
         if invader_crashed:
             reward += 10.0
             terminated = True
         #penalization for crash
         if self.world.pursuers[0].crashed:
+            print("lost")
             reward -= 20.0
             terminated = True
         #penalization for breaking the defense
         if current_inv_prime_dist < 2.0 or done: 
+            print("lost")
             reward -= 20.0
             terminated = True
         #reward for getting invader far
@@ -332,10 +341,10 @@ class HerdingEnv(gym.Env):
         safety_ratio = safe_distance / 20.0
         reward += safety_ratio * 0.05
         #penalty for invader moving too much
-        #if current_inv_prime_dist > 20:
-        #    inv_diff = np.linalg.norm(self.last_inv_pos - invader_pos)
-        #    reward -= inv_diff * 0.05
-        self.last_inv_pos = invader_pos
+        # if current_inv_prime_dist > 20:
+        #     inv_diff = np.linalg.norm(self.last_inv_pos - invader_pos)
+        #     reward -= inv_diff * 0.05
+        # self.last_inv_pos = invader_pos
         # elif current_inv_prime_dist > 20.0:
         #     reward += 0.5
         #whole game won

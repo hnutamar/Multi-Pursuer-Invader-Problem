@@ -13,8 +13,13 @@ class Invader(Agent):
         self.coll_obs = 5.0
         self.coll_gr = 2.0
         self.rad_run = np.random.uniform(low=1.5, high=3.5)
+        self.my_dt = dt
+        self.my_clock = 0.0
+        self.u_dir = np.zeros_like(self.position)
         
     def evade(self, pursuers, target, obstacles):
+        if self.my_clock % 0.1 != 0:
+            return self.u_dir
         v_dir = np.zeros_like(self.position)
         if self.crashed:
             return v_dir
@@ -36,8 +41,8 @@ class Invader(Agent):
         sum_norm = np.linalg.norm(v_sum)
         if sum_norm > self.cruise_speed:
             v_sum = (v_sum/sum_norm) * self.cruise_speed
-        u_dir = self.KP*(v_sum - self.curr_speed) - self.KD*self.curr_speed
-        return u_dir
+        self.u_dir = self.KP*(v_sum - self.curr_speed) - self.KD*self.curr_speed
+        return self.u_dir
     
     def strategy_run_away(self, purs, idx):
         dir_ = self.position - purs[idx].position

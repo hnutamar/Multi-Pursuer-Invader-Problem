@@ -18,7 +18,7 @@ def test_herding_model():
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
     #model_path = "drone_herding_brain_gen1" 
-    model_path = "./models/history/gen_14" 
+    model_path = "./models/history/gen_11" 
     print(f"Loading MLP: {model_path} ...")
     model = PPO.load(model_path)
     env.load_teammate_brain(model_path)
@@ -27,33 +27,46 @@ def test_herding_model():
     #running forever
     running = True
     whole_reward = 0
+    episode_num = 0
+    render_every = 1
+    ep_len = 0
     #visualizer
     #vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
     while running:
         #AI action
+        ep_len += 1
         action, _states = model.predict(obs, deterministic=True)
         #step
         obs, reward, terminated, truncated, info = env.step(action)
         whole_reward += reward
         world = env.world
-        #state = world.get_state()
-        #controlling visualizer window
+        state = world.get_state()
+        # #controlling visualizer window
         # if hasattr(vis, 'is_open') and not vis.is_open:
         #     print("Window closed, ending...")
         #     running = False
         #     break
-        #rendering
-        #vis.render(state, world_instance=world)
+        # #rendering
+        # if ep_len % render_every == 0:
+        #     vis.render(state, world_instance=world)
         #restarting episode
         if terminated or truncated:
-            print(f"Episode over! Reward: {whole_reward:.1f}.")
+            #print(f"Episode over! Reward: {whole_reward:.1f}.")
             whole_reward = 0
+            ep_len = 0
+            episode_num += 1
+            if episode_num % 25 == 0:
+                print("Episode: " + str(episode_num))
+            if episode_num == 100:
+                break
             #plt.pause(1.0)
             obs, info = env.reset()
             #if hasattr(vis, 'is_open') and not vis.is_open:
             #    vis.is_open = False
             #visualizer
             #vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
+    win_rate = 1 - (env.lost / float(episode_num))
+    print("win rate:" + str(win_rate))
 
 if __name__ == "__main__":
     test_herding_model()

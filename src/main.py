@@ -1,4 +1,6 @@
 import time
+import matplotlib
+matplotlib.use('TkAgg')
 from world import SimulationWorld
 from visualizer import MatplotlibVisualizer
 from sim_config3D import Sim3DConfig
@@ -8,6 +10,7 @@ import matplotlib.pyplot as plt
 from pybullet_visualizer import PyBulletVisualizer
 from toronto_visualizer import TorontoVisualizer
 from mpl_toolkits.mplot3d import Axes3D
+from stable_baselines3 import PPO
 
 def main():
     _3d = True
@@ -15,13 +18,15 @@ def main():
     MANUAL_CONTROL = False
     #config
     if _3d:
-        sc = Sim3DConfig(dt=0.02, purs_num=15, inv_num=3, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
+        sc = Sim3DConfig(dt=0.02, purs_num=20, inv_num=2, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
     else:
         sc = Sim2DConfig(dt=0.02, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=True, 
                          obstacle_rad=[4.0, 4.0], obstacle_pos=[np.array([17.0, 6.0]), np.array([6.0, 17.0])])
     #world, physics
     inv_pos = np.array([[25.24, 20.15, 15.58]])
-    world = SimulationWorld(sc, _3d=_3d, purs_acc=3.5, inv_acc=6.0, prime_acc=1.3, purs_speed=4.0, inv_speed=8.0, prime_speed=3.5)
+    model = PPO.load("brain_to_integrate")
+    #model = PPO.load("./models/history/gen_6")
+    world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 5.0), inv_acc=3.0, prime_acc=1.3, purs_speed=np.full(30, 8.0), inv_speed=5.0, prime_speed=3.5, pursue_model=model, not_testing=True)
     #visualization
     SHOW_VISUALIZATION = True
     vis = None
@@ -37,7 +42,7 @@ def main():
         EPISODE_NUM = 1
     else:
         RENDER_EVERY = 5
-        EPISODE_NUM = 5
+        EPISODE_NUM = 20
     step_counter = 1
     current_episode = 1
     SYNC_INTERVAL = 20
@@ -86,7 +91,7 @@ def main():
             if EPISODE_NUM == current_episode:
                 running = False
                 break
-            world.reset(purs_acc=3.5, inv_acc=2.0, prime_acc=1.3, purs_speed=6.0, inv_speed=4.0, prime_speed=3.5)
+            world.reset()
             step_counter = 1
             current_episode += 1
     if vis and PYBULLET:

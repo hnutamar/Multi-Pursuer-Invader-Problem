@@ -8,10 +8,13 @@ from scipy.spatial.distance import cdist
 
 class SimulationWorld:
     def __init__(self, sc_config, _3d=False, purs_acc=None, purs_speed=None, prime_acc=None, prime_speed=None, inv_acc=None, inv_speed=None,
-                 prime_pos=None, inv_pos=None, purs_pos=None, purs_num=None, herding=False):
+                 prime_pos=None, inv_pos=None, purs_pos=None, purs_num=None, herding=False, pursue_model=None, not_testing=False, no_target=False):
+        self.not_testing = not_testing
+        self.no_target = no_target
         self.sc = sc_config
         self._3d = _3d
         self.herding = herding
+        self.pursue_model = pursue_model
         self.init_params = {
             'purs_acc': purs_acc, 'purs_speed': purs_speed, 'prime_acc': prime_acc, 'prime_speed': prime_speed, 'inv_acc': inv_acc, 'inv_speed': inv_speed,
             'prime_pos': prime_pos, 'inv_pos': inv_pos, 'purs_pos': purs_pos, 'purs_num': purs_num
@@ -90,7 +93,7 @@ class SimulationWorld:
         for i in range(self.sc.PURSUER_NUM):
             p_num = purs_num[i] if purs_num is not None else np.random.randint(0, 1001)
             p = Pursuer(position=rnd_points_purs[i], max_speed=rnd_speed_purs[i],
-                max_acc=rnd_purs_acc[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=p_num, purs_vis=self.sc.PURS_VIS, dt=self.sc.DT)
+                max_acc=rnd_purs_acc[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=p_num, purs_vis=self.sc.PURS_VIS, dt=self.sc.DT, pursue_model=self.pursue_model)
             self.pursuers.append(p)
         #invader init
         self.invaders = []
@@ -144,7 +147,7 @@ class SimulationWorld:
         for i, pur in enumerate(free_purs):
             #close_purs = [p for p in free_purs if (np.linalg.norm(p.position - pur.position) - p.my_rad - pur.my_rad) <= self.sc.PURS_VIS]
             purs_acc = pur.pursue(free_inv, self.prime.curr_speed, self.prime.my_rad, self.prime.position, all_purs_targets, precalc_data=(all_inv_pos, all_inv_vel, all_inv_pnums, 
-                        all_inv_rad, all_purs_pos, all_purs_vel, all_purs_rad, i, self.obs_centers, self.obs_radii))
+                        all_inv_rad, all_purs_pos, all_purs_vel, all_purs_rad, i, self.obs_centers, self.obs_radii), not_testing=self.not_testing, no_target=self.no_target)
             pur.move(purs_acc)
         #prime move
         prime_acc = self.prime.fly(self.way_point, free_inv, free_purs, Modes.LINE, (self.obs_centers, self.obs_radii))
@@ -244,7 +247,7 @@ class SimulationWorld:
             for idx in np.where(swarm_crash_mask)[0]:
                 free_purs[idx].crashed = True
         #ending check
-        done = self.prime.crashed #or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
+        done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
         return self.get_state(), done
 
     def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):

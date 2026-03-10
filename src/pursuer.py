@@ -4,11 +4,13 @@ from invader import Invader
 from prime_unit import Prime_unit
 from pursuer_states import States
 import copy
+from stable_baselines3 import PPO
 
 class Pursuer(Agent):
-    def __init__(self, position, max_speed, max_acc, max_omega, my_rad, purs_num, purs_vis, dt):
+    def __init__(self, position, max_speed, max_acc, max_omega, my_rad, purs_num, purs_vis, dt, pursue_model: PPO | None = None):
         super().__init__(position, max_speed, max_acc, max_omega, dt, my_rad, num_iter=purs_num)
         self.is_rl_controlled = False
+        self.pursue_model = pursue_model
         #visibility range
         self.vis_range = purs_vis
         #repulsive forces
@@ -79,12 +81,30 @@ class Pursuer(Agent):
         self.base_rad = 0.02
         self.k_rad = 0.02
         self.new_acc_vector = None
+        self.my_clock = 0
+        self.new_acc = np.zeros_like(self.position)
         
     def herding(self, acc_vector):
         #getting the vector, nothing else
         self.new_acc_vector = acc_vector
         
-    def pursue(self, targets: list[Invader], prime_vel, prime_rad, prime_pos, all_purs_tars, precalc_data):
+    def pursue_herding(self):
+        observation = self.get_observation_herding()
+        action, _ = self.pursue_model.predict(observation, deterministic=True)
+        raw_act = np.array(action, dtype=np.float32)
+        #cliping
+        norm = np.linalg.norm(raw_act)
+        if norm > 1.0:
+            raw_act = raw_act / norm
+        target_acc = raw_act * self.max_acc
+        self.new_acc = target_acc
+        return
+        
+    def pursue(self, targets: list[Invader], prime_vel, prime_rad, prime_pos, all_purs_tars, precalc_data, not_testing=False, no_target=False):
+        if not_testing:
+            self.my_clock += 1
+            if self.my_clock % 5 != 0:
+                return self.new_acc
         #precalculated data, faster this way
         self.prime_rad = prime_rad
         all_inv_pos, all_inv_vel, self.all_inv_purs_num, all_inv_rads, all_purs_pos, all_purs_vel, all_purs_rads, self.my_index, obs_centers, obs_radii = precalc_data
@@ -108,15 +128,27 @@ class Pursuer(Agent):
             self.target = None
             self.state = States.FORM
         #pursuer having no target, finding target, if found, pursue it
-        if self.target == None and not self.is_rl_controlled:
+        if self.target == None and not self.is_rl_controlled and not no_target:
             if self.strategy_capture_cone(targets, self.num_iter, cooldown=self.capture_cooldown*self.dt):
-                tar_vel = self.pursue_target(self.target)
+                if self.pursue_model is not None:
+                    self.pursue_herding()
+                    return self.new_acc
+                else:
+                    tar_vel = self.pursue_target(self.target)
             elif self.strategy_target_close(targets):
-                tar_vel = self.pursue_target(self.target)
+                if self.pursue_model is not None:
+                    self.pursue_herding()
+                    return self.new_acc
+                else:
+                    tar_vel = self.pursue_target(self.target)
         #pursuer having target -> pursue it
         elif self.target != None and self.target["target"].crashed == False:
             if not (self.target["purs_type"] != self.purs_types["circling"] and np.linalg.norm(self.position - self.prime_pos) > self.capture_max):
-                tar_vel = self.pursue_target(self.target) 
+                if self.pursue_model is not None:
+                    self.pursue_herding()
+                    return self.new_acc
+                else:
+                    tar_vel = self.pursue_target(self.target)
         #if target dir is zero, pursuer has no target -> keep the formation
         if np.array_equal(tar_vel, form_vel):
             self.target = None
@@ -144,8 +176,8 @@ class Pursuer(Agent):
         if sum_norm > self.cruise_speed:
             sum_vel = (sum_vel/sum_norm) * self.cruise_speed
         #converting to acceleration
-        new_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
-        return new_acc
+        self.new_acc = self.KP * (sum_vel - self.curr_speed) - self.KD * self.curr_speed
+        return self.new_acc
     
     def get_closest_invaders(self, all_invaders, max_count=2):
         if not all_invaders:
@@ -190,11 +222,27 @@ class Pursuer(Agent):
             pursuers_obs[start+3 : start+6] = 0.0  # defaultní relativní rychlost
             pursuers_obs[start+6] = 0.0            # defaultní poloměr
         density = 0
-        if len(self.all_purs_pos) > 0:
-            density = len(self.all_purs_pos)
+        other_purs_pos = []
+        other_purs_vel = []
+        other_purs_rads = []
+        new_obs_pos = []
+        new_obs_rad = []
+        for i, tar in enumerate(self.all_purs_tars):
+            if tar is not None and tar is self.target["target"]:
+                other_purs_pos.append(self.all_purs_pos[i])
+                other_purs_vel.append(self.all_purs_vel[i])
+                other_purs_rads.append(self.all_purs_rads[i])
+            else:
+                new_obs_pos.append(self.all_purs_pos[i])
+                new_obs_rad.append(self.all_purs_rads[i])
+        new_purs_pos = np.array(other_purs_pos)
+        new_purs_vel = np.array(other_purs_vel)
+        new_purs_rads = np.array(other_purs_rads)
+        if len(new_purs_pos) > 0:
+            density = len(new_purs_pos)
             # 1. KROK: Nejdřív rovnou spočítáme normalizované vektory pro VŠECHNY kolegy naráz!
             # (Tím si ušetříme dělení později v cyklu)
-            norm_rel_positions = (self.all_purs_pos - self.position) / self.vis_range
+            norm_rel_positions = (new_purs_pos - self.position) / self.vis_range
             # 2. KROK: A teď z těch už zkrácených šipek spočítáme tu explicitní vzdálenost (váš trik)
             norm_dists = np.linalg.norm(norm_rel_positions, axis=1)
             # 3. KROK: Seřadíme podle těch normalizovaných vzdáleností
@@ -205,10 +253,10 @@ class Pursuer(Agent):
                 # Relativní pozice (použijeme to, co už jsme spočítali nahoře)
                 pursuers_obs[start : start+3] = norm_rel_positions[idx]    
                 # Relativní rychlost (nezapomeňte dělit 2x maximálkou, jak jsme řešili)
-                rel_vel = self.all_purs_vel[idx] - self.curr_speed
+                rel_vel = new_purs_vel[idx] - self.curr_speed
                 pursuers_obs[start+3 : start+6] = rel_vel / (MAX_SPEED * 2.0)    
                 # Poloměr kolegy
-                pursuers_obs[start+6] = self.all_purs_rads[idx] / MAX_DRONE_RAD    
+                pursuers_obs[start+6] = new_purs_rads[idx] / MAX_DRONE_RAD    
                 # NOVÉ: Explicitní normalizovaná vzdálenost jako červený maják pro síť!
                 pursuers_obs[start+7] = norm_dists[idx]
         density_obs = np.array([density / MAX_DENSITY], dtype=np.float32)
@@ -227,11 +275,18 @@ class Pursuer(Agent):
         # Defaultní nulový poloměr pro prázdná místa (indexy 3 a 8)
         obstacles_obs[3] = 0.0 
         obstacles_obs[8] = 0.0 
-        if self.obs_centers is not None and len(self.obs_centers) > 0:
+        if len(new_obs_pos) > 0:
+            obs_centers = np.concatenate((self.obs_centers, np.array(new_obs_pos)), axis=0)
+            obs_radii = np.concatenate((self.obs_radii, np.array(new_obs_rad)))
+        else:
+            obs_centers = self.obs_centers
+            obs_radii = self.obs_radii
+        
+        if obs_centers is not None and len(obs_centers) > 0:
             # 1. Vzdálenost k centrům
-            center_dists = np.linalg.norm(self.obs_centers - self.position, axis=1)
+            center_dists = np.linalg.norm(obs_centers - self.position, axis=1)
             # 2. Vzdálenost k povrchu (odečteme poloměr překážky)
-            edge_dists = center_dists - self.obs_radii
+            edge_dists = center_dists - obs_radii
             # 3. Vyfiltrujeme jen ty, jejichž povrch je v našem zorném poli
             visible_mask = edge_dists <= self.vis_range
             visible_indices = np.where(visible_mask)[0]
@@ -246,10 +301,10 @@ class Pursuer(Agent):
                 for i, idx in enumerate(closest_obs_indices):
                     start = i * 5  # <--- Změna bloku na 5!
                     # Pozici předáváme jako vektor ke středu dělený dohledem radaru
-                    obs_pos = (self.obs_centers[idx] - self.position) / self.vis_range
+                    obs_pos = (obs_centers[idx] - self.position) / self.vis_range
                     obstacles_obs[start : start+3] = obs_pos
                     # Poloměr překážky
-                    obstacles_obs[start+3] = self.obs_radii[idx] / MAX_RADIUS
+                    obstacles_obs[start+3] = obs_radii[idx] / MAX_RADIUS
                     # NOVÉ: Explicitní vzdálenost (znovu využijeme váš trik s normou!)
                     obstacles_obs[start+4] = np.linalg.norm(obs_pos)
         #final vector

@@ -30,7 +30,7 @@ class UpdateSwarmCallback(BaseCallback):
         self.save_dir = os.path.abspath("./models/history")
         os.makedirs(self.save_dir, exist_ok=True) 
         #gen1
-        self.generation = 4
+        self.generation = 0
     def _on_training_start(self) -> None:
         start_step = self.model.num_timesteps
         rest = start_step % self.update_freq
@@ -110,28 +110,28 @@ def main_herding():
     #vectorized env
     vec_env = SubprocVecEnv([make_env(i) for i in range(num_cpu)], start_method="spawn")
     #model
-    #custom_policy = dict(activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]))
+    custom_policy = dict(activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]))
     print("Creating custom AI model...")
-    #model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy, verbose=1, 
-    #    tensorboard_log="./ppo_drone_tensorboard/", learning_rate=linear_schedule(0.0003))
+    model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy, verbose=1, 
+        tensorboard_log="./ppo_drone_tensorboard/", learning_rate=linear_schedule(0.0003))
     #init_brain_path = "brain_to_integrate"
-    init_brain_path = "./models/history/gen_3"
-    #model.save(init_brain_path)
+    init_brain_path = "./models/history/g_0"
+    model.save(init_brain_path)
     vec_env.env_method("load_teammate_brain", init_brain_path)
-    custom_objects = {
-       #"ent_coef": 0.0001,
-       "learning_rate": 5e-5
-    }
-    model = PPO.load("./models/history/gen_3", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
-    with torch.no_grad():
-      model.policy.log_std.data = torch.full_like(model.policy.log_std.data, -1.8)
+    #custom_objects = {
+    #   #"ent_coef": 0.0001,
+    #   "learning_rate": 0.0001
+    #}
+    #model = PPO.load("brain_to_integrate", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
+    #with torch.no_grad():
+    #  model.policy.log_std.data = torch.full_like(model.policy.log_std.data, -1.4)
     #save_freq = 500000/num_cpu
     #checkpoint_callback = CheckpointCallback(save_freq=save_freq, save_path='./models_checkpoints/',
     #    name_prefix='herding_brain')
     #train
     print("Starting training...")
-    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=200_000)
-    model.learn(total_timesteps=20_000_000, callback=swarm_callback, tb_log_name="PPO_Marathon", reset_num_timesteps=False)
+    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=300_000)
+    model.learn(total_timesteps=20_000_000, callback=swarm_callback, tb_log_name="PPO_Marathon")
     #saving result
     print("Training done...")
     model.save("drone_herding_brain_gen2")

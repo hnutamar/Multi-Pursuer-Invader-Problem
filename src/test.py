@@ -17,8 +17,8 @@ def test_herding_model():
     env = HerdingEnv(world_instance=world, sc=new_sc, test=True)
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
-    model_path = "brain_to_integrate" 
-    #model_path = "./models/history/gen_1" 
+    #model_path = "brain_to_integrate" 
+    model_path = "./models/history/gen_11" 
     print(f"Loading MLP: {model_path} ...")
     model = PPO.load(model_path)
     env.load_teammate_brain(model_path)

@@ -31,7 +31,7 @@ def test_herding_model():
     render_every = 1
     ep_len = 0
     #visualizer
-    #vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
+    vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
     while running:
         #AI action
         ep_len += 1
@@ -41,14 +41,14 @@ def test_herding_model():
         whole_reward += reward
         world = env.world
         state = world.get_state()
-        # #controlling visualizer window
-        # if hasattr(vis, 'is_open') and not vis.is_open:
-        #     print("Window closed, ending...")
-        #     running = False
-        #     break
-        # #rendering
-        # if ep_len % render_every == 0:
-        #     vis.render(state, world_instance=world)
+        #controlling visualizer window
+        if hasattr(vis, 'is_open') and not vis.is_open:
+            print("Window closed, ending...")
+            running = False
+            break
+        #rendering
+        if ep_len % render_every == 0:
+            vis.render(state, world_instance=world)
         #restarting episode
         if terminated or truncated:
             #print(f"Episode over! Reward: {whole_reward:.1f}.")
@@ -59,12 +59,12 @@ def test_herding_model():
                 print("Episode: " + str(episode_num))
             if episode_num == 100:
                 break
-            #plt.pause(1.0)
+            plt.pause(1.0)
             obs, info = env.reset()
-            # if hasattr(vis, 'is_open') and not vis.is_open:
-            #    vis.is_open = False
-            # #visualizer
-            # vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
+            if hasattr(vis, 'is_open') and not vis.is_open:
+               vis.is_open = False
+            #visualizer
+            vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
     purs_crash = env.lost_purs_crash
     prime_purs = env.lost_pursuer_prime
     inv_prime = env.lost_invader_prime

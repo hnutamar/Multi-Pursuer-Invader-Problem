@@ -174,7 +174,7 @@ class HerdingEnv(gym.Env):
         self.teammate_brain = PPO.load(model_path, device="cpu")
         #if self.episode_num > 800_000/10:
         with torch.no_grad():
-            self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -3.1)
+            self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -2.8)
 
     def generate_safe_obstacles(self, num_obs, agent_positions, agent_radii, max_coord, is_3d, min_r=1.0, max_r=5.0, safe_margin=1.5):
         #arrays
@@ -298,12 +298,25 @@ class HerdingEnv(gym.Env):
         pursuer_positions = np.array([p.position for p in self.world.free_purs])
         #pursuer penalty
         colleague_penalty = 0.0
-        safe_drone_dist = 2.0
+        # Definujeme si dvě různé bubliny
+        safe_drone_dist = 2.5   # Velká bublina pro kolegy stíhače (aby se nesrazili při manévrech)
+        safe_formation_dist = 0.75 # Malá bublina pro drony ve formaci (ať se jich tolik nebojí)
         other_rads = np.array([p.my_rad for p in self.world.free_purs[1:]])
+        pursuer_positions = np.array([p.position for p in self.world.free_purs])
         other_pos = pursuer_positions[1:]
         if len(other_pos) > 0:
+            # Kolik z ostatních dronů jsou stíhači a kolik formace?
+            # Odečítáme 1, protože náš hlavní agent (index 0) už je jeden z pursuerů
+            num_fellow_pursuers = max(0, self.pursuing_purs - 1) 
+            num_formation = len(other_pos) - num_fellow_pursuers
+            # Vytvoříme pole vzdáleností přesně na míru každému dronovi v 'other_pos'
+            # Např: [2.0, 2.0, 0.5, 0.5, 0.5]
+            safe_dists = np.array([safe_drone_dist] * num_fellow_pursuers + 
+                                  [safe_formation_dist] * num_formation)
+            # Vypočítáme reálné vzdálenosti
             distances = np.linalg.norm(other_pos - pursuer_pos, axis=1) - pursuer_rad - other_rads
-            violations = safe_drone_dist - distances
+            # TADY JE TA MAGIE: Odečítáme pole od pole (každý dron se porovná se svou vlastní bublinou)
+            violations = safe_dists - distances
             colleague_penalty = -np.sum(violations[violations > 0]) * 0.1
             reward += colleague_penalty
         #obstacle penalty

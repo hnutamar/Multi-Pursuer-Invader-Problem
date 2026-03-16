@@ -290,7 +290,7 @@ class HerdingEnv(gym.Env):
         reward = 0.0
         reward += 0.05
         terminated = False
-        curr_dist_to_inv = np.linalg.norm(pursuer_pos - invader_pos) - 8.0
+        curr_dist_to_inv = np.linalg.norm(pursuer_pos - invader_pos) - 6.0
         #navigating penalty to invader
         if curr_dist_to_inv > 0:
             distance_penalty = curr_dist_to_inv * 0.05
@@ -300,7 +300,7 @@ class HerdingEnv(gym.Env):
         colleague_penalty = 0.0
         # Definujeme si dvě různé bubliny
         safe_drone_dist = 2.5   # Velká bublina pro kolegy stíhače (aby se nesrazili při manévrech)
-        safe_formation_dist = 0.75 # Malá bublina pro drony ve formaci (ať se jich tolik nebojí)
+        safe_formation_dist = 0.5 # Malá bublina pro drony ve formaci (ať se jich tolik nebojí)
         other_rads = np.array([p.my_rad for p in self.world.free_purs[1:]])
         pursuer_positions = np.array([p.position for p in self.world.free_purs])
         other_pos = pursuer_positions[1:]
@@ -391,15 +391,6 @@ class HerdingEnv(gym.Env):
         #whole game won
         #if truncated:
             #reward += min(current_inv_prime_dist, 20.0) * 2
-        # vec_to_inv = invader_pos - pursuer_pos
-        # dist_to_inv = np.linalg.norm(vec_to_inv)
-        # purs_vel = self.world.pursuers[0].curr_speed
-        # purs_speed = np.linalg.norm(purs_vel)
-        # if dist_to_inv > 0.1 and purs_speed > 0.1:
-        #     dir_to_inv = vec_to_inv / dist_to_inv
-        #     dir_vel = purs_vel / purs_speed
-        #     alignment = np.dot(dir_to_inv, dir_vel)
-        #     reward += alignment * 0.05
         self.last_inv_prime_dist = current_inv_prime_dist    
         obs = self._get_obs()
         return obs, reward, terminated, truncated, {}

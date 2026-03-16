@@ -25,7 +25,7 @@ def main():
     #world, physics
     inv_pos = np.array([[25.24, 20.15, 15.58]])
     #model = PPO.load("brain_to_integrate")
-    model = PPO.load("./models/history/gen_11")
+    model = PPO.load("./models/history/gen_17")
     world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 5.0), inv_acc=3.0, prime_acc=1.3, purs_speed=np.full(30, 8.0), inv_speed=5.0, prime_speed=3.5, pursue_model=model, not_testing=True)
     #visualization
     SHOW_VISUALIZATION = True

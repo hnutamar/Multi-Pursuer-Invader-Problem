@@ -18,10 +18,12 @@ def test_herding_model():
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
     #model_path = "brain_to_integrate" 
-    model_path = "./models/history/gen_17" 
+    model_path = "./models/history/gen_20" 
+    model_path2 = "./models/history/gen_19" 
     print(f"Loading MLP: {model_path} ...")
+    print(f"Loading MLP: {model_path2} ...")
     model = PPO.load(model_path)
-    env.load_teammate_brain(model_path)
+    env.load_teammate_brain(model_path, model_path2=model_path2)
     obs, info = env.reset()
     print("Start")
     #running forever

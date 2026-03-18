@@ -10,7 +10,15 @@ class Pursuer(Agent):
     def __init__(self, position, max_speed, max_acc, max_omega, my_rad, purs_num, purs_vis, dt, pursue_model: PPO | None = None):
         super().__init__(position, max_speed, max_acc, max_omega, dt, my_rad, num_iter=purs_num)
         self.is_rl_controlled = False
-        self.pursue_model = pursue_model
+        rnd_num = np.random.randint(0, 2)
+        #updating the brain
+        if isinstance(pursue_model, tuple):
+            if rnd_num == 0:
+                self.pursue_model = pursue_model[0]
+            else:
+                self.pursue_model = pursue_model[1]
+        else:
+            self.pursue_model = pursue_model
         #visibility range
         self.vis_range = purs_vis
         #repulsive forces
@@ -273,27 +281,27 @@ class Pursuer(Agent):
             start = i * 8
             pursuers_form[start+3 : start+6] = 0.0  # defaultní relativní rychlost
             pursuers_form[start+6] = 0.0            # defaultní poloměr
-        if len(new_purs_pos) > 0:
-            density = len(new_purs_pos)
-            # 1. KROK: Nejdřív rovnou spočítáme normalizované vektory pro VŠECHNY kolegy naráz!
-            # (Tím si ušetříme dělení později v cyklu)
-            norm_rel_positions = (new_purs_pos - self.position) / self.vis_range
-            # 2. KROK: A teď z těch už zkrácených šipek spočítáme tu explicitní vzdálenost (váš trik)
-            norm_dists = np.linalg.norm(norm_rel_positions, axis=1)
-            # 3. KROK: Seřadíme podle těch normalizovaných vzdáleností
-            closest_indices = np.argsort(norm_dists)[:4]
-            #iterating from closest indices
-            for i, idx in enumerate(closest_indices):
-                start = i * 8  # <-- Nový multiplikátor 8!    
-                # Relativní pozice (použijeme to, co už jsme spočítali nahoře)
-                pursuers_form[start : start+3] = norm_rel_positions[idx]    
-                # Relativní rychlost (nezapomeňte dělit 2x maximálkou, jak jsme řešili)
-                rel_vel = new_purs_vel[idx] - self.curr_speed
-                pursuers_form[start+3 : start+6] = rel_vel / (MAX_SPEED * 2.0)    
-                # Poloměr kolegy
-                pursuers_form[start+6] = new_purs_rads[idx] / MAX_DRONE_RAD    
-                # NOVÉ: Explicitní normalizovaná vzdálenost jako červený maják pro síť!
-                pursuers_form[start+7] = norm_dists[idx]
+        # if len(new_purs_pos) > 0:
+        #     density = len(new_purs_pos)
+        #     # 1. KROK: Nejdřív rovnou spočítáme normalizované vektory pro VŠECHNY kolegy naráz!
+        #     # (Tím si ušetříme dělení později v cyklu)
+        #     norm_rel_positions = (new_purs_pos - self.position) / 2.0 #self.vis_range
+        #     # 2. KROK: A teď z těch už zkrácených šipek spočítáme tu explicitní vzdálenost (váš trik)
+        #     norm_dists = np.linalg.norm(norm_rel_positions, axis=1)
+        #     # 3. KROK: Seřadíme podle těch normalizovaných vzdáleností
+        #     closest_indices = np.argsort(norm_dists)[:4]
+        #     #iterating from closest indices
+        #     for i, idx in enumerate(closest_indices):
+        #         start = i * 8  # <-- Nový multiplikátor 8!    
+        #         # Relativní pozice (použijeme to, co už jsme spočítali nahoře)
+        #         pursuers_form[start : start+3] = norm_rel_positions[idx]    
+        #         # Relativní rychlost (nezapomeňte dělit 2x maximálkou, jak jsme řešili)
+        #         rel_vel = new_purs_vel[idx] - self.curr_speed
+        #         pursuers_form[start+3 : start+6] = rel_vel / (MAX_SPEED * 2.0)    
+        #         # Poloměr kolegy
+        #         pursuers_form[start+6] = new_purs_rads[idx] / MAX_DRONE_RAD    
+        #         # NOVÉ: Explicitní normalizovaná vzdálenost jako červený maják pro síť!
+        #         pursuers_form[start+7] = norm_dists[idx]
         #invader state
         inv_rel_pos = (self.target["tar_pos"] - self.position) / MAX_DIST
         inv_rel_vel = self.target["tar_vel"] - self.curr_speed

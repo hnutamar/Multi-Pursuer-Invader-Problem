@@ -108,8 +108,8 @@ class HerdingEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         #num of purs in episode
-        new_purs_num = np.random.randint(4, 21)
-        self.pursuing_purs = np.random.randint(1, new_purs_num // 2) #new_purs_num // 2
+        new_purs_num = np.random.randint(4, 21) #np.random.randint(1, 11)
+        self.pursuing_purs = np.random.randint(1, new_purs_num // 2) #new_purs_num #new_purs_num // 2 
         #pursuers
         new_purs_speed = np.random.uniform(6.0, 8.0)
         new_purs_speeds = np.full(new_purs_num, new_purs_speed, dtype=np.float32)
@@ -178,7 +178,7 @@ class HerdingEnv(gym.Env):
             self.teammate_brain = PPO.load(model_path2, device="cpu")
         #if self.episode_num > 800_000/10:
         with torch.no_grad():
-            self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -2.8)
+            self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -3.3)
 
     def generate_safe_obstacles(self, num_obs, agent_positions, agent_radii, max_coord, is_3d, min_r=1.0, max_r=5.0, safe_margin=1.5):
         #arrays
@@ -302,28 +302,16 @@ class HerdingEnv(gym.Env):
         pursuer_positions = np.array([p.position for p in self.world.free_purs])
         #pursuer penalty
         colleague_penalty = 0.0
-        # Definujeme si dvě různé bubliny
-        safe_drone_dist = 1.5   # Velká bublina pro kolegy stíhače (aby se nesrazili při manévrech)
-        safe_formation_dist = 0.5 # Malá bublina pro drony ve formaci (ať se jich tolik nebojí)
+        safe_drone_dist = 1.0
         other_rads = np.array([p.my_rad for p in self.world.free_purs[1:]])
-        pursuer_positions = np.array([p.position for p in self.world.free_purs])
         other_pos = pursuer_positions[1:]
         if len(other_pos) > 0:
-            # Kolik z ostatních dronů jsou stíhači a kolik formace?
-            # Odečítáme 1, protože náš hlavní agent (index 0) už je jeden z pursuerů
-            num_fellow_pursuers = max(0, self.pursuing_purs - 1) 
-            num_formation = len(other_pos) - num_fellow_pursuers
-            # Vytvoříme pole vzdáleností přesně na míru každému dronovi v 'other_pos'
-            # Např: [2.0, 2.0, 0.5, 0.5, 0.5]
-            safe_dists = np.array([safe_drone_dist] * num_fellow_pursuers + 
-                                  [safe_formation_dist] * num_formation)
-            # Vypočítáme reálné vzdálenosti
             distances = np.linalg.norm(other_pos - pursuer_pos, axis=1) - pursuer_rad - other_rads
-            # TADY JE TA MAGIE: Odečítáme pole od pole (každý dron se porovná se svou vlastní bublinou)
-            violations = safe_dists - distances
+            violations = safe_drone_dist - distances
             colleague_penalty = -np.sum(violations[violations > 0]) * 0.1
             reward += colleague_penalty
         #obstacle penalty
+        safe_drone_dist = 2.5
         if len(self.obs_centers) > 0:
             obs_centers_arr = self.obs_centers
             obs_rads_arr = self.obs_rads
@@ -349,9 +337,9 @@ class HerdingEnv(gym.Env):
         #     com_reward = max(0.0, 5.0 - invader_com_dist) * 0.1
         #     reward += com_reward
         # #reward for pushing invader away
-        critical_zone = 12.0
+        critical_zone = 18.0
         if current_inv_prime_dist < critical_zone:
-            panic_penalty = ((critical_zone - current_inv_prime_dist) / critical_zone) * 0.1
+            panic_penalty = ((critical_zone - current_inv_prime_dist) / critical_zone) * 0.15
             reward -= panic_penalty
         diff = current_inv_prime_dist - self.last_inv_prime_dist
         #reward, positive if invader is further away from prime
@@ -366,8 +354,8 @@ class HerdingEnv(gym.Env):
             #print("lost")
             if not done:
                 self.lost_purs_crash += 1
-            reward -= 40.0
-            terminated = True
+            #reward -= 30.0
+            #terminated = True
         #penalization for breaking the defense
         if current_inv_prime_dist < 2.0 or done: 
             if done:

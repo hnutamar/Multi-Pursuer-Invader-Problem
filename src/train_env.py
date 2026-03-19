@@ -108,8 +108,10 @@ class HerdingEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         #num of purs in episode
-        new_purs_num = np.random.randint(4, 21) #np.random.randint(1, 11)
-        self.pursuing_purs = np.random.randint(1, new_purs_num // 2) #new_purs_num #new_purs_num // 2 
+        new_purs_num = np.random.randint(4, 21)
+        #new_purs_num = np.random.randint(1, 11)
+        #self.pursuing_purs = new_purs_num
+        self.pursuing_purs = np.random.randint(1, new_purs_num // 2) #new_purs_num // 2 
         #pursuers
         new_purs_speed = np.random.uniform(6.0, 8.0)
         new_purs_speeds = np.full(new_purs_num, new_purs_speed, dtype=np.float32)
@@ -133,6 +135,7 @@ class HerdingEnv(gym.Env):
         self.world.sc.DRONE_RAD = drone_rad
         self.world.sc.UNIT_RAD = prime_rad
         #obstacles
+        #num_obs = random.choice([4, 5, 6, 7, 8])
         num_obs = random.choice([1, 2, 3, 4, 5])
         if num_obs > 0:
             #array of pos and radii
@@ -337,7 +340,7 @@ class HerdingEnv(gym.Env):
         #     com_reward = max(0.0, 5.0 - invader_com_dist) * 0.1
         #     reward += com_reward
         # #reward for pushing invader away
-        critical_zone = 18.0
+        critical_zone = 20.0
         if current_inv_prime_dist < critical_zone:
             panic_penalty = ((critical_zone - current_inv_prime_dist) / critical_zone) * 0.15
             reward -= panic_penalty

@@ -30,7 +30,7 @@ class UpdateSwarmCallback(BaseCallback):
         self.save_dir = os.path.abspath("./models/history")
         os.makedirs(self.save_dir, exist_ok=True) 
         #gen1
-        self.generation = 28
+        self.generation = 31
     def _on_training_start(self) -> None:
         start_step = self.model.num_timesteps
         rest = start_step % self.update_freq
@@ -115,14 +115,14 @@ def main_herding():
     #model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy, verbose=1, 
     #    tensorboard_log="./ppo_drone_tensorboard/", learning_rate=linear_schedule(0.0003))
     #init_brain_path = "new_obs_best"
-    init_brain_path = "./models/history/gen_28"
+    init_brain_path = "./models/history/gen_31"
     #model.save(init_brain_path)
     vec_env.env_method("load_teammate_brain", init_brain_path)
     custom_objects = {
        #"ent_coef": 0.0001,
-       "learning_rate": 0.00009
+       "learning_rate": 0.00005
     }
-    model = PPO.load("./models/history/gen_28", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
+    model = PPO.load("./models/history/gen_31", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
     #with torch.no_grad():
     #  model.policy.log_std.data = torch.full_like(model.policy.log_std.data, -1.4)
     #save_freq = 500000/num_cpu
@@ -130,7 +130,7 @@ def main_herding():
     #    name_prefix='herding_brain')
     #train
     print("Starting training...")
-    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=200_000)
+    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=150_000)
     model.learn(total_timesteps=20_000_000, callback=swarm_callback, tb_log_name="PPO_Marathon", reset_num_timesteps=False)
     #saving result
     print("Training done...")

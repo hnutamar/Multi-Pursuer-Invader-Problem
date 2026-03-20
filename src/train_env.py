@@ -84,7 +84,7 @@ class HerdingEnv(gym.Env):
         #action space - acc vector
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
         #obs space
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(115,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(92,), dtype=np.float32)
         #episode limits
         self.current_step = 0
         self.test = test
@@ -108,10 +108,10 @@ class HerdingEnv(gym.Env):
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         #num of purs in episode
-        new_purs_num = np.random.randint(4, 21)
-        #new_purs_num = np.random.randint(1, 11)
-        #self.pursuing_purs = new_purs_num
-        self.pursuing_purs = np.random.randint(1, new_purs_num // 2) #new_purs_num // 2 
+        #new_purs_num = np.random.randint(4, 21)
+        new_purs_num = np.random.randint(1, 6)
+        self.pursuing_purs = new_purs_num
+        #self.pursuing_purs = np.random.randint(1, new_purs_num // 2) #new_purs_num // 2 
         #pursuers
         new_purs_speed = np.random.uniform(6.0, 8.0)
         new_purs_speeds = np.full(new_purs_num, new_purs_speed, dtype=np.float32)
@@ -119,14 +119,14 @@ class HerdingEnv(gym.Env):
         self.new_purs_accs = np.full(new_purs_num, new_purs_acc, dtype=np.float32)
         max_purs_speed = np.max(new_purs_speeds)
         #invaders
-        new_inv_speed = np.random.uniform(2.0, max_purs_speed)
-        new_inv_acc = np.random.uniform(new_inv_speed / 1.5, new_inv_speed / 1.1)
+        new_inv_speed = np.random.uniform(2.0, max_purs_speed*0.8)
+        new_inv_acc = np.random.uniform(new_inv_speed / 2.0, new_inv_speed / 1.3)
         #prime
         new_prime_speed = 1.0
         new_prime_acc = np.random.uniform(new_prime_speed / 4.0, new_prime_speed / 2.0)
         #positions
         inv_pos = self.get_random_invader_start()
-        purs_positions = self.get_random_pursuer_starts(new_purs_num)
+        purs_positions = self.get_random_pursuer_starts(new_purs_num, inv_pos)
         #random radii
         drone_rad = random.uniform(0.1, 0.4)
         prime_rad = random.uniform(0.1, 0.7)
@@ -135,8 +135,8 @@ class HerdingEnv(gym.Env):
         self.world.sc.DRONE_RAD = drone_rad
         self.world.sc.UNIT_RAD = prime_rad
         #obstacles
-        #num_obs = random.choice([4, 5, 6, 7, 8])
-        num_obs = random.choice([1, 2, 3, 4, 5])
+        num_obs = random.choice([4, 5, 6, 7, 8])
+        #num_obs = random.choice([1, 2, 3, 4, 5])
         if num_obs > 0:
             #array of pos and radii
             all_agents_pos = np.vstack([inv_pos, purs_positions,np.array([3.0, 3.0, 7.0])])
@@ -181,7 +181,7 @@ class HerdingEnv(gym.Env):
             self.teammate_brain = PPO.load(model_path2, device="cpu")
         #if self.episode_num > 800_000/10:
         with torch.no_grad():
-            self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -3.3)
+            self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -2.8)
 
     def generate_safe_obstacles(self, num_obs, agent_positions, agent_radii, max_coord, is_3d, min_r=1.0, max_r=5.0, safe_margin=1.5):
         #arrays
@@ -214,7 +214,7 @@ class HerdingEnv(gym.Env):
     def get_random_invader_start(self):
         #random pos of invader, not too far or too close
         prime_pos = np.array([3.0, 3.0, 7.0])
-        dist = np.random.uniform(17.0, 25.0)
+        dist = np.random.uniform(17.0, 19.0)
         dir = np.random.randn(3)
         dir[2] = abs(dir[2]) 
         dir = dir / np.linalg.norm(dir)
@@ -222,15 +222,29 @@ class HerdingEnv(gym.Env):
         new_inv_pos[2] = max(1.0, new_inv_pos[2])
         return new_inv_pos
 
-    def get_random_pursuer_starts(self, num_pursuers):
-        #center, prime position
+    def get_random_pursuer_starts(self, num_pursuers, inv_pos):
+        # center, prime position
         prime_pos = np.array([3.0, 3.0, 7.0])    
-        #array for all pursuers
+        # array for all pursuers
         positions = np.zeros((num_pursuers, 3))
-        #guard, the one close to prime
+        # Vzdálenost, jak daleko od Invadera (nebo Prime) se má spawnout
         dist_close = np.random.uniform(2.2, 3.0)
+        # if self.episode_num <= 500000 / 10 and not self.test:
+        #     # --- FÁZE 1: SPAWN PŘESNĚ NA LOS (MEZI INVADERA A PRIME) ---
+        #     # 1. Směrový vektor: Od Invadera směrem k Prime dronovi
+        #     dir_to_prime = prime_pos - inv_pos
+        #     # 2. Normalizace: Uděláme z vektoru šipku o délce přesně 1
+        #     dist_to_prime = np.linalg.norm(dir_to_prime)
+        #     if dist_to_prime > 0:
+        #         norm_dir = dir_to_prime / dist_to_prime
+        #     else:
+        #         norm_dir = np.array([0.0, 0.0, 1.0]) # Fallback    
+        #     # 3. Naspawnujeme Pursuera na Invadera a posuneme ho po LOS blíž k Prime
+        #     positions[0] = inv_pos + (norm_dir * dist_close)
+        #else:
+            # --- FÁZE 2: NÁHODNÝ SPAWN U PRIME DRONA ---
         dir_close = np.random.randn(3)
-        dir_close[2] = abs(dir_close[2])
+        dir_close[2] = abs(dir_close[2]) # Aby se spawnoval spíš nahoře
         dir_close = dir_close / np.linalg.norm(dir_close)
         positions[0] = prime_pos + (dir_close * dist_close)
         #others can be further
@@ -249,7 +263,7 @@ class HerdingEnv(gym.Env):
         #safe clip
         positions[:, 2] = np.clip(positions[:, 2], 1.0, np.inf)
         #so that learning pursuer is not always by prime
-        rnd_num = np.random.randint(0, 4)
+        rnd_num = np.random.randint(0, 2)
         if rnd_num != 1:
             np.random.shuffle(positions)
         return positions
@@ -297,7 +311,7 @@ class HerdingEnv(gym.Env):
         reward = 0.0
         reward += 0.05
         terminated = False
-        curr_dist_to_inv = np.linalg.norm(pursuer_pos - invader_pos) - 6.0
+        curr_dist_to_inv = np.linalg.norm(pursuer_pos - invader_pos) - 8.0
         #navigating penalty to invader
         if curr_dist_to_inv > 0:
             distance_penalty = curr_dist_to_inv * 0.05
@@ -305,7 +319,7 @@ class HerdingEnv(gym.Env):
         pursuer_positions = np.array([p.position for p in self.world.free_purs])
         #pursuer penalty
         colleague_penalty = 0.0
-        safe_drone_dist = 1.0
+        safe_drone_dist = 2.0
         other_rads = np.array([p.my_rad for p in self.world.free_purs[1:]])
         other_pos = pursuer_positions[1:]
         if len(other_pos) > 0:
@@ -332,25 +346,25 @@ class HerdingEnv(gym.Env):
         dist_to_prime = np.linalg.norm(pursuer_pos - self.world.prime.position) - pursuer_rad - self.world.prime.my_rad
         if dist_to_prime < safe_drone_dist:
             prime_violation = safe_drone_dist - dist_to_prime
-            reward -= prime_violation * 0.2
+            reward -= prime_violation * 0.2      
         #COM reward
         # if len(pursuer_positions) > 1:
         #     center_of_mass = np.mean(pursuer_positions, axis=0)
         #     invader_com_dist = np.linalg.norm(center_of_mass - invader_pos)
         #     com_reward = max(0.0, 5.0 - invader_com_dist) * 0.1
         #     reward += com_reward
-        # #reward for pushing invader away
-        critical_zone = 20.0
+        #reward for pushing invader away
+        critical_zone = 8.0
         if current_inv_prime_dist < critical_zone:
-            panic_penalty = ((critical_zone - current_inv_prime_dist) / critical_zone) * 0.15
+            panic_penalty = ((critical_zone - current_inv_prime_dist) / critical_zone) * 5.0
             reward -= panic_penalty
         diff = current_inv_prime_dist - self.last_inv_prime_dist
         #reward, positive if invader is further away from prime
-        if current_inv_prime_dist < 20.0: # and diff > 0:
+        if 8.0 < current_inv_prime_dist < 20.0: # and diff > 0:
             reward += diff * 0.1
         #if invader crashed, it is good, but better to push him away
-        if invader_crashed:
-            reward += 10.0
+        if np.linalg.norm(pursuer_pos - invader_pos) < 1.5:
+            reward += 20.0
             terminated = True
         #penalization for crash
         if self.world.pursuers[0].crashed:
@@ -371,9 +385,9 @@ class HerdingEnv(gym.Env):
             reward -= 80.0
             terminated = True
         #reward for getting invader far
-        safe_distance = min(current_inv_prime_dist, 20.0)
-        safety_ratio = safe_distance / 20.0
-        reward += safety_ratio * 0.05
+        # safe_distance = min(current_inv_prime_dist, 20.0)
+        # safety_ratio = safe_distance / 20.0
+        # reward += safety_ratio * 0.05
         # action_penalty = np.sum(np.square(action)) * 0.005
         # reward -= action_penalty
         #penalty for invader moving too much
@@ -381,8 +395,8 @@ class HerdingEnv(gym.Env):
         #     inv_diff = np.linalg.norm(self.last_inv_pos - invader_pos)
         #     reward -= inv_diff * 0.05
         #self.last_inv_pos = invader_pos
-        # if current_inv_prime_dist > 20.0:
-        #     reward += 0.1
+        if current_inv_prime_dist > 20.0:
+            reward += 0.1
         #whole game won
         #if truncated:
             #reward += min(current_inv_prime_dist, 20.0) * 2

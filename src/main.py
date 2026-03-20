@@ -26,9 +26,9 @@ def main():
     inv_pos = np.array([[25.24, 20.15, 15.58]])
     #model = PPO.load("new_obs_best")
     #model2 = PPO.load("new_obs_best2")
-    #model = PPO.load("./models/history/gen_31")
-    #model2 = PPO.load("./models/history/gen_30")
-    world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 5.0), inv_acc=5.0, prime_acc=1.3, purs_speed=np.full(30, 8.0), inv_speed=7.0, prime_speed=3.5, pursue_model=None, not_testing=True)
+    model = PPO.load("./models/history/gen_45")
+    model2 = PPO.load("./models/history/gen_44")
+    world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 5.0), inv_acc=5.0, prime_acc=1.3, purs_speed=np.full(30, 8.0), inv_speed=7.0, prime_speed=3.5, pursue_model=(model, model2), not_testing=True)
     #visualization
     SHOW_VISUALIZATION = True
     vis = None

@@ -1,5 +1,6 @@
 import numpy as np
 from agent import Agent
+import random
 
 class Invader(Agent):
     def __init__(self, position, max_speed, max_acc, max_omega, my_rad, dt):
@@ -15,6 +16,7 @@ class Invader(Agent):
         self.rad_run = np.random.uniform(low=1.5, high=3.5)
         self.my_clock = 0
         self.u_dir = np.zeros_like(self.position)
+        self.kamikadze = True #random.random() < 0.75
         
     def evade(self, pursuers, target, obstacles):
         self.my_clock += 1
@@ -27,7 +29,7 @@ class Invader(Agent):
         p_idx = self.strategy_closest_pursuer(pursuers)
         #v_dir = self.cons_purs*self.strategy_run_away(pursuers, pursuer) + self.cons_targ*self.pursuit_pure_pursuit(target)
         #if the closest pursuer is close enough, run away from him, otherwise pursue the prime
-        if p_idx != -1 and np.linalg.norm(self.position - pursuers[p_idx].position) - self.my_rad - pursuers[p_idx].my_rad <= self.rad_run:
+        if not self.kamikadze and p_idx != -1 and np.linalg.norm(self.position - pursuers[p_idx].position) - self.my_rad - pursuers[p_idx].my_rad <= self.rad_run:
             v_dir = self.strategy_run_away(pursuers, p_idx)
         else:
             v_dir = self.pursuit_pure_pursuit(target)

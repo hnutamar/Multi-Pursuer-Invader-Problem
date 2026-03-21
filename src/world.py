@@ -247,7 +247,14 @@ class SimulationWorld:
             for idx in np.where(swarm_crash_mask)[0]:
                 free_purs[idx].crashed = True
         #ending check
-        done = self.prime.crashed #or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
+        done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
+        if self.prime.finished:
+            inv_to_prime = np.linalg.norm(self.invaders[0].position - self.prime.position)
+            inv_to_prime2 = np.linalg.norm(self.invaders[1].position - self.prime.position)
+            min_dist = min(inv_to_prime, inv_to_prime2)
+            print("win, dist: " + str(min_dist))
+        elif done:
+            print("lost")
         return self.get_state(), done
 
     def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):

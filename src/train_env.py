@@ -119,7 +119,7 @@ class HerdingEnv(gym.Env):
         self.new_purs_accs = np.full(new_purs_num, new_purs_acc, dtype=np.float32)
         max_purs_speed = np.max(new_purs_speeds)
         #invaders
-        new_inv_speed = np.random.uniform(2.0, max_purs_speed*0.9)
+        new_inv_speed = np.random.uniform(4.0, max_purs_speed*0.9)
         new_inv_acc = np.random.uniform(new_inv_speed / 2.0, new_inv_speed / 1.3)
         #prime
         new_prime_speed = 1.0
@@ -319,7 +319,7 @@ class HerdingEnv(gym.Env):
         pursuer_positions = np.array([p.position for p in self.world.free_purs])
         #pursuer penalty
         colleague_penalty = 0.0
-        safe_drone_dist = 2.0
+        safe_drone_dist = 0.5
         other_rads = np.array([p.my_rad for p in self.world.free_purs[1:]])
         other_pos = pursuer_positions[1:]
         if len(other_pos) > 0:
@@ -372,8 +372,8 @@ class HerdingEnv(gym.Env):
             #print("lost")
             if not done:
                 self.lost_purs_crash += 1
-            #reward -= 20.0
-            #terminated = True
+            reward -= 20.0
+            terminated = True
         #penalization for breaking the defense
         if current_inv_prime_dist < 2.0 or done: 
             if done:

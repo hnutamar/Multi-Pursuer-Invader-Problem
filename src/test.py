@@ -18,9 +18,9 @@ def test_herding_model():
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
     #model_path = "new_obs_best" 
-    model_path = "./models/history/gen_35" 
+    model_path = "./models/history/gen_38" 
     #model_path = "./models/gen_31" 
-    model_path2 = "./models/history/gen_34" 
+    model_path2 = "./models/history/gen_37" 
     #model_path2 = "./models/gen_30" 
     #model_path2 = "new_obs_best2"
     print(f"Loading MLP: {model_path} ...")

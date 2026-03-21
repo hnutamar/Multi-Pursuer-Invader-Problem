@@ -283,34 +283,44 @@ class Pursuer(Agent):
         new_purs_vel = np.array(new_obs_vel)
         new_purs_rads = np.array(new_obs_rad)
         #pursuer state + density
-        # Zvětšeno na 24, protože máme 3 kolegy * 8 informací (nově přidána vzdálenost)
+        # --- 1. VYTVOŘENÍ PRÁZDNÉHO "BATOHU" (32 hodnot) ---
         pursuers_form = np.full(32, FAR_AWAY, dtype=np.float32)
-        # Nastavení defaultních nul pro rychlosti a poloměry (pozice a vzdálenost zůstanou FAR_AWAY)
+        # Nastavení defaultních nul pro rychlosti a poloměry
         for i in range(4):
             start = i * 8
-            pursuers_form[start+3 : start+6] = 0.0  # defaultní relativní rychlost
-            pursuers_form[start+6] = 0.0            # defaultní poloměr
-        # if len(new_purs_pos) > 0:
-        #     density = len(new_purs_pos)
-        #     # 1. KROK: Nejdřív rovnou spočítáme normalizované vektory pro VŠECHNY kolegy naráz!
-        #     # (Tím si ušetříme dělení později v cyklu)
-        #     norm_rel_positions = (new_purs_pos - self.position) / 2.0 #self.vis_range
-        #     # 2. KROK: A teď z těch už zkrácených šipek spočítáme tu explicitní vzdálenost (váš trik)
-        #     norm_dists = np.linalg.norm(norm_rel_positions, axis=1)
-        #     # 3. KROK: Seřadíme podle těch normalizovaných vzdáleností
-        #     closest_indices = np.argsort(norm_dists)[:4]
-        #     #iterating from closest indices
-        #     for i, idx in enumerate(closest_indices):
-        #         start = i * 8  # <-- Nový multiplikátor 8!    
-        #         # Relativní pozice (použijeme to, co už jsme spočítali nahoře)
-        #         pursuers_form[start : start+3] = norm_rel_positions[idx]    
-        #         # Relativní rychlost (nezapomeňte dělit 2x maximálkou, jak jsme řešili)
-        #         rel_vel = new_purs_vel[idx] - self.curr_speed
-        #         pursuers_form[start+3 : start+6] = rel_vel / (MAX_SPEED * 2.0)    
-        #         # Poloměr kolegy
-        #         pursuers_form[start+6] = new_purs_rads[idx] / MAX_DRONE_RAD    
-        #         # NOVÉ: Explicitní normalizovaná vzdálenost jako červený maják pro síť!
-        #         pursuers_form[start+7] = norm_dists[idx]
+            pursuers_form[start+3 : start+6] = 0.0  
+            pursuers_form[start+6] = 0.0            
+
+        # --- 2. VÝPOČET LOS ---
+        attack_vector = self.target["tar_pos"] - self.prime_pos
+        attack_dist = np.linalg.norm(attack_vector)
+        
+        if attack_dist > 0.1:
+            prime_to_me = self.position - self.prime_pos
+            # 1. Projekce
+            projection = np.dot(prime_to_me, attack_vector) / (attack_dist**2)
+            # 2. Vzdálenost k ose
+            cross_prod = np.cross(attack_vector, prime_to_me)
+            raw_dist_to_line = np.linalg.norm(cross_prod) / attack_dist
+            # 3. Vektor směrem k ose
+            closest_point_on_line = self.prime_pos + (projection * attack_vector)
+            vector_to_line = closest_point_on_line - self.position    
+        else:
+            # Fallback
+            projection = 0.0
+            raw_dist_to_line = MAX_DIST
+            vector_to_line = np.zeros(3)
+            
+        # Zabijácký LOS blok (5 hodnot)
+        los_obs = np.concatenate([
+            [projection],                                  
+            [raw_dist_to_line / MAX_DIST],                 
+            vector_to_line / MAX_DIST                      
+        ]).astype(np.float32)
+
+        # --- 3. TRIK S PROPAŠOVÁNÍM DAT (Transfer Learning Hack) ---
+        # Vezmeme našich 5 hodnot z los_obs a přepíšeme jimi posledních 5 pozic v pursuers_form
+        pursuers_form[-5:] = los_obs
         #invader state
         inv_rel_pos = (self.target["tar_pos"] - self.position) / MAX_DIST
         inv_rel_vel = self.target["tar_vel"] - self.curr_speed

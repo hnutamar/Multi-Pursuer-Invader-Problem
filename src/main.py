@@ -28,7 +28,7 @@ def main():
     #model2 = PPO.load("new_obs_best2")
     model = PPO.load("./models/history/gen_35")
     model2 = PPO.load("./models/history/gen_34")
-    world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 5.0), inv_acc=4.0, prime_acc=1.3, purs_speed=np.full(30, 8.0), inv_speed=7.0, prime_speed=3.5, pursue_model=(model, model2), not_testing=True)
+    world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 5.0), inv_acc=5.5, prime_acc=1.3, purs_speed=np.full(30, 8.0), inv_speed=7.0, prime_speed=3.5, pursue_model=(model, model2), not_testing=True)
     #visualization
     SHOW_VISUALIZATION = True
     vis = None

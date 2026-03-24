@@ -90,31 +90,31 @@ def make_defense_env(env_rank, seed=0):
         #unique seed
         set_random_seed(seed + env_rank)
         #new config
-        new_sc = Sim3DConfig(dt=0.02, purs_num=1, inv_num=1, obstacle=False)
+        new_sc = Sim3DConfig(dt=0.02, purs_num=10, inv_num=1, obstacle=False)
         #random max speeds
-        new_purs_speed = random.uniform(2.0, 8.0)
-        new_purs_acc = random.uniform(new_purs_speed/4, new_purs_speed/2)
-        new_inv_speed = random.uniform(2.0, new_purs_speed + 2.0)
-        new_inv_acc = random.uniform(new_inv_speed/4, new_inv_speed/2)
+        purs_acc = np.full(30, 5.0)
+        inv_acc = np.full(30, 4.0)
+        purs_speed = np.full(30, 8.0)
+        inv_speed = np.full(30, 7.0)
         #brave new world
         model = PPO.load("./models/history/gen_38")
         model2 = PPO.load("./models/history/gen_37")
-        world = SimulationWorld(new_sc, _3d=True, purs_acc=[new_purs_acc], prime_acc=0.1, pursue_model=(model, model2),
-            inv_acc=new_inv_acc, purs_speed=[new_purs_speed], inv_speed=new_inv_speed, prime_speed=0.2, inv_pos=[np.array([10.0, 10.0, 10.0])], not_testing=True)
+        world = SimulationWorld(new_sc, _3d=True, purs_acc=purs_acc, prime_acc=0.1, pursue_model=(model, model2),
+            inv_acc=inv_acc, purs_speed=purs_speed, inv_speed=inv_speed, prime_speed=0.2, inv_pos=[np.array([10.0, 10.0, 10.0])], not_testing=True)
         env = FastWorldEnv(world_instance=world, sc=new_sc)
         env = Monitor(env)
         return env
     return _init
 
 def main_defense():
-    num_cpu = 10
+    num_cpu = 5
     #vectorized env
     vec_env = SubprocVecEnv([make_defense_env(i) for i in range(num_cpu)], start_method="spawn")
     #model
     custom_policy = dict(activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]))
     print("Creating custom AI model...")
-    model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy, verbose=1, 
-       tensorboard_log="./ppo_drone_tensorboard/", learning_rate=linear_schedule(0.0003))
+    model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy, batch_size=256, gamma=0.99, n_steps=2048,
+       tensorboard_log="./ppo_drone_tensorboard/", learning_rate=linear_schedule(0.0003), verbose=1)
     #init_brain_path = "new_obs_best"
     init_brain_path = "./models/history_def/g_0"
     model.save(init_brain_path)
@@ -131,8 +131,8 @@ def main_defense():
     #    name_prefix='herding_brain')
     #train
     print("Starting training...")
-    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=300_000)
-    model.learn(total_timesteps=20_000_000, callback=swarm_callback, tb_log_name="PPO_Defense", reset_num_timesteps=True)
+    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=50_000)
+    model.learn(total_timesteps=2_000_000, callback=swarm_callback, tb_log_name="PPO_Defense", reset_num_timesteps=True)
     #saving result
     print("Training done...")
     model.save("drone_defense_brain")
@@ -169,7 +169,7 @@ def main_herding():
     model.save("drone_herding_brain_gen2")
 
 if __name__ == "__main__":
-    main_herding()
+    main_defense()
     
 #UNUSED CODE
     # #new config

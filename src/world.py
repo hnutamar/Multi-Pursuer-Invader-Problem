@@ -81,9 +81,9 @@ class SimulationWorld:
                 high=[2*self.sc.WORLD_WIDTH, 2*self.sc.WORLD_HEIGHT], 
                 size=(self.sc.INVADER_NUM, 2)
             )
-        rnd_acc_inv = np.full(self.sc.INVADER_NUM, inv_acc) if inv_acc is not None else np.random.uniform(1.3, 1.5, self.sc.INVADER_NUM)
-        acc_inv = inv_acc or 1.0
-        speed_inv = inv_speed or 5.0
+        #rnd_acc_inv = np.full(self.sc.INVADER_NUM, inv_acc) if inv_acc is not None else np.random.uniform(1.3, 1.5, self.sc.INVADER_NUM)
+        acc_inv = inv_acc #or 1.0
+        speed_inv = inv_speed #or 5.0
         #acc_purs = purs_acc or 1.0
         rnd_purs_acc = purs_acc
         rnd_speed_purs = purs_speed
@@ -98,7 +98,7 @@ class SimulationWorld:
         #invader init
         self.invaders = []
         for i in range(self.sc.INVADER_NUM):
-            inv = Invader(position=rnd_points_inv[i], max_speed=speed_inv, max_acc=acc_inv, max_omega=1.5, my_rad=self.sc.DRONE_RAD, dt=self.sc.DT)
+            inv = Invader(position=rnd_points_inv[i], max_speed=speed_inv[i], max_acc=acc_inv[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD, dt=self.sc.DT)
             self.invaders.append(inv)
 
     def _get_safe_agent_data(self, agents, inv=False):
@@ -247,14 +247,14 @@ class SimulationWorld:
             for idx in np.where(swarm_crash_mask)[0]:
                 free_purs[idx].crashed = True
         #ending check
-        done = self.prime.crashed #or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
-        # if self.prime.finished:
-        #     inv_to_prime = np.linalg.norm(self.invaders[0].position - self.prime.position)
-        #     inv_to_prime2 = np.linalg.norm(self.invaders[1].position - self.prime.position)
-        #     min_dist = min(inv_to_prime, inv_to_prime2)
-        #     print("win, dist: " + str(min_dist))
-        # elif done:
-        #     print("lost")
+        done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
+        if self.prime.finished:
+            inv_to_prime = np.linalg.norm(self.invaders[0].position - self.prime.position)
+            inv_to_prime2 = np.linalg.norm(self.invaders[1].position - self.prime.position)
+            min_dist = min(inv_to_prime, inv_to_prime2)
+            print("win, dist: " + str(min_dist))
+        elif done:
+            print("lost")
         return self.get_state(), done
 
     def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):

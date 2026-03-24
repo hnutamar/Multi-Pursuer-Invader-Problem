@@ -114,15 +114,31 @@ class Pursuer(Agent):
             if self.my_clock % 5 != 0:
                 return self.new_acc
         #precalculated data, faster this way
+        # ... (začátek jako u vás) ...
         self.prime_rad = prime_rad
         all_inv_pos, all_inv_vel, self.all_inv_purs_num, all_inv_rads, all_purs_pos, all_purs_vel, all_purs_rads, self.my_index, obs_centers, obs_radii = precalc_data
-        self.copy_data(prime_vel, prime_pos, all_inv_pos, all_inv_vel, all_inv_rads, all_purs_pos, all_purs_vel, obs_centers, obs_radii)
-        self.all_purs_pos, self.all_purs_vel, self.all_purs_rads, self.all_purs_tars = self.get_visible_neighbors_data(all_purs_pos.copy(), all_purs_vel.copy(), all_purs_rads.copy(), all_purs_tars, gaussian=True)
-        #update target
+        # 1. PURSUEŘI (Kolegové) - Tohle už máte, jen použijeme tu vaši stávající metodu (nebo novou, obě budou fungovat)
+        self.all_purs_pos, self.all_purs_vel, self.all_purs_rads, self.all_purs_tars = self.get_visible_neighbors_data(
+            all_purs_pos.copy(), all_purs_vel.copy(), all_purs_rads.copy(), all_purs_tars, gaussian=True)
+        # --- ZDE PŘICHÁZÍ TA ZMĚNA ---
+        # 2. INVADEŘI (Filtrování + Šum)
+        self.all_inv_pos, self.all_inv_vel, self.all_inv_rads, inv_mask = self.filter_visible_objects(
+            all_inv_pos.copy(), all_inv_vel.copy(), all_inv_rads.copy(), max_range=25.0, apply_noise=True)
+        # Nezapomeneme vyfiltrovat i objekty Invaderů, jestli je potřebujeme pro ten `purs_num`
+        self.all_inv_purs_num = self.all_inv_purs_num[inv_mask]
+        targets = [obj for obj, m in zip(targets, inv_mask) if m]
+        # 3. PŘEKÁŽKY (Filtrování + Šum)
+        if obs_centers is not None and len(obs_centers) > 0:
+            self.obs_centers, _, self.obs_radii, _ = self.filter_visible_objects(
+                obs_centers.copy(), None, obs_radii.copy(), max_range=25.0, apply_noise=True, obstacles=True)
+        else:
+            self.obs_centers, self.obs_radii = None, None
+        # 4. ZBYTEK (Target a Prime)
+        # Zde zavoláme upravenou funkci gauss_noise, ze které jsme smazali bloky pro all_inv_pos a obs_centers
+        self.copy_data(prime_vel, prime_pos)
         if self.target:
             self.update_target()
-        #adding realistic gaussian noise
-        self.gauss_noise()
+        self.gauss_noise() # Tady už šumíme JEN Prime a ten aktuální explicitní Target
         #init directions
         tar_vel = np.zeros_like(self.position)
         form_vel = np.zeros_like(self.position)
@@ -150,13 +166,17 @@ class Pursuer(Agent):
                 else:
                     tar_vel = self.pursue_target(self.target)
         #pursuer having target -> pursue it
-        elif self.target != None and self.target["target"].crashed == False:
-            if not (self.target["purs_type"] != self.purs_types["circling"] and np.linalg.norm(self.position - self.prime_pos) > self.capture_max):
+        elif self.target != None and self.target["target"].crashed == False and not self.is_rl_controlled:
+            if not (self.target["purs_type"] != self.purs_types["circling"] and np.linalg.norm(self.position - self.prime_pos) > self.capture_max) or self.is_rl_controlled:
                 if self.pursue_model is not None:
                     self.pursue_herding()
                     return self.new_acc
                 else:
                     tar_vel = self.pursue_target(self.target)
+        elif self.target != None and self.target["target"].crashed == False and self.is_rl_controlled:
+            tar_vel = self.pursue_rl_target(self.target)
+            if self.target["purs_type"] == self.purs_types["circling"]:
+                return self.new_acc
         #if target dir is zero, pursuer has no target -> keep the formation
         if np.array_equal(tar_vel, form_vel):
             self.target = None
@@ -393,7 +413,7 @@ class Pursuer(Agent):
         ]).astype(np.float32)
         return final_obs
     
-    def observation_herding(self):
+    def get_observation(self):
         #observation for herding NN, everything normalized
         MAX_COORD = 30.0       #world
         MAX_DIST = 40.0        #max possible distance
@@ -403,236 +423,141 @@ class Pursuer(Agent):
         MAX_DRONE_RAD = 0.7
         FAR_AWAY = 3.0  #far away, bigger number
         MAX_ACC = 8.0
-        #my state
+        is_attacking = 1.0 if self.target is not None else 0.0
+        state_obs = np.array([is_attacking], dtype=np.float32)
+        # 1. MOJE DATA A PRIME DATA (zůstávají jak jste to měl)
         my_obs = np.concatenate([self.curr_speed / MAX_SPEED, self.curr_acc / MAX_ACC, [self.position[2] / MAX_COORD], 
                                  [self.my_rad / MAX_DRONE_RAD], [self.cruise_speed / MAX_SPEED], [self.max_acc / MAX_ACC]]) 
-        # prime state
         prime_rad_obs = np.array([self.prime_rad / MAX_DRONE_RAD], dtype=np.float32)
         prime_rel_vel = self.prime_vel - self.curr_speed
         prime_pos = (self.prime_pos - self.position) / MAX_DIST
-        # 1. Výpočet reálné vzdálenosti mezi středy MĚ a PRIME
         raw_prime_dist = np.linalg.norm(self.prime_pos - self.position)
-        # 2. Odečtení poloměrů (Povrchová vzdálenost)
         surf_prime_dist = max(0.0, raw_prime_dist - self.prime_rad - self.my_rad)
-        # 3. Normalizace pro Observation Space
         prime_purs_dist = surf_prime_dist / MAX_DIST
-        prime_obs = np.concatenate([
-            prime_pos, 
-            prime_rel_vel / (MAX_SPEED * 2.0),
-            prime_rad_obs,
-            [prime_purs_dist]
-        ])
-        #dividing pursuers to those chasing invader with me and the others
+        prime_obs = np.concatenate([prime_pos, prime_rel_vel / (MAX_SPEED * 2.0), prime_rad_obs, [prime_purs_dist]])
+        # 2. INTELIGENTNÍ FILTRACE KOLEGŮ (Záleží na našem stavu)
         other_purs_pos = []
         other_purs_vel = []
         other_purs_rads = []
-        # new_obs_pos = []
-        # new_obs_vel = []
-        # new_obs_rad = []
         for i, tar in enumerate(self.all_purs_tars):
-            if tar is not None and tar is self.target["target"]:
+            # Podmínka A: Útočím! Zajímá mě jen ten kolega, co útočí na STEJNÝ cíl jako já
+            if self.state == States.PURSUE and tar is not None and tar is self.target["target"]:
                 other_purs_pos.append(self.all_purs_pos[i])
                 other_purs_vel.append(self.all_purs_vel[i])
                 other_purs_rads.append(self.all_purs_rads[i])
-            # else:
-            #     new_obs_pos.append(self.all_purs_pos[i])
-            #     new_obs_rad.append(self.all_purs_rads[i])
-            #     new_obs_vel.append(self.all_purs_vel[i])
+            # Podmínka B: Jsem ve formaci! Zajímají mě VŠICHNI kolegové blízko (abych do nich nenarazil)
+            elif self.state == States.FORM:
+                other_purs_pos.append(self.all_purs_pos[i])
+                other_purs_vel.append(self.all_purs_vel[i])
+                other_purs_rads.append(self.all_purs_rads[i])
         new_purs_pos = np.array(other_purs_pos)
         new_purs_vel = np.array(other_purs_vel)
         new_purs_rads = np.array(other_purs_rads)
-        # Získáme pozici Invadera pro výpočet
-        invader_pos = self.target["tar_pos"]
-        # Zvětšíme pole: 4 kolegové * 9 informací = 36 (místo 32)
-        pursuers_obs = np.full(36, FAR_AWAY, dtype=np.float32)
-        # Defaultní hodnoty (nuly pro rychlost a poloměr)
+        # Sestavení pole pursuers_obs (stejný kód jako máte vy, velikost 32)
+        pursuers_obs = np.full(32, FAR_AWAY, dtype=np.float32)
         for i in range(4):
-            start = i * 9  # <-- Změna multiplikátoru na 9
-            pursuers_obs[start+3 : start+6] = 0.0  # default velocity
-            pursuers_obs[start+6] = 0.0            # default radius
-        density = 0
-        if len(new_purs_pos) > 0:
-            density = len(new_purs_pos)
-            # Normalizované pozice vůči mně
+            start = i * 8
+            pursuers_obs[start+3 : start+6] = 0.0  
+            pursuers_obs[start+6] = 0.0            
+        density = len(new_purs_pos)
+        if density > 0:
             norm_rel_positions = (new_purs_pos - self.position) / self.vis_range
             norm_dists = np.linalg.norm(norm_rel_positions, axis=1)
-            # Seřazení podle vzdálenosti (kdo je mi nejblíž)
             closest_indices = np.argsort(norm_dists)[:4]
             for i, idx in enumerate(closest_indices):
-                start = i * 9  # <-- Změna multiplikátoru na 9
-                # 0, 1, 2: Relativní pozice
+                start = i * 8    
                 pursuers_obs[start : start+3] = norm_rel_positions[idx]    
-                # 3, 4, 5: Relativní rychlost
                 rel_vel = new_purs_vel[idx] - self.curr_speed
                 pursuers_obs[start+3 : start+6] = rel_vel / (MAX_SPEED * 2.0)    
-                # 6: Poloměr drona
                 pursuers_obs[start+6] = new_purs_rads[idx] / MAX_DRONE_RAD    
-                # --- 7: Povrchová vzdálenost kolegy ode MĚ ---
-                # Výpočet reálné vzdálenosti (předtím byla norm_dists normalizovaná vůči vis_range)
                 raw_mate_to_me_dist = np.linalg.norm(new_purs_pos[idx] - self.position)
                 surf_mate_to_me_dist = max(0.0, raw_mate_to_me_dist - new_purs_rads[idx] - self.my_rad)
-                # Uložíme normalizovanou vůči vis_range (aby to navazovalo na předchozí logiku)
                 pursuers_obs[start+7] = surf_mate_to_me_dist / self.vis_range
-                # --- 8: Povrchová vzdálenost kolegy od INVADERA ---
-                raw_mate_to_inv_dist = np.linalg.norm(new_purs_pos[idx] - invader_pos)
-                surf_mate_to_inv_dist = max(0.0, raw_mate_to_inv_dist - new_purs_rads[idx] - self.target["tar_rad"])
-                # Uložíme normalizovanou vůči MAX_DIST
-                pursuers_obs[start+8] = surf_mate_to_inv_dist / MAX_DIST
         density_obs = np.array([density / MAX_DENSITY], dtype=np.float32)
-        # new_purs_pos = np.array(new_obs_pos)
-        # new_purs_vel = np.array(new_obs_vel)
-        # new_purs_rads = np.array(new_obs_rad)
-        #pursuer state + density
-        # pursuers_form = np.full(32, FAR_AWAY, dtype=np.float32)
-        # for i in range(4):
-        #     start = i * 8
-        #     pursuers_form[start+3 : start+6] = 0.0
-        #     pursuers_form[start+6] = 0.0
-        # if len(new_purs_pos) > 0:
-        #     density = len(new_purs_pos)
-        #     norm_rel_positions = (new_purs_pos - self.position) / 2.0 #self.vis_range
-        #     norm_dists = np.linalg.norm(norm_rel_positions, axis=1)
-        #     closest_indices = np.argsort(norm_dists)[:4]
-        #     #iterating from closest indices
-        #     for i, idx in enumerate(closest_indices):
-        #         start = i * 8  # <-- Nový multiplikátor 8!    
-        #         pursuers_form[start : start+3] = norm_rel_positions[idx]    
-        #         rel_vel = new_purs_vel[idx] - self.curr_speed
-        #         pursuers_form[start+3 : start+6] = rel_vel / (MAX_SPEED * 2.0)    
-        #         pursuers_form[start+6] = new_purs_rads[idx] / MAX_DRONE_RAD    
-        #         pursuers_form[start+7] = norm_dists[idx]
-        #invader state
-        # Vektory (směry) zůstávají nezměněné, ukazují přesně na středy
-        inv_rel_pos = (self.target["tar_pos"] - self.position) / MAX_DIST
-        inv_rel_vel = self.target["tar_vel"] - self.curr_speed
-        inv_to_prime_vec = (self.prime_pos - self.target["tar_pos"]) / MAX_DIST
-        # --- NOVÉ: Povrchové vzdálenosti ---
-        # 1. Vzdálenost k Prime dronovi (Invader -> Prime)
-        raw_inv_prime_dist = np.linalg.norm(self.prime_pos - self.target["tar_pos"])
-        surf_inv_prime_dist = max(0.0, raw_inv_prime_dist - self.target["tar_rad"] - self.prime_rad)
-        inv_to_prime_dist = np.array([surf_inv_prime_dist / MAX_DIST], dtype=np.float32)
-        # 2. Vzdálenost ke mně (Invader -> Pursuer)
-        raw_inv_purs_dist = np.linalg.norm(self.target["tar_pos"] - self.position)
-        surf_inv_purs_dist = max(0.0, raw_inv_purs_dist - self.target["tar_rad"] - self.my_rad)
-        inv_purs_dist = np.array([surf_inv_purs_dist / MAX_DIST], dtype=np.float32)
-        # --- Zbytek zůstává nezměněn ---
-        inv_rad_obs = np.array([self.target["tar_rad"] / MAX_DRONE_RAD], dtype=np.float32)
-        invaders_obs = np.concatenate([inv_rel_pos, inv_rel_vel / (MAX_SPEED * 2.0), inv_to_prime_vec, inv_to_prime_dist,
-                       inv_rad_obs, inv_purs_dist])
+        # 3. ZPRACOVÁNÍ AŽ 2 NEJBLIŽŠÍCH INVADERŮ (S metrikou počtu lovců!)
+        invaders_obs = np.full(26, FAR_AWAY, dtype=np.float32) 
+        # Velikost 26 = (2 invadery * 13 informací)
+        # Vyplníme defaultními rychlostmi a počtem pursuerů (0)
+        for i in range(2):
+            start = i * 13
+            invaders_obs[start+3 : start+6] = 0.0 # rychlost
+            invaders_obs[start+12] = 0.0          # počet pursuerů
+        if len(self.all_inv_pos) > 0:
+            inv_dists = np.linalg.norm(self.all_inv_pos - self.position, axis=1)
+            sorted_inv_indices = np.argsort(inv_dists)
+            closest_inv_indices = sorted_inv_indices[:2] # Bereme 2 nejbližší!
+            for i, idx in enumerate(closest_inv_indices):
+                start = i * 13
+                # Získání reálného objektu Invadera z enginu pro počet pursuerů
+                # Předpokládám, že self.all_inv_objects drží reference na instance Invaderů
+                inv_rel_pos = (self.all_inv_pos[idx] - self.position) / MAX_DIST
+                inv_rel_vel = self.all_inv_vel[idx] - self.curr_speed
+                inv_to_prime_vec = (self.prime_pos - self.all_inv_pos[idx]) / MAX_DIST
+                raw_inv_prime_dist = np.linalg.norm(self.prime_pos - self.all_inv_pos[idx])
+                surf_inv_prime_dist = max(0.0, raw_inv_prime_dist - self.all_inv_rads[idx] - self.prime_rad)
+                raw_inv_purs_dist = np.linalg.norm(self.all_inv_pos[idx] - self.position)
+                surf_inv_purs_dist = max(0.0, raw_inv_purs_dist - self.all_inv_rads[idx] - self.my_rad)
+                invaders_obs[start : start+3] = inv_rel_pos
+                invaders_obs[start+3 : start+6] = inv_rel_vel / (MAX_SPEED * 2.0)
+                invaders_obs[start+6 : start+9] = inv_to_prime_vec
+                invaders_obs[start+9] = surf_inv_prime_dist / MAX_DIST
+                invaders_obs[start+10] = surf_inv_purs_dist / MAX_DIST
+                invaders_obs[start+11] = self.all_inv_rads[idx] / MAX_DRONE_RAD
+                # ZMĚNA ZDE: Saháme už jen čistě do Numpy pole
+                invaders_obs[start+12] = self.all_inv_purs_num[idx] / MAX_DENSITY    
         #closest obstacles
         obstacles_obs = np.full(20, FAR_AWAY, dtype=np.float32)
-        #default radii
+        # Defaultní nulový poloměr pro prázdná místa (indexy 3 a 8)
         obstacles_obs[3] = 0.0 
         obstacles_obs[8] = 0.0 
         obstacles_obs[13] = 0.0 
         obstacles_obs[18] = 0.0 
+        # if len(new_obs_pos) > 0:
+        #     if self.obs_centers is not None:
+        #         obs_centers = np.concatenate((self.obs_centers, np.array(new_obs_pos)), axis=0)
+        #         obs_radii = np.concatenate((self.obs_radii, np.array(new_obs_rad)))
+        #     else:
+        #         obs_centers = np.array(new_obs_pos)
+        #         obs_radii = np.array(new_obs_rad)
+        # else:
         obs_centers = self.obs_centers
         obs_radii = self.obs_radii
         if obs_centers is not None and len(obs_centers) > 0:
-            #dist to centers
+            # 1. Vzdálenost k centrům
             center_dists = np.linalg.norm(obs_centers - self.position, axis=1)
-            #dist to edges
+            # 2. Vzdálenost k povrchu (odečteme poloměr překážky)
             edge_dists = center_dists - obs_radii
-            #only those in sight
+            # 3. Vyfiltrujeme jen ty, jejichž povrch je v našem zorném poli
             visible_mask = edge_dists <= self.vis_range
             visible_indices = np.where(visible_mask)[0]
             if len(visible_indices) > 0:
-                #only visible distances
+                # 4. Získáme vzdálenosti k povrchu POUZE pro viditelné překážky
                 visible_edge_dists = edge_dists[visible_indices]
-                #sorting by distance
+                # 5. Seřadíme je od nejbližšího POVRCHU a vezmeme max 2
                 sorted_local_indices = np.argsort(visible_edge_dists)[:4]
+                # 6. Převedeme lokální pořadí zpět na reálné indexy v self.obs_centers
                 closest_obs_indices = visible_indices[sorted_local_indices]
-                #writing to the obs space
+                # 7. Zápis do observation space
                 for i, idx in enumerate(closest_obs_indices):
-                    start = i * 5
-                    #rel position
+                    start = i * 5  # <--- Změna bloku na 5!
+                    # Pozici předáváme jako vektor ke středu dělený dohledem radaru
                     obs_pos = (obs_centers[idx] - self.position) / self.vis_range
                     obstacles_obs[start : start+3] = obs_pos
-                    #radius
+                    # Poloměr překážky
                     obstacles_obs[start+3] = obs_radii[idx] / MAX_RADIUS
-                    #distance
+                    # NOVÉ: Explicitní vzdálenost (znovu využijeme váš trik s normou!)
                     obstacles_obs[start+4] = np.linalg.norm(obs_pos)
-                    
-        # --- VÝPOČET LOS (Line of Sight) PRO OBSERVATION ---
-        attack_vector = self.target["tar_pos"] - self.prime_pos
-        attack_dist = np.linalg.norm(attack_vector)
-        if attack_dist > 0.1:
-            prime_to_me = self.position - self.prime_pos
-            # 1. Projekce (kde na ose jsem)
-            # Normalizovat nepotřebujeme, už to dává hodnoty typicky kolem 0.0 až 1.0
-            projection = np.dot(prime_to_me, attack_vector) / (attack_dist**2)
-            # 2. Vzdálenost k ose
-            cross_prod = np.cross(attack_vector, prime_to_me)
-            raw_dist_to_line = np.linalg.norm(cross_prod) / attack_dist
-            # 3. Vektor směrem k ose (Kudy tam?)
-            # Najdeme ten nejbližší bod na ose:
-            closest_point_on_line = self.prime_pos + (projection * attack_vector)
-            # Vektor ode mě k tomu bodu:
-            vector_to_line = closest_point_on_line - self.position    
-        else:
-            # Fallback, pokud by se nějak spawnuli na sobě
-            projection = 0.0
-            raw_dist_to_line = MAX_DIST
-            vector_to_line = np.zeros(3)
-        # Zabijácký LOS blok pro observation (5 hodnot)
-        los_obs = np.concatenate([
-            [projection],                                  # 1 hodnota
-            [raw_dist_to_line / MAX_DIST],                 # 1 hodnota (normalizovaná!)
-            vector_to_line / MAX_DIST                      # 3 hodnoty (vektor X, Y, Z)
-        ]).astype(np.float32)
-        #final vector
+        # 5. FINÁLNÍ SPOJENÍ
         final_obs = np.concatenate([
-            my_obs,         # 10
+            state_obs,      # 1  (Je důležité to dát hned na začátek!)
+            my_obs,         # 6
             prime_obs,      # 8
             density_obs,    # 1
-            pursuers_obs,   # 36
-            #pursuers_form,  # 32
-            invaders_obs,   # 12
-            obstacles_obs,   # 20
-            los_obs         # 5
+            pursuers_obs,   # 32
+            invaders_obs,   # 26 (Místo původních 12)
+            obstacles_obs   # 20
         ]).astype(np.float32)
-        return final_obs
-    
-    def get_observation(self):
-        #my state
-        my_obs = np.concatenate([self.position, self.curr_speed]) 
-        #prime state
-        prime_obs = np.concatenate([self.prime_pos - self.position, self.prime_vel])
-        #pursuers
-        pursuers_obs = np.zeros(18, dtype=np.float32)
-        density = 0
-        if len(self.all_purs_pos) > 0:
-            #distances
-            dists = np.linalg.norm(self.all_purs_pos - self.position, axis=1)
-            #density
-            density = len(self.all_purs_pos)
-            #sorting to closest
-            sorted_indices = np.argsort(dists)
-            closest_indices = sorted_indices[:3]
-            #array filling
-            for i, idx in enumerate(closest_indices):
-                start = i * 6
-                pursuers_obs[start : start+3] = self.all_purs_pos[idx] - self.position
-                pursuers_obs[start+3 : start+6] = self.all_purs_vel[idx]    
-        density_obs = np.array([density], dtype=np.float32)
-        #invaders
-        invaders_obs = np.zeros(12, dtype=np.float32)
-        if len(self.all_inv_pos) > 0:
-            inv_dists = np.linalg.norm(self.all_inv_pos - self.position, axis=1)
-            sorted_inv_indices = np.argsort(inv_dists)
-            closest_inv_indices = sorted_inv_indices[:2] # Max 2 closest
-            for i, idx in enumerate(closest_inv_indices):
-                start = i * 6
-                invaders_obs[start : start+3] = self.all_inv_pos[idx] - self.position
-                invaders_obs[start+3 : start+6] = self.all_inv_vel[idx]
-        #final observation
-        final_obs = np.concatenate([
-            my_obs,         # 6
-            prime_obs,      # 6
-            density_obs,    # 1
-            pursuers_obs,   # 18
-            invaders_obs    # 12
-        ]).astype(np.float32)
+        # Celková velikost matice je teď: 1 + 6 + 8 + 1 + 32 + 26 + 20 = 94
         return final_obs
     
     def set_rl_action(self, action_array, visible_invaders):
@@ -654,7 +579,7 @@ class Pursuer(Agent):
         #speed
         self.cruise_speed = np.interp(action_array[12], [-1, 1], [1.0, self.max_speed*0.75])
         #decision making
-        attack_intent = action_array[13] > 0.0 # a[12] > 0 means attack
+        attack_intent = action_array[13] > 0.0
         if attack_intent and len(visible_invaders) > 0:
             #choosing target
             target_idx = 0 if action_array[14] < 0.0 else min(1, len(visible_invaders) - 1)
@@ -675,20 +600,11 @@ class Pursuer(Agent):
             self.target = None
             self.state = States.FORM
     
-    def copy_data(self, prime_vel, prime_pos, all_inv_pos, all_inv_vel, all_inv_rads, all_purs_pos, all_purs_vel, obs_centers, obs_radii):
+    def copy_data(self, prime_vel, prime_pos):
         #copies all data, that are going to be modified
         self.prime_vel = prime_vel.copy()
         self.prime_pos = prime_pos.copy()
-        self.all_inv_pos = all_inv_pos.copy()
-        self.all_inv_vel = all_inv_vel.copy()
-        self.all_inv_rads = all_inv_rads.copy()
-        #self.every_purs_pos = all_purs_pos.copy()
-        #self.every_purs_vel = all_purs_vel.copy()
-        if obs_radii is not None:
-            self.obs_centers = obs_centers.copy()
-            self.obs_radii = obs_radii.copy()
         
-    
     def update_target(self):
         #updates parameters of target
         self.target["tar_pos"] = self.target["target"].position.copy()
@@ -697,10 +613,10 @@ class Pursuer(Agent):
     
     def gauss_noise(self):
         #apply gauss
-        if len(self.all_inv_pos) != 0:
-            self.apply_gaussian_noise(self.all_inv_pos, self.all_inv_rads, self.all_inv_vel)    
-        if self.obs_centers is not None and len(self.obs_centers) > 0:
-            self.apply_gaussian_noise(self.obs_centers, rads=self.obs_radii)    
+        # if len(self.all_inv_pos) != 0:
+        #     self.apply_gaussian_noise(self.all_inv_pos, self.all_inv_rads, self.all_inv_vel)    
+        # if self.obs_centers is not None and len(self.obs_centers) > 0:
+        #     self.apply_gaussian_noise(self.obs_centers, rads=self.obs_radii)    
         #if len(self.every_purs_pos) != 0:
         #    self.apply_gaussian_noise(self.every_purs_pos, velocities=self.every_purs_vel)
         #target
@@ -735,6 +651,39 @@ class Pursuer(Agent):
             sigmas_vel = self.base_vel + self.k_vel * dists_center
             velocities += np.random.normal(loc=0.0, scale=sigmas_vel[:, np.newaxis], size=velocities.shape)
         return positions, rads, velocities
+
+    def filter_visible_objects(self, positions, velocities, rads, max_range, apply_noise=False, obstacles=False):
+        # Vytvoříme prázdnou masku pro případy, kdy rovnou vracíme prázdná data
+        empty_mask = np.array([], dtype=bool)
+        # 1. EARLY RETURN: Vstupní pole je úplně prázdné
+        if len(positions) == 0:
+            if obstacles:
+                # Pro překážky vracíme None
+                return None, None, None, empty_mask
+            else:
+                # Pro invadery vracíme prázdná Numpy pole (a případně None pro rychlost, pokud nebyla zadána)
+                if velocities is not None:
+                    return np.empty((0, self.pos_length)), np.empty((0, self.pos_length)), np.empty((0,)), empty_mask
+                else:
+                    return np.empty((0, self.pos_length)), None, np.empty((0,)), empty_mask
+        # --- Výpočet vzdáleností a šumu ---
+        diffs = positions - self.position
+        dists_center = np.linalg.norm(diffs, axis=1)
+        if apply_noise:
+            positions, rads, velocities = self.apply_gaussian_noise(positions, rads, velocities)
+            diffs = positions - self.position
+            dists_center = np.linalg.norm(diffs, axis=1)
+        dists_surface = dists_center - self.my_rad - rads
+        # 2. Vytvoření masky (Kdo je dost blízko?)
+        mask = dists_surface <= max_range
+        # 3. Aplikace masky
+        visible_pos = positions[mask]
+        visible_rad = rads[mask]
+        visible_vel = velocities[mask] if velocities is not None else None
+        # 4. LATE RETURN: Na vstupu něco bylo, ale po filtraci nezbylo nic viditelného
+        if obstacles and len(visible_pos) == 0:
+            return None, None, None, mask
+        return visible_pos, visible_vel, visible_rad, mask
     
     def get_visible_neighbors_data(self, all_pos, all_vel, all_rad, all_tars, gaussian=False):
         #dists to all
@@ -1188,6 +1137,16 @@ class Pursuer(Agent):
                 form_vel = (form_vel/form_norm)*self.max_form_speed
         return form_vel
     
+    def pursue_rl_target(self, target):
+        #if target is faster then pursuer, just pure pursue him
+        if target["purs_type"] == self.purs_types['pure_pursuit']:
+            return self.pursuit_pure_pursuit(target)
+        #still too fast for encirclement, CB him
+        elif target["purs_type"] == self.purs_types['const_bear']:
+            return self.pursuit_constant_bearing(target)
+        else:
+            return self.pursue_herding()
+    
     def pursue_target(self, target):
         tar_speed = np.linalg.norm(target["tar_vel"])
         my_speed = self.cruise_speed
@@ -1196,7 +1155,7 @@ class Pursuer(Agent):
             target["purs_type"] = self.purs_types['pure_pursuit']
             return self.pursuit_pure_pursuit(target)
         #still too fast for encirclement, CB him
-        elif tar_speed >= my_speed or target["purs_type"] == self.purs_types['const_bear']:
+        elif tar_speed >= my_speed/1.2 or target["purs_type"] == self.purs_types['const_bear']:
             #if tar_speed >= my_speed/1.2:
                 # print("my speed " + str(my_speed))
                 # print(tar_speed)
@@ -1357,6 +1316,206 @@ class Pursuer(Agent):
         return PP_dir
     
 # =============== CURRENTLY UNUSED CODE ======================
+
+    # def observation_herding(self):
+    #     #observation for herding NN, everything normalized
+    #     MAX_COORD = 30.0       #world
+    #     MAX_DIST = 40.0        #max possible distance
+    #     MAX_SPEED = 8.5        #max speed
+    #     MAX_DENSITY = 6.0     #max pursuer density
+    #     MAX_RADIUS = 5.0      #max obstacle radius
+    #     MAX_DRONE_RAD = 0.7
+    #     FAR_AWAY = 3.0  #far away, bigger number
+    #     MAX_ACC = 8.0
+    #     #my state
+    #     my_obs = np.concatenate([self.curr_speed / MAX_SPEED, self.curr_acc / MAX_ACC, [self.position[2] / MAX_COORD], 
+    #                              [self.my_rad / MAX_DRONE_RAD], [self.cruise_speed / MAX_SPEED], [self.max_acc / MAX_ACC]]) 
+    #     # prime state
+    #     prime_rad_obs = np.array([self.prime_rad / MAX_DRONE_RAD], dtype=np.float32)
+    #     prime_rel_vel = self.prime_vel - self.curr_speed
+    #     prime_pos = (self.prime_pos - self.position) / MAX_DIST
+    #     # 1. Výpočet reálné vzdálenosti mezi středy MĚ a PRIME
+    #     raw_prime_dist = np.linalg.norm(self.prime_pos - self.position)
+    #     # 2. Odečtení poloměrů (Povrchová vzdálenost)
+    #     surf_prime_dist = max(0.0, raw_prime_dist - self.prime_rad - self.my_rad)
+    #     # 3. Normalizace pro Observation Space
+    #     prime_purs_dist = surf_prime_dist / MAX_DIST
+    #     prime_obs = np.concatenate([
+    #         prime_pos, 
+    #         prime_rel_vel / (MAX_SPEED * 2.0),
+    #         prime_rad_obs,
+    #         [prime_purs_dist]
+    #     ])
+    #     #dividing pursuers to those chasing invader with me and the others
+    #     other_purs_pos = []
+    #     other_purs_vel = []
+    #     other_purs_rads = []
+    #     # new_obs_pos = []
+    #     # new_obs_vel = []
+    #     # new_obs_rad = []
+    #     for i, tar in enumerate(self.all_purs_tars):
+    #         if tar is not None and tar is self.target["target"]:
+    #             other_purs_pos.append(self.all_purs_pos[i])
+    #             other_purs_vel.append(self.all_purs_vel[i])
+    #             other_purs_rads.append(self.all_purs_rads[i])
+    #         # else:
+    #         #     new_obs_pos.append(self.all_purs_pos[i])
+    #         #     new_obs_rad.append(self.all_purs_rads[i])
+    #         #     new_obs_vel.append(self.all_purs_vel[i])
+    #     new_purs_pos = np.array(other_purs_pos)
+    #     new_purs_vel = np.array(other_purs_vel)
+    #     new_purs_rads = np.array(other_purs_rads)
+    #     # Získáme pozici Invadera pro výpočet
+    #     invader_pos = self.target["tar_pos"]
+    #     # Zvětšíme pole: 4 kolegové * 9 informací = 36 (místo 32)
+    #     pursuers_obs = np.full(36, FAR_AWAY, dtype=np.float32)
+    #     # Defaultní hodnoty (nuly pro rychlost a poloměr)
+    #     for i in range(4):
+    #         start = i * 9  # <-- Změna multiplikátoru na 9
+    #         pursuers_obs[start+3 : start+6] = 0.0  # default velocity
+    #         pursuers_obs[start+6] = 0.0            # default radius
+    #     density = 0
+    #     if len(new_purs_pos) > 0:
+    #         density = len(new_purs_pos)
+    #         # Normalizované pozice vůči mně
+    #         norm_rel_positions = (new_purs_pos - self.position) / self.vis_range
+    #         norm_dists = np.linalg.norm(norm_rel_positions, axis=1)
+    #         # Seřazení podle vzdálenosti (kdo je mi nejblíž)
+    #         closest_indices = np.argsort(norm_dists)[:4]
+    #         for i, idx in enumerate(closest_indices):
+    #             start = i * 9  # <-- Změna multiplikátoru na 9
+    #             # 0, 1, 2: Relativní pozice
+    #             pursuers_obs[start : start+3] = norm_rel_positions[idx]    
+    #             # 3, 4, 5: Relativní rychlost
+    #             rel_vel = new_purs_vel[idx] - self.curr_speed
+    #             pursuers_obs[start+3 : start+6] = rel_vel / (MAX_SPEED * 2.0)    
+    #             # 6: Poloměr drona
+    #             pursuers_obs[start+6] = new_purs_rads[idx] / MAX_DRONE_RAD    
+    #             # --- 7: Povrchová vzdálenost kolegy ode MĚ ---
+    #             # Výpočet reálné vzdálenosti (předtím byla norm_dists normalizovaná vůči vis_range)
+    #             raw_mate_to_me_dist = np.linalg.norm(new_purs_pos[idx] - self.position)
+    #             surf_mate_to_me_dist = max(0.0, raw_mate_to_me_dist - new_purs_rads[idx] - self.my_rad)
+    #             # Uložíme normalizovanou vůči vis_range (aby to navazovalo na předchozí logiku)
+    #             pursuers_obs[start+7] = surf_mate_to_me_dist / self.vis_range
+    #             # --- 8: Povrchová vzdálenost kolegy od INVADERA ---
+    #             raw_mate_to_inv_dist = np.linalg.norm(new_purs_pos[idx] - invader_pos)
+    #             surf_mate_to_inv_dist = max(0.0, raw_mate_to_inv_dist - new_purs_rads[idx] - self.target["tar_rad"])
+    #             # Uložíme normalizovanou vůči MAX_DIST
+    #             pursuers_obs[start+8] = surf_mate_to_inv_dist / MAX_DIST
+    #     density_obs = np.array([density / MAX_DENSITY], dtype=np.float32)
+    #     # new_purs_pos = np.array(new_obs_pos)
+    #     # new_purs_vel = np.array(new_obs_vel)
+    #     # new_purs_rads = np.array(new_obs_rad)
+    #     #pursuer state + density
+    #     # pursuers_form = np.full(32, FAR_AWAY, dtype=np.float32)
+    #     # for i in range(4):
+    #     #     start = i * 8
+    #     #     pursuers_form[start+3 : start+6] = 0.0
+    #     #     pursuers_form[start+6] = 0.0
+    #     # if len(new_purs_pos) > 0:
+    #     #     density = len(new_purs_pos)
+    #     #     norm_rel_positions = (new_purs_pos - self.position) / 2.0 #self.vis_range
+    #     #     norm_dists = np.linalg.norm(norm_rel_positions, axis=1)
+    #     #     closest_indices = np.argsort(norm_dists)[:4]
+    #     #     #iterating from closest indices
+    #     #     for i, idx in enumerate(closest_indices):
+    #     #         start = i * 8  # <-- Nový multiplikátor 8!    
+    #     #         pursuers_form[start : start+3] = norm_rel_positions[idx]    
+    #     #         rel_vel = new_purs_vel[idx] - self.curr_speed
+    #     #         pursuers_form[start+3 : start+6] = rel_vel / (MAX_SPEED * 2.0)    
+    #     #         pursuers_form[start+6] = new_purs_rads[idx] / MAX_DRONE_RAD    
+    #     #         pursuers_form[start+7] = norm_dists[idx]
+    #     #invader state
+    #     # Vektory (směry) zůstávají nezměněné, ukazují přesně na středy
+    #     inv_rel_pos = (self.target["tar_pos"] - self.position) / MAX_DIST
+    #     inv_rel_vel = self.target["tar_vel"] - self.curr_speed
+    #     inv_to_prime_vec = (self.prime_pos - self.target["tar_pos"]) / MAX_DIST
+    #     # --- NOVÉ: Povrchové vzdálenosti ---
+    #     # 1. Vzdálenost k Prime dronovi (Invader -> Prime)
+    #     raw_inv_prime_dist = np.linalg.norm(self.prime_pos - self.target["tar_pos"])
+    #     surf_inv_prime_dist = max(0.0, raw_inv_prime_dist - self.target["tar_rad"] - self.prime_rad)
+    #     inv_to_prime_dist = np.array([surf_inv_prime_dist / MAX_DIST], dtype=np.float32)
+    #     # 2. Vzdálenost ke mně (Invader -> Pursuer)
+    #     raw_inv_purs_dist = np.linalg.norm(self.target["tar_pos"] - self.position)
+    #     surf_inv_purs_dist = max(0.0, raw_inv_purs_dist - self.target["tar_rad"] - self.my_rad)
+    #     inv_purs_dist = np.array([surf_inv_purs_dist / MAX_DIST], dtype=np.float32)
+    #     # --- Zbytek zůstává nezměněn ---
+    #     inv_rad_obs = np.array([self.target["tar_rad"] / MAX_DRONE_RAD], dtype=np.float32)
+    #     invaders_obs = np.concatenate([inv_rel_pos, inv_rel_vel / (MAX_SPEED * 2.0), inv_to_prime_vec, inv_to_prime_dist,
+    #                    inv_rad_obs, inv_purs_dist])
+    #     #closest obstacles
+    #     obstacles_obs = np.full(20, FAR_AWAY, dtype=np.float32)
+    #     #default radii
+    #     obstacles_obs[3] = 0.0 
+    #     obstacles_obs[8] = 0.0 
+    #     obstacles_obs[13] = 0.0 
+    #     obstacles_obs[18] = 0.0 
+    #     obs_centers = self.obs_centers
+    #     obs_radii = self.obs_radii
+    #     if obs_centers is not None and len(obs_centers) > 0:
+    #         #dist to centers
+    #         center_dists = np.linalg.norm(obs_centers - self.position, axis=1)
+    #         #dist to edges
+    #         edge_dists = center_dists - obs_radii
+    #         #only those in sight
+    #         visible_mask = edge_dists <= self.vis_range
+    #         visible_indices = np.where(visible_mask)[0]
+    #         if len(visible_indices) > 0:
+    #             #only visible distances
+    #             visible_edge_dists = edge_dists[visible_indices]
+    #             #sorting by distance
+    #             sorted_local_indices = np.argsort(visible_edge_dists)[:4]
+    #             closest_obs_indices = visible_indices[sorted_local_indices]
+    #             #writing to the obs space
+    #             for i, idx in enumerate(closest_obs_indices):
+    #                 start = i * 5
+    #                 #rel position
+    #                 obs_pos = (obs_centers[idx] - self.position) / self.vis_range
+    #                 obstacles_obs[start : start+3] = obs_pos
+    #                 #radius
+    #                 obstacles_obs[start+3] = obs_radii[idx] / MAX_RADIUS
+    #                 #distance
+    #                 obstacles_obs[start+4] = np.linalg.norm(obs_pos)
+                    
+    #     # --- VÝPOČET LOS (Line of Sight) PRO OBSERVATION ---
+    #     attack_vector = self.target["tar_pos"] - self.prime_pos
+    #     attack_dist = np.linalg.norm(attack_vector)
+    #     if attack_dist > 0.1:
+    #         prime_to_me = self.position - self.prime_pos
+    #         # 1. Projekce (kde na ose jsem)
+    #         # Normalizovat nepotřebujeme, už to dává hodnoty typicky kolem 0.0 až 1.0
+    #         projection = np.dot(prime_to_me, attack_vector) / (attack_dist**2)
+    #         # 2. Vzdálenost k ose
+    #         cross_prod = np.cross(attack_vector, prime_to_me)
+    #         raw_dist_to_line = np.linalg.norm(cross_prod) / attack_dist
+    #         # 3. Vektor směrem k ose (Kudy tam?)
+    #         # Najdeme ten nejbližší bod na ose:
+    #         closest_point_on_line = self.prime_pos + (projection * attack_vector)
+    #         # Vektor ode mě k tomu bodu:
+    #         vector_to_line = closest_point_on_line - self.position    
+    #     else:
+    #         # Fallback, pokud by se nějak spawnuli na sobě
+    #         projection = 0.0
+    #         raw_dist_to_line = MAX_DIST
+    #         vector_to_line = np.zeros(3)
+    #     # Zabijácký LOS blok pro observation (5 hodnot)
+    #     los_obs = np.concatenate([
+    #         [projection],                                  # 1 hodnota
+    #         [raw_dist_to_line / MAX_DIST],                 # 1 hodnota (normalizovaná!)
+    #         vector_to_line / MAX_DIST                      # 3 hodnoty (vektor X, Y, Z)
+    #     ]).astype(np.float32)
+    #     #final vector
+    #     final_obs = np.concatenate([
+    #         my_obs,         # 10
+    #         prime_obs,      # 8
+    #         density_obs,    # 1
+    #         pursuers_obs,   # 36
+    #         #pursuers_form,  # 32
+    #         invaders_obs,   # 12
+    #         obstacles_obs,   # 20
+    #         los_obs         # 5
+    #     ]).astype(np.float32)
+    #     return final_obs
 
     # def get_avoidance_direction(self, obstacle_pos, obstacle_rad, prime):
     #     #if prime is too close to obstacle, calculate which direction is better for avoidance, in 2D

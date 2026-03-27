@@ -8,13 +8,14 @@ from scipy.spatial.distance import cdist
 
 class SimulationWorld:
     def __init__(self, sc_config, _3d=False, purs_acc=None, purs_speed=None, prime_acc=None, prime_speed=None, inv_acc=None, inv_speed=None,
-                 prime_pos=None, inv_pos=None, purs_pos=None, purs_num=None, herding=False, pursue_model=None, not_testing=False, no_target=False):
+                 prime_pos=None, inv_pos=None, purs_pos=None, purs_num=None, herding=False, pursue_model=None, def_model=None, not_testing=False, no_target=False):
         self.not_testing = not_testing
         self.no_target = no_target
         self.sc = sc_config
         self._3d = _3d
         self.herding = herding
         self.pursue_model = pursue_model
+        self.def_model = def_model
         self.init_params = {
             'purs_acc': purs_acc, 'purs_speed': purs_speed, 'prime_acc': prime_acc, 'prime_speed': prime_speed, 'inv_acc': inv_acc, 'inv_speed': inv_speed,
             'prime_pos': prime_pos, 'inv_pos': inv_pos, 'purs_pos': purs_pos, 'purs_num': purs_num
@@ -64,11 +65,12 @@ class SimulationWorld:
                 high=[self.sc.PURSUER_NUM/2 + 1 + pos_u[0], self.sc.PURSUER_NUM/2 + 1 + pos_u[1], self.sc.PURSUER_NUM/2 + 1 +  pos_u[2]], 
                 size=(self.sc.PURSUER_NUM, 3)
             )
-            rnd_points_inv = inv_pos if inv_pos is not None else np.random.uniform(
-                low=[-2*self.sc.WORLD_WIDTH, -2*self.sc.WORLD_HEIGHT, pos_u[2]], 
-                high=[2*self.sc.WORLD_WIDTH, 2*self.sc.WORLD_HEIGHT, pos_u[2] + 15], 
-                size=(self.sc.INVADER_NUM, 3)
-            )
+            # rnd_points_inv = inv_pos if inv_pos is not None else np.random.uniform(
+            #     low=[-2*self.sc.WORLD_WIDTH, -2*self.sc.WORLD_HEIGHT, pos_u[2]], 
+            #     high=[2*self.sc.WORLD_WIDTH, 2*self.sc.WORLD_HEIGHT, pos_u[2] + 15], 
+            #     size=(self.sc.INVADER_NUM, 3)
+            # )
+            rnd_points_inv = self.get_random_invader_start(num_invaders=self.sc.INVADER_NUM)
         else:
             rnd_points_purs = purs_pos if purs_pos is not None else np.random.uniform(
                 low=[-self.sc.PURSUER_NUM/2 - 2 + pos_u[0], -self.sc.PURSUER_NUM/2 - 2 + pos_u[1]], 
@@ -93,13 +95,32 @@ class SimulationWorld:
         for i in range(self.sc.PURSUER_NUM):
             p_num = purs_num[i] if purs_num is not None else np.random.randint(0, 1001)
             p = Pursuer(position=rnd_points_purs[i], max_speed=rnd_speed_purs[i],
-                max_acc=rnd_purs_acc[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=p_num, purs_vis=self.sc.PURS_VIS, dt=self.sc.DT, pursue_model=self.pursue_model)
+                max_acc=rnd_purs_acc[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD, purs_num=p_num, purs_vis=self.sc.PURS_VIS, dt=self.sc.DT, pursue_model=self.pursue_model, def_model=self.def_model)
             self.pursuers.append(p)
         #invader init
         self.invaders = []
         for i in range(self.sc.INVADER_NUM):
             inv = Invader(position=rnd_points_inv[i], max_speed=speed_inv[i], max_acc=acc_inv[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD, dt=self.sc.DT)
             self.invaders.append(inv)
+
+    def get_random_invader_start(self, num_invaders=1):
+        prime_pos = np.array([3.0, 3.0, 7.0])
+        # 1. Vygenerujeme vzdálenosti pro všechny invadery najednou (sloupcový vektor)
+        dists = np.random.uniform(60.0, 70.0, size=(num_invaders, 1))
+        # 2. Vygenerujeme náhodné směry pro všechny naráz (matice N x 3)
+        dirs = np.random.randn(num_invaders, 3)
+        dirs[:, 2] = np.abs(dirs[:, 2]) # Všichni budou nahoře (Z > 0)
+        # 3. Normalizace směrů (vydělíme každý řádek jeho délkou)
+        norms = np.linalg.norm(dirs, axis=1, keepdims=True)
+        dirs = dirs / norms
+        # 4. Výpočet nových pozic (Prime pozice + vektor směru * vzdálenost)
+        new_inv_pos = prime_pos + (dirs * dists)
+        # 5. Omezení výšky (Z souřadnice nesmí klesnout pod 1.0)
+        new_inv_pos[:, 2] = np.maximum(1.0, new_inv_pos[:, 2])        
+        # Jinak vrátíme seznam polí (nebo můžete nechat return new_inv_pos, pokud chcete 2D Numpy matici)
+        # if num_invaders == 1:
+        #     return new_inv_pos[0]
+        return list(new_inv_pos)
 
     def _get_safe_agent_data(self, agents, inv=False):
         dim = 3 if self._3d else 2
@@ -248,14 +269,14 @@ class SimulationWorld:
             for idx in np.where(swarm_crash_mask)[0]:
                 free_purs[idx].crashed = True
         #ending check
-        done = self.prime.crashed #or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
-        # if self.prime.finished:
-        #     inv_to_prime = np.linalg.norm(self.invaders[0].position - self.prime.position)
-        #     inv_to_prime2 = np.linalg.norm(self.invaders[1].position - self.prime.position)
-        #     min_dist = min(inv_to_prime, inv_to_prime2)
-        #     print("win, dist: " + str(min_dist))
-        # elif done:
-        #     print("lost")
+        done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
+        if self.prime.finished:
+            inv_to_prime = np.linalg.norm(self.invaders[0].position - self.prime.position)
+            inv_to_prime2 = np.linalg.norm(self.invaders[1].position - self.prime.position)
+            min_dist = min(inv_to_prime, inv_to_prime2)
+            print("win, dist: " + str(min_dist))
+        elif done:
+            print("lost")
         return self.get_state(), done
 
     def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):

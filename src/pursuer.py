@@ -7,7 +7,7 @@ import copy
 from stable_baselines3 import PPO
 
 class Pursuer(Agent):
-    def __init__(self, position, max_speed, max_acc, max_omega, my_rad, purs_num, purs_vis, dt, pursue_model: PPO | None = None):
+    def __init__(self, position, max_speed, max_acc, max_omega, my_rad, purs_num, purs_vis, dt, pursue_model: PPO | None = None, def_model: PPO | None = None):
         super().__init__(position, max_speed, max_acc, max_omega, dt, my_rad, num_iter=purs_num)
         self.is_rl_controlled = False
         rnd_num = np.random.randint(0, 2)
@@ -19,6 +19,10 @@ class Pursuer(Agent):
                 self.pursue_model = pursue_model[1]
         else:
             self.pursue_model = pursue_model
+        self.def_model = None
+        if def_model is not None:
+            self.is_rl_controlled = True
+            self.def_model = def_model
         #visibility range
         self.vis_range = purs_vis
         #repulsive forces
@@ -110,9 +114,17 @@ class Pursuer(Agent):
         target_acc = raw_act * self.max_acc
         self.new_acc = target_acc
         return
+    
+    def defense(self, targets):
+        observation = self.get_observation()
+        action, _ = self.def_model.predict(observation, deterministic=True)
+        vis_inv_0 = self.get_closest_invaders(targets, 2)
+        self.set_rl_action(action, vis_inv_0)
         
     def pursue(self, targets: list[Invader], prime_vel, prime_rad, prime_pos, all_purs_tars, precalc_data, not_testing=False, no_target=False):
         if not_testing:
+            if self.my_clock % 20 == 0 and self.is_rl_controlled and self.def_model is not None:
+                self.defense(targets)
             self.my_clock += 1
             if self.my_clock % 5 != 0:
                 return self.new_acc
@@ -126,14 +138,14 @@ class Pursuer(Agent):
         # --- ZDE PŘICHÁZÍ TA ZMĚNA ---
         # 2. INVADEŘI (Filtrování + Šum)
         self.all_inv_pos, self.all_inv_vel, self.all_inv_rads, inv_mask = self.filter_visible_objects(
-            all_inv_pos.copy(), all_inv_vel.copy(), all_inv_rads.copy(), max_range=25.0, apply_noise=True)
+            all_inv_pos.copy(), all_inv_vel.copy(), all_inv_rads.copy(), max_range=50.0, apply_noise=True)
         # Nezapomeneme vyfiltrovat i objekty Invaderů, jestli je potřebujeme pro ten `purs_num`
         self.all_inv_purs_num = self.all_inv_purs_num[inv_mask]
         targets = [obj for obj, m in zip(targets, inv_mask) if m]
         # 3. PŘEKÁŽKY (Filtrování + Šum)
         if obs_centers is not None and len(obs_centers) > 0:
             self.obs_centers, _, self.obs_radii, _ = self.filter_visible_objects(
-                obs_centers.copy(), None, obs_radii.copy(), max_range=25.0, apply_noise=True, obstacles=True)
+                obs_centers.copy(), None, obs_radii.copy(), max_range=50.0, apply_noise=True, obstacles=True)
         else:
             self.obs_centers, self.obs_radii = None, None
         # 4. ZBYTEK (Target a Prime)
@@ -171,7 +183,7 @@ class Pursuer(Agent):
                     tar_vel = self.pursue_target(self.target)
         #pursuer having target -> pursue it
         elif self.target != None and self.target["target"].crashed == False and not self.is_rl_controlled:
-            if not (self.target["purs_type"] != self.purs_types["circling"] and np.linalg.norm(self.position - self.prime_pos) > self.capture_max) or self.is_rl_controlled:
+            if not (self.target["purs_type"] != self.purs_types["circling"] and np.linalg.norm(self.position - self.prime_pos) > self.capture_max):
                 if self.pursue_model is not None:
                     self.pursue_herding()
                     return self.new_acc
@@ -223,8 +235,8 @@ class Pursuer(Agent):
     
     def get_observation_herding(self):
         #observation for herding NN, everything normalized
-        MAX_COORD = 30.0       #world
-        MAX_DIST = 40.0        #max possible distance
+        MAX_COORD = 50.0       #world
+        MAX_DIST = 50.0        #max possible distance
         MAX_SPEED = 8.5        #max speed
         MAX_DENSITY = 6.0     #max pursuer density
         MAX_RADIUS = 5.0      #max obstacle radius
@@ -384,7 +396,7 @@ class Pursuer(Agent):
             # 1. Vzdálenost k centrům
             center_dists = np.linalg.norm(obs_centers - self.position, axis=1)
             # 2. Vzdálenost k povrchu (odečteme poloměr překážky)
-            edge_dists = center_dists - obs_radii
+            edge_dists = center_dists - obs_radii - self.my_rad
             # 3. Vyfiltrujeme jen ty, jejichž povrch je v našem zorném poli
             visible_mask = edge_dists <= self.vis_range
             visible_indices = np.where(visible_mask)[0]
@@ -420,8 +432,8 @@ class Pursuer(Agent):
     def get_observation(self):
         #observation for herding NN, everything normalized
         #observation for herding NN, everything normalized
-        MAX_COORD = 30.0       #world
-        MAX_DIST = 40.0        #max possible distance
+        MAX_COORD = 50.0       #world
+        MAX_DIST = 50.0        #max possible distance
         MAX_SPEED = 8.5        #max speed
         MAX_DENSITY = 15.0     #max pursuer density
         OTHER_PURS = 5.0     #max pursuer density
@@ -508,7 +520,7 @@ class Pursuer(Agent):
             closest_inv_indices = sorted_inv_indices[:2] # Bereme 2 nejbližší!
             for i, idx in enumerate(closest_inv_indices):
                 start = i * 12
-                inv_rel_pos = (self.all_inv_pos[idx] - self.position) / MAX_DIST
+                inv_rel_pos = (self.all_inv_pos[idx] - self.position) / MAX_COORD
                 inv_rel_vel = self.all_inv_vel[idx] - self.curr_speed
                 # --- NOVINKA: Výpočet "Štítu" (Kosinus úhlu mezi Prime a Invaderem) ---
                 me_to_prime = self.prime_pos - self.position
@@ -524,15 +536,19 @@ class Pursuer(Agent):
                 
                 raw_inv_purs_dist = np.linalg.norm(self.all_inv_pos[idx] - self.position)
                 surf_inv_purs_dist = max(0.0, raw_inv_purs_dist - self.all_inv_rads[idx] - self.my_rad)
-                
+
                 invaders_obs[start : start+3] = inv_rel_pos
                 invaders_obs[start+3 : start+6] = inv_rel_vel / (MAX_SPEED * 2.0)
-                invaders_obs[start+6] = cos_angle # Nahrazen ten 3D vektor jedním číslem
-                invaders_obs[start+7] = surf_inv_prime_dist / MAX_DIST
-                invaders_obs[start+8] = surf_inv_purs_dist / MAX_DIST
+                invaders_obs[start+6] = cos_angle
+                invaders_obs[start+7] = surf_inv_prime_dist / MAX_COORD
+                invaders_obs[start+8] = surf_inv_purs_dist / MAX_COORD
                 invaders_obs[start+9] = self.all_inv_rads[idx] / MAX_DRONE_RAD
                 invaders_obs[start+10] = self.all_inv_purs_num[idx] / OTHER_PURS  
-                is_targetable = 1.0 if self.all_inv_purs_num[idx] < 4 else -1.0
+                if surf_inv_prime_dist < 10.0:
+                    max_attackers = 10
+                else:
+                    max_attackers = 4
+                is_targetable = 1.0 if self.all_inv_purs_num[idx] < max_attackers else -1.0
                 invaders_obs[start+11] = is_targetable
         #closest obstacles
         obstacles_obs = np.full(20, FAR_AWAY, dtype=np.float32)
@@ -547,7 +563,7 @@ class Pursuer(Agent):
             # 1. Vzdálenost k centrům
             center_dists = np.linalg.norm(obs_centers - self.position, axis=1)
             # 2. Vzdálenost k povrchu (odečteme poloměr překážky)
-            edge_dists = center_dists - obs_radii
+            edge_dists = center_dists - obs_radii - self.my_rad
             # 3. Vyfiltrujeme jen ty, jejichž povrch je v našem zorném poli
             visible_mask = edge_dists <= self.vis_range
             visible_indices = np.where(visible_mask)[0]
@@ -586,27 +602,56 @@ class Pursuer(Agent):
         self.tried_invalid_attack = False
         #if invader is too close, cooldown is over 
         if self.target is not None:
-            dist_to_prime = np.linalg.norm(self.prime_pos - self.target["target"].position)
-            if dist_to_prime < 10.0:
+            dist_to_prime = np.linalg.norm(self.prime_pos - self.target["tar_pos"]) - self.target["tar_rad"] - self.prime_rad
+            if dist_to_prime < 20.0:
                 self.cooldown = 0
         #big decisions
         if self.cooldown > 0:
             self.cooldown -= 1
             pass 
         else:
-            #deciding
-            attack_intent = action_array[11] > 0.0
-            if attack_intent and len(visible_invaders) > 0:
-                target_idx = 0 if action_array[12] < 0.0 else min(1, len(visible_invaders) - 1)
-                tar = visible_invaders[target_idx]
-                is_already_my_target = (self.target is not None and self.target["target"] is tar)
-                if tar.purs_num >= 4 and not is_already_my_target:
-                    attack_intent = False               
-                    self.tried_invalid_attack = True    
+            # deciding
+            raw_attack_intent = action_array[11] > 0.0
+            attack_intent = False
+            tar = None
+            is_already_my_target = False
+            # 1. FÁZE: VÝBĚR NEBO DRŽENÍ CÍLE
+            if self.target is not None and self.target["target"].crashed == False:
+                # Dron už útočí na živý cíl -> ZAMYKÁME CÍL!
+                tar = self.target["target"]
+                is_already_my_target = True
+                # Aby ho Generál odvolal, musí poslat hodně negativní signál (< -0.5)
+                #if action_array[11] > -0.5:
+                attack_intent = True 
+                #else:
+                #    attack_intent = False # Generál ho silou odvolává do formace
+            else:
+                # Dron je ve formaci (nebo jeho cíl umřel) -> VYBÍRÁME NOVÝ CÍL
+                if raw_attack_intent and len(visible_invaders) > 0:
+                    attack_intent = True
+                    target_idx = 0 if action_array[12] < 0.0 else min(1, len(visible_invaders) - 1)
+                    tar = visible_invaders[target_idx]
+                is_already_my_target = False
+            # 2. FÁZE: KONTROLA ROJOVÝCH LIMITŮ A DEMOBILIZACE
+            if attack_intent and tar is not None:
+                prime_inv_dist = np.linalg.norm(self.prime_pos - tar.position) - tar.my_rad - self.prime_rad
+                max_allowed = 10 if prime_inv_dist < 20.0 else 4
+                # Kolik OSTATNÍCH dronů na něj útočí? (odečtu sebe, pokud už útočím)
+                others_attacking = tar.purs_num - 1 if is_already_my_target else tar.purs_num
+                # Pokud je ostatních dronů víc (nebo stejně) než je povoleno, já už se nevejdu!
+                if others_attacking >= max_allowed:
+                    attack_intent = False 
+                    # Penalizaci napaříme JEN tehdy, když to byl pokus o nový útok.
+                    if not is_already_my_target:
+                        self.tried_invalid_attack = True
+            # ========================================================= 
             if attack_intent and len(visible_invaders) > 0:
                 self.state = States.PURSUE
-                target_idx = 0 if action_array[12] < 0.0 else min(1, len(visible_invaders) - 1)
-                tar = visible_invaders[target_idx]
+                # 1. ZMĚNA CÍLE (Pouze pokud je dron volný!)
+                if not is_already_my_target:
+                    target_idx = 0 if action_array[12] < 0.0 else min(1, len(visible_invaders) - 1)
+                    tar = visible_invaders[target_idx]
+                # 2. ZMĚNA TAKTIKY (Generál smí kdykoliv přepnout z obkličování na střelbu)
                 strat_val = action_array[13]
                 if strat_val < -0.33:
                     chosen_strategy = self.purs_types["circling"]
@@ -614,6 +659,7 @@ class Pursuer(Agent):
                     chosen_strategy = self.purs_types["const_bear"]
                 else:
                     chosen_strategy = self.purs_types["pure_pursuit"]
+                # 3. ZPRACOVÁNÍ ZMĚN A COOLDOWNY
                 if self.target is None or self.target["target"] is not tar:
                     if self.target is not None:
                         self.target["target"].purs_num -= 1
@@ -624,6 +670,7 @@ class Pursuer(Agent):
                 elif self.target["purs_type"] != chosen_strategy:
                     # ZMĚNA STRATEGIE = NAHOĎ COOLDOWN!
                     self.cooldown = 5
+                # 4. ULOŽENÍ STAVU
                 self.target = {"target": tar, "tar_pos": tar.position, 
                                "tar_vel": tar.curr_speed, "tar_rad": tar.my_rad, "purs_type": chosen_strategy}
             else:
@@ -640,8 +687,8 @@ class Pursuer(Agent):
             self.purs = np.interp(action_array[1], [-1, 1], [0.5, 3.0])
             self.coll_obs = np.interp(action_array[2], [-1, 1], [0.5, 3.0]) 
             self.rep_obs = np.interp(action_array[3], [-1, 1], [0.5, 3.0])  
-            self.prime_rep_in_purs = np.interp(action_array[4], [-1, 1], [0.5, 5.0])
-            self.prime_coll_r = np.interp(action_array[5], [-1, 1], [1.0, 20.0])
+            self.prime_rep_in_purs = np.interp(action_array[4], [-1, 1], [0.5, 3.0])
+            self.prime_coll_r = np.interp(action_array[5], [-1, 1], [1.0, 5.0])
         elif self.state == States.FORM:
             self.rep_in_form = np.interp(action_array[0], [-1, 1], [0.5, 5.0])
             self.form = np.interp(action_array[1], [-1, 1], [0.5, 5.0])
@@ -654,7 +701,10 @@ class Pursuer(Agent):
         self.collision_r = np.interp(action_array[7], [-1, 1], [0.5, 3.0])
         self.coll_gr = np.interp(action_array[8], [-1, 1], [0.5, 3.0])
         self.rep_gr = np.interp(action_array[9], [-1, 1], [0.5, 4.0])
-        self.cruise_speed = np.interp(action_array[10], [-1, 1], [1.0, self.max_speed*0.75])
+        if self.target is not None and self.target["purs_type"] != self.purs_types["circling"]:
+            self.cruise_speed = np.interp(action_array[10], [-1, 1], [max(5.0, self.max_speed*0.75 - 1.5), self.max_speed*0.75])
+        else:
+            self.cruise_speed = np.interp(action_array[10], [-1, 1], [0.1, self.max_speed*0.75])
         self.KP = np.interp(action_array[14], [-1, 1], [2.0, 7.0])
         self.KD = np.interp(action_array[15], [-1, 1], [0.0, 0.5])
     

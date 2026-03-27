@@ -26,7 +26,7 @@ class UpdateSwarmCallback(BaseCallback):
         super().__init__(verbose)
         self.env = env
         self.update_freq = update_freq
-        self.next_update = 16
+        self.next_update = 0
         self.save_dir = os.path.abspath("./models/history_def")
         os.makedirs(self.save_dir, exist_ok=True) 
         #gen1
@@ -107,23 +107,23 @@ def make_defense_env(env_rank, seed=0):
     return _init
 
 def main_defense():
-    num_cpu = 5
+    num_cpu = 8
     #vectorized env
     vec_env = SubprocVecEnv([make_defense_env(i) for i in range(num_cpu)], start_method="spawn")
     #model
-    #custom_policy = dict(activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]))
+    custom_policy = dict(activation_fn=nn.ReLU, net_arch=dict(pi=[256, 256], vf=[256, 256]))
     print("Creating custom AI model...")
-    #model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy, batch_size=256, gamma=0.99, n_steps=2048,
-    #  tensorboard_log="./ppo_drone_tensorboard/", learning_rate=linear_schedule(0.0003), verbose=1)
+    model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy, batch_size=256, gamma=0.99, n_steps=2048,
+      tensorboard_log="./ppo_drone_tensorboard/", learning_rate=linear_schedule(0.0003), verbose=1)
     #init_brain_path = "new_obs_best"
-    init_brain_path = "./models/history_def/gen_16"
-    #model.save(init_brain_path)
+    init_brain_path = "./models/history_def/g_0"
+    model.save(init_brain_path)
     vec_env.env_method("load_teammate_brain", init_brain_path)
-    custom_objects = {
+    #custom_objects = {
         #"ent_coef": 0.0001,
         #"learning_rate": 0.00005
-    }
-    model = PPO.load("./models/history_def/gen_6", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
+    #}
+    #model = PPO.load("./models/history_def/gen_17", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
     # with torch.no_grad():
     #     model.policy.log_std.data = torch.full_like(model.policy.log_std.data, -1.5)
     #save_freq = 500000/num_cpu
@@ -131,8 +131,8 @@ def main_defense():
     #    name_prefix='herding_brain')
     #train
     print("Starting training...")
-    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=300_000)
-    model.learn(total_timesteps=5_000_000, callback=swarm_callback, tb_log_name="PPO_Defense", reset_num_timesteps=False)
+    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=200_000)
+    model.learn(total_timesteps=5_000_000, callback=swarm_callback, tb_log_name="PPO_Defense", reset_num_timesteps=True)
     #saving result
     print("Training done...")
     model.save("drone_defense_brain")

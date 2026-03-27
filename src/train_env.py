@@ -93,9 +93,9 @@ class FastWorldEnv(gym.Env):
         for i in range(new_purs_num):
             self.world.pursuers[i].is_rl_controlled = True
         #setting invader speed from the beginning
-        inv_to_prime = self.world.prime.position - self.world.invaders[0].position
-        inv_speed = (inv_to_prime / np.linalg.norm(inv_to_prime)) * np.random.uniform(low=0.0, high=self.world.invaders[0].cruise_speed)
-        self.world.invaders[0].curr_speed = inv_speed
+        #inv_to_prime = self.world.prime.position - self.world.invaders[0].position
+        #inv_speed = (inv_to_prime / np.linalg.norm(inv_to_prime)) * np.random.uniform(low=0.0, high=self.world.invaders[0].cruise_speed)
+        #self.world.invaders[0].curr_speed = inv_speed
         #first step
         self.world.step()
         obs = self.world.pursuers[0].get_observation()
@@ -149,7 +149,7 @@ class FastWorldEnv(gym.Env):
     def get_random_invader_start(self, num_invaders=1):
         prime_pos = np.array([3.0, 3.0, 7.0])
         # 1. Vygenerujeme vzdálenosti pro všechny invadery najednou (sloupcový vektor)
-        dists = np.random.uniform(17.0, 40.0, size=(num_invaders, 1))
+        dists = np.random.uniform(60.0, 90.0, size=(num_invaders, 1))
         # 2. Vygenerujeme náhodné směry pro všechny naráz (matice N x 3)
         dirs = np.random.randn(num_invaders, 3)
         dirs[:, 2] = np.abs(dirs[:, 2]) # Všichni budou nahoře (Z > 0)
@@ -219,6 +219,7 @@ class FastWorldEnv(gym.Env):
         #frame skipping, 0.02 is too short
         min_inv_dist = np.inf
         any_invader_crashed = 0
+        crashed_this_step = []
         distances = []
         for i in range(20):
             if i == 19:
@@ -232,6 +233,7 @@ class FastWorldEnv(gym.Env):
                     if inv.crashed:
                         any_invader_crashed += 1
                         distances.append(dist)
+                        crashed_this_step.append((inv, dist))
             else:
                 #common steps
                 state, done = self.world.step()
@@ -241,6 +243,7 @@ class FastWorldEnv(gym.Env):
                         any_invader_crashed += 1  
                         dist = np.linalg.norm(inv.position - prime_pos)    
                         distances.append(dist) 
+                        crashed_this_step.append((inv, dist))
         #computing reward
         prime_pos = state["prime"]
         target = self.world.pursuers[0].target is not None
@@ -251,8 +254,9 @@ class FastWorldEnv(gym.Env):
         terminated = False
         reward = 0
         reward += 0.05
+        #penalty for switching state too much
         if current_state != self.last_state:
-            reward -= 0.5
+            reward -= 2.0
         self.last_state = current_state
         #penalty for pursuing target with a lot of pursuers
         if in_pursue and target:
@@ -267,22 +271,57 @@ class FastWorldEnv(gym.Env):
         if in_pursue and target:
             p_i_dist = np.linalg.norm(prime_pos - self.world.pursuers[0].target["target"].position)
             if self.world.pursuers[0].target["purs_type"] == self.world.pursuers[0].purs_types["circling"]:
-                if p_i_dist > 10.0:
-                    reward += 1.0
-            else:
-                if p_i_dist > 10.0:
+                if p_i_dist > 20.0:
+                    reward += 0.5
+                elif p_i_dist < 18.0:
                     reward -= 0.5
-        if min_inv_dist < 20.0:
+            else:
+                if p_i_dist > 20.0:
+                    reward -= 0.4
+                else:
+                    reward += 0.4
+        if 8.0 < min_inv_dist < 30.0:
             delta_dist = min_inv_dist - self.last_inv_prime_dist
             reward += delta_dist * 0.05
-        elif min_inv_dist > 20.0:
-            reward += 0.05
+        elif min_inv_dist > 30.0:
+            reward += 0.1
+        #reward for being in the formation
+        # ==========================================
+        # ODMĚNA ZA FORMACI A JEJÍ SYMETRII
+        # ==========================================
+        if current_state == States.FORM:
+            # 1. Plat za to, že je hlídání bezpečné (to už máte)
+            if min_inv_dist > 20.0:
+                reward += 0.05
+            # 2. BONUS ZA DOKONALOU KOULI (Triks s těžištěm)
+            # Vyfiltrujeme jen ty drony, kteří aktuálně drží formaci
+            form_positions = [p.position for p in self.world.free_purs if p.state == States.FORM]
+            # Abychom mohli hodnotit kouli, musí v ní být rozumný počet dronů
+            if len(form_positions) >= 4:
+                # Spočítáme těžiště všech strážců
+                centroid = np.mean(form_positions, axis=0)
+                # Jak moc se těžiště roje liší od pozice šéfa?
+                centroid_offset = np.linalg.norm(centroid - prime_pos)
+                com_reward = max(0.0, 3.0 - centroid_offset) * 0.1
+                reward += com_reward
         #reward for invader crashing
-        for dist in distances:
-            if dist > 8.0:
-                reward += 0.1 * any_invader_crashed
+        target_dict = self.world.pursuers[0].target
+        agent_pos = self.world.pursuers[0].position
+        for inv, dist_to_prime in crashed_this_step:
+            #my target
+            is_my_target = (target_dict is not None and target_dict["target"] is inv)
+            #or was I close
+            dist_to_agent = np.linalg.norm(agent_pos - inv.position)
+            physically_involved = dist_to_agent < 5.0
+            if is_my_target or physically_involved:
+                #giving reward
+                if dist_to_prime > 20.0:
+                    reward += 1.0
+                else:
+                    reward += 5.0
             else:
-                reward += 5.0 * any_invader_crashed
+                #no involvement
+                reward += 0.5
         if len(self.world.free_inv) == 0:
             terminated = True
         #prime died
@@ -291,17 +330,17 @@ class FastWorldEnv(gym.Env):
                 self.lost_pursuer_prime += 1
             else:
                 self.lost_invader_prime += 1
-            reward -= 20.0
+            reward -= 80.0
             terminated = True
         #pursuer died
         if self.world.pursuers[0].crashed:
             if not done:
                 self.lost_purs_crash += 1
-            #reward -= 10.0 
-            #terminated = True
+            reward -= 15.0 
+            terminated = True
         #penalty for trying attacking when too much attackers attacks
         if self.world.pursuers[0].tried_invalid_attack:
-            reward -= 0.5
+            reward -= 1.0
         # Update last distance for next step
         self.last_inv_prime_dist = min(min_inv_dist, 20.0)
         obs = self._get_obs()

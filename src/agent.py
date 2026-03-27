@@ -53,6 +53,9 @@ class Agent:
         v_dot = acc - drag 
         #computing the final velocity
         final_v = self.curr_speed + v_dot * self.dt
+        final_v_norm = np.linalg.norm(final_v)
+        if final_v_norm > self.cruise_speed:
+            final_v = (final_v / final_v_norm) * self.cruise_speed
         #clipping angle
         if speed_val > 0.001: 
              final_v = self.clip_angle(final_v, self.dt)

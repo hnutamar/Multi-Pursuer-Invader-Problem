@@ -165,10 +165,15 @@ class MatplotlibVisualizer:
                 p_dot.set_3d_properties([p_pos[2]])
             #color according to the state
             if p_state[0] == States.PURSUE:
+                #circling
                 if p_state[1][1] == 1:
                     p_dot.set_color("#000000")
+                #const bear
+                elif p_state[1][1] == 4:
+                    p_dot.set_color("#714900")
+                #pure pursuit
                 else:
-                    p_dot.set_color("#710049")
+                    p_dot.set_color("#006168")
             else:
                 p_dot.set_color('#d62728')
                 

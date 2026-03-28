@@ -48,8 +48,8 @@ class Pursuer(Agent):
         self.circle_dir = 1
         self.circle_dir_obs = 1
         #capture radiuses
-        self.capture_r = 20.0
-        self.capture_max = 30.0
+        self.capture_r = 55.0
+        self.capture_max = 65.0
         #radiuses for target circling
         self.t_circle = 1.0
         self.target_close = 2.0
@@ -120,7 +120,7 @@ class Pursuer(Agent):
         observation = self.get_observation()
         action, _ = self.def_model.predict(observation, deterministic=True)
         vis_inv_0 = self.get_closest_invaders(targets, 2)
-        self.set_rl_action(action, vis_inv_0)
+        self.set_rl_action_restrictive(action, vis_inv_0)
         
     def pursue(self, targets: list[Invader], prime_vel, prime_rad, prime_pos, all_purs_tars, precalc_data, not_testing=False, no_target=False):
         if not_testing:
@@ -449,7 +449,7 @@ class Pursuer(Agent):
         MAX_COOLDOWN = 5.0 # Počet RL kroků (rozhodnutí), po které nesmí změnit stav    
         # 0. FLAG STAVU A COOLDOWNU
         is_attacking = 1.0 if self.state == States.PURSUE else 0.0
-        cooldown_obs = 0.0#self.cooldown / MAX_COOLDOWN  # Tímhle se síť dozví, že má svázané ruce
+        cooldown_obs = self.cooldown / MAX_COOLDOWN  # Tímhle se síť dozví, že má svázané ruce
         tactic_obs = [0.0, 0.0, 0.0]
         if self.state == States.PURSUE and self.target is not None:
             actual_strat = self.target["purs_type"]
@@ -459,7 +459,8 @@ class Pursuer(Agent):
                 tactic_obs[1] = 1.0
             elif actual_strat == self.purs_types["circling"]:
                 tactic_obs[2] = 1.0
-        state_obs = np.array([is_attacking, cooldown_obs] + tactic_obs, dtype=np.float32)
+        is_overridden = 1.0 if getattr(self, 'override_active', False) else 0.0
+        state_obs = np.array([is_attacking, cooldown_obs, is_overridden] + tactic_obs, dtype=np.float32)
         # 1. MOJE DATA A PRIME DATA
         my_obs = np.concatenate([self.curr_speed / MAX_SPEED, self.curr_acc / MAX_ACC, [self.position[2] / MAX_COORD], 
                                  [self.my_rad / MAX_DRONE_RAD], [self.cruise_speed / MAX_SPEED], [self.max_speed / MAX_SPEED], [self.max_acc / MAX_ACC]]) 
@@ -591,7 +592,7 @@ class Pursuer(Agent):
                     obstacles_obs[start+4] = np.linalg.norm(obs_pos)
         # 5. FINÁLNÍ SPOJENÍ
         final_obs = np.concatenate([
-            state_obs,      # 5  (Je důležité to dát hned na začátek!)
+            state_obs,      # 6  (Je důležité to dát hned na začátek!)
             my_obs,         # 7
             prime_obs,      # 8
             density_obs,    # 1
@@ -601,8 +602,8 @@ class Pursuer(Agent):
         ]).astype(np.float32)
         # Celková velikost matice je teď: 1 + 7 + 8 + 1 + 32 + 22 + 20 = 91
         return final_obs
-
-    def set_rl_action(self, action_array, visible_invaders):
+    
+    def set_rl_action_restrictive(self, action_array, visible_invaders):
         self.is_rl_controlled = True
         self.tried_invalid_attack = False
         raw_attack_intent = action_array[11] > 0.0
@@ -695,6 +696,109 @@ class Pursuer(Agent):
         self.rep_gr = np.interp(action_array[9], [-1, 1], [0.5, 4.0])
         if self.target is not None and self.target["purs_type"] != self.purs_types["circling"]:
             self.cruise_speed = self.max_speed*0.75#np.interp(action_array[10], [-1, 1], [max(5.0, self.max_speed*0.75 - 1.5), self.max_speed*0.75])
+        else:
+            self.cruise_speed = np.interp(action_array[10], [-1, 1], [0.1, self.max_speed*0.75])
+        self.KP = np.interp(action_array[14], [-1, 1], [2.0, 7.0])
+        self.KD = np.interp(action_array[15], [-1, 1], [0.0, 0.5])
+
+    def set_rl_action(self, action_array, visible_invaders):
+        self.is_rl_controlled = True
+        self.tried_invalid_attack = False
+        # --- 1. NOUZOVÝ RESET COOLDOWNU ---
+        # Pokud je cíl moc blízko Primea, ignorujeme cooldown a jedeme hned
+        if self.target is not None:
+            dist_to_prime = np.linalg.norm(self.prime_pos - self.target["tar_pos"]) - self.target["tar_rad"] - self.prime_rad
+            if dist_to_prime < 20.0:
+                self.cooldown = 0    
+        # --- 2. KONTROLA COOLDOWNU PRO MAKRO ROZHODNUTÍ ---
+        if self.cooldown > 0:
+            self.cooldown -= 1
+            pass 
+        else:
+            raw_attack_intent = action_array[11] > 0.0
+            # --- START NOVÉHO BLOKU: VÝBĚR CÍLE A ZMĚNA ---
+            # A) NOUZOVÝ STAV: Běží override a cíl žije -> Generál nesmí nic měnit!
+            if getattr(self, 'override_active', False) and self.target is not None and self.target["target"].crashed == False:
+                attack_intent = True
+                tar = self.target["target"]
+                # Protože je to override, víme, že cíl se nemění, jen ho nutíme držet
+                is_already_my_target = True 
+            # B) BĚŽNÝ STAV: Plná svoboda pro Generála
+            else:
+                if raw_attack_intent and len(visible_invaders) > 0:
+                    attack_intent = True
+                    target_idx = 0 if action_array[12] < 0.0 else min(1, len(visible_invaders) - 1)
+                    tar = visible_invaders[target_idx]
+                    if self.target is not None and self.target["target"] is tar:
+                        # Pořád drží stejný cíl
+                        pass
+                    else:
+                        # Změnil cíl dobrovolně, nulujeme případný zapomenutý override
+                        self.override_active = False 
+                else:
+                    # Generál odvolal útok nebo nejsou cíle na mapě
+                    attack_intent = False
+                    tar = None
+                    self.override_active = False
+            # --- KONEC NOVÉHO BLOKU ---
+            if attack_intent and len(visible_invaders) > 0:
+                self.state = States.PURSUE
+                # ZMĚNA TAKTIKY (Generál smí kdykoliv přepnout z obkličování na střelbu)
+                strat_val = action_array[13]
+                if not getattr(self, 'override_active', False):
+                    if strat_val < -0.33:
+                        chosen_strategy = self.purs_types["circling"]
+                    elif strat_val < 0.33:
+                        chosen_strategy = self.purs_types["const_bear"]
+                    else:
+                        chosen_strategy = self.purs_types["pure_pursuit"]
+                else:
+                    chosen_strategy = self.target["purs_type"] if self.target else self.purs_types["const_bear"]    
+                # ZPRACOVÁNÍ ZMĚN A COOLDOWNY
+                if self.target is None or self.target["target"] is not tar:
+                    if self.target is not None:
+                        self.target["target"].purs_num -= 1
+                    tar.purs_num += 1 
+                    # ZMĚNA CÍLE = NAHOĎ COOLDOWN!
+                    self.cooldown = 5
+                elif self.target is not None and self.target["purs_type"] != chosen_strategy:
+                    # ZMĚNA STRATEGIE = NAHOĎ COOLDOWN!
+                    self.cooldown = 5
+                # ULOŽENÍ STAVU
+                self.target = {"target": tar, "tar_pos": tar.position, 
+                                "tar_vel": tar.curr_speed, "tar_rad": tar.my_rad, "purs_type": chosen_strategy}
+            else:
+                # Přechod do formace (odvolání útoku)
+                if self.state == States.PURSUE:
+                    self.cooldown = 5
+                self.state = States.FORM
+                if self.target is not None:
+                    self.target["target"].purs_num -= 1
+                self.target = None
+        # --- 3. MIKRO ROZHODNUTÍ (Běží každý krok nezávisle na cooldownu) ---
+        if self.state == States.PURSUE:
+            self.rep_in_purs = np.interp(action_array[0], [-1, 1], [0.1, 2.0])
+            self.purs = np.interp(action_array[1], [-1, 1], [0.5, 3.0])
+            self.coll_obs = np.interp(action_array[2], [-1, 1], [0.5, 3.0]) 
+            self.rep_obs = np.interp(action_array[3], [-1, 1], [0.5, 3.0])  
+            self.prime_rep_in_purs = np.interp(action_array[4], [-1, 1], [2.5, 5.0])
+            self.prime_coll_r = np.interp(action_array[5], [-1, 1], [2.0, 6.0])
+            self.collision_r = np.interp(action_array[7], [-1, 1], [0.5, 3.0])
+        elif self.state == States.FORM:
+            self.override_active = False
+            self.rep_in_form = np.interp(action_array[0], [-1, 1], [4.5, 10.0])
+            self.form = np.interp(action_array[1], [-1, 1], [0.5, 5.0])
+            self.coll_obs = np.interp(action_array[2], [-1, 1], [2.0, 10.0]) 
+            self.rep_obs = np.interp(action_array[3], [-1, 1], [0.5, 5.0])   
+            self.formation_r = np.interp(action_array[4], [-1, 1], [1.0, 3.0])
+            self.formation_r_min = np.interp(action_array[5], [-1, 1], [0.5, self.formation_r])
+            self.rep_invs_r = np.interp(action_array[6], [-1, 1], [3.0, 15.0])
+            self.collision_r = np.interp(action_array[7], [-1, 1], [2.0, 3.0])
+        # gesamt
+        self.coll_gr = np.interp(action_array[8], [-1, 1], [0.5, 3.0])
+        self.rep_gr = np.interp(action_array[9], [-1, 1], [0.5, 4.0])
+        if self.target is not None and self.target["purs_type"] != self.purs_types["circling"]:
+            self.cruise_speed = self.max_speed*0.75 #np.interp(action_array[10], [-1, 1], [max(5.0, self.max_speed*0.75 - 1.5), self.max_speed*0.75])
         else:
             self.cruise_speed = np.interp(action_array[10], [-1, 1], [0.1, self.max_speed*0.75])
         self.KP = np.interp(action_array[14], [-1, 1], [2.0, 7.0])
@@ -1239,18 +1343,20 @@ class Pursuer(Agent):
         return form_vel
     
     def pursue_rl_target(self, target):
-        tar_speed = np.linalg.norm(target["tar_vel"])
+        tar_speed = np.linalg.norm(target["target"].curr_speed) #np.linalg.norm(target["tar_vel"])
         my_speed = self.max_speed * 0.75
         #if target is faster then pursuer, just pure pursue him
         if tar_speed >= my_speed or target["purs_type"] == self.purs_types['pure_pursuit']:
             if tar_speed >= my_speed:
                 self.override_active = True
+                #print("override active")
             target["purs_type"] = self.purs_types['pure_pursuit']
             return self.pursuit_pure_pursuit(target)
         #still too fast for encirclement, CB him
         elif tar_speed >= my_speed/1.2 or target["purs_type"] == self.purs_types['const_bear']:
             if tar_speed >= my_speed/1.2:
                 self.override_active = True
+                #print("override active")
             target["purs_type"] = self.purs_types['const_bear']
             return self.pursuit_constant_bearing(target)
         else:
@@ -1258,7 +1364,7 @@ class Pursuer(Agent):
             return self.pursue_herding()
     
     def pursue_target(self, target):
-        tar_speed = np.linalg.norm(target["tar_vel"])
+        tar_speed = np.linalg.norm(target["target"].curr_speed) #np.linalg.norm(target["tar_vel"])
         my_speed = self.cruise_speed
         prime_inv_dist = np.linalg.norm(self.prime_pos - target["tar_pos"])
         #if target is faster then pursuer, just pure pursue him

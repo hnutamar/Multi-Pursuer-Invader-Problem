@@ -70,7 +70,7 @@ class SimulationWorld:
             #     high=[2*self.sc.WORLD_WIDTH, 2*self.sc.WORLD_HEIGHT, pos_u[2] + 15], 
             #     size=(self.sc.INVADER_NUM, 3)
             # )
-            rnd_points_inv = self.get_random_invader_start(num_invaders=self.sc.INVADER_NUM)
+            rnd_points_inv = inv_pos if inv_pos is not None else self.get_random_invader_start(num_invaders=self.sc.INVADER_NUM)
         else:
             rnd_points_purs = purs_pos if purs_pos is not None else np.random.uniform(
                 low=[-self.sc.PURSUER_NUM/2 - 2 + pos_u[0], -self.sc.PURSUER_NUM/2 - 2 + pos_u[1]], 
@@ -106,7 +106,7 @@ class SimulationWorld:
     def get_random_invader_start(self, num_invaders=1):
         prime_pos = np.array([3.0, 3.0, 7.0])
         # 1. Vygenerujeme vzdálenosti pro všechny invadery najednou (sloupcový vektor)
-        dists = np.random.uniform(40.0, 60.0, size=(num_invaders, 1))
+        dists = np.random.uniform(70.0, 90.0, size=(num_invaders, 1))
         # 2. Vygenerujeme náhodné směry pro všechny naráz (matice N x 3)
         dirs = np.random.randn(num_invaders, 3)
         dirs[:, 2] = np.abs(dirs[:, 2]) # Všichni budou nahoře (Z > 0)

@@ -16,7 +16,7 @@ class Invader(Agent):
         self.rad_run = np.random.uniform(low=1.5, high=3.5)
         self.my_clock = 0
         self.u_dir = np.zeros_like(self.position)
-        self.kamikadze = False#random.random() < 0.5
+        self.kamikadze = random.random() < 0.5
         
     def evade(self, pursuers, target, obstacles):
         self.my_clock += 1

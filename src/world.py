@@ -106,7 +106,7 @@ class SimulationWorld:
     def get_random_invader_start(self, num_invaders=1):
         prime_pos = np.array([3.0, 3.0, 7.0])
         # 1. Vygenerujeme vzdálenosti pro všechny invadery najednou (sloupcový vektor)
-        dists = np.random.uniform(60.0, 70.0, size=(num_invaders, 1))
+        dists = np.random.uniform(40.0, 60.0, size=(num_invaders, 1))
         # 2. Vygenerujeme náhodné směry pro všechny naráz (matice N x 3)
         dirs = np.random.randn(num_invaders, 3)
         dirs[:, 2] = np.abs(dirs[:, 2]) # Všichni budou nahoře (Z > 0)
@@ -195,6 +195,7 @@ class SimulationWorld:
             if len(all_purs_pos) > 0 and not self.prime.crashed:
                 dist_p_p = cdist(prime_pos, all_purs_pos)[0]
                 if np.any(dist_p_p < prime_rad + all_purs_rad):
+                    #print("yeet")
                     self.prime.crashed = True
             #Prime vs Obstacles
             if self.obs_centers is not None and not self.prime.crashed:
@@ -271,8 +272,14 @@ class SimulationWorld:
         #ending check
         done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
         if self.prime.finished:
-            inv_to_prime = np.linalg.norm(self.invaders[0].position - self.prime.position)
-            inv_to_prime2 = np.linalg.norm(self.invaders[1].position - self.prime.position)
+            if not self.invaders[0].crashed:
+                inv_to_prime = np.linalg.norm(self.invaders[0].position - self.prime.position)
+            else:
+                inv_to_prime = np.inf
+            if not self.invaders[0].crashed:
+                inv_to_prime2 = np.linalg.norm(self.invaders[1].position - self.prime.position)
+            else:
+                inv_to_prime2 = np.inf
             min_dist = min(inv_to_prime, inv_to_prime2)
             print("win, dist: " + str(min_dist))
         elif done:

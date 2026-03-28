@@ -28,7 +28,7 @@ def test_defense_model():
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
     #model_path = "new_obs_best" 
-    model_path = "./models/history_def/gen_17" 
+    model_path = "./models/history_def/gen_13" 
     #model_path = "./models/gen_31" 
     #model_path2 = "./models/gen_30" 
     #model_path2 = "new_obs_best2"
@@ -87,6 +87,7 @@ def test_defense_model():
     print("Invader won: " + str(inv_prime))
     print("Pursuer crashed to Prime: " + str(prime_purs))
     print("Pursuer crashed somewhere: " + str(purs_crash))
+    print("Pursuers killed everyone: " + str(env.all_invaders_dead))
     lost = prime_purs + inv_prime
     win_rate = 1 - (lost / float(episode_num))
     print("win rate:" + str(win_rate))

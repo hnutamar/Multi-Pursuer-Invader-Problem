@@ -20,6 +20,7 @@ class Agent:
         self.CD = self.max_acc / (self.max_speed ** 2)
         #angular speed
         self.max_omega = max_omega
+        self.curr_omega = 0.0
         #internal clock
         self.dt = dt
         self.num_iter = num_iter
@@ -78,23 +79,22 @@ class Agent:
         #        self.position += final_dir
     
     def clip_angle(self, dir_vec, dt):
-        #speed new and old
         current_speed_norm = np.linalg.norm(self.curr_speed)
         target_speed_norm = np.linalg.norm(dir_vec)
         if current_speed_norm < 1e-6 or target_speed_norm < 1e-6:
-            return dir_vec
-        #norming the velocity vectors, calculating angles
+            self.curr_omega = 0.0
+            return dir_vec    
         u = self.curr_speed / current_speed_norm
         v = dir_vec / target_speed_norm
         dot_product = np.dot(u, v)
         dot_product = np.clip(dot_product, -1.0, 1.0)
         angle = np.arccos(dot_product)
         max_step = self.max_omega * dt
-        #angle is ok
         if angle <= max_step:
+            self.curr_omega = angle / dt
             return dir_vec
-        #too sharp angle
         else:
+            self.curr_omega = self.max_omega
             t = max_step / angle
             sin_angle = np.sin(angle)
             w1 = np.sin((1 - t) * angle) / sin_angle

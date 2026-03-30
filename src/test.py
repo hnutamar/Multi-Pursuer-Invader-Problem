@@ -9,6 +9,7 @@ from visualizer import MatplotlibVisualizer
 from sim_config3D import Sim3DConfig
 from train_env import HerdingEnv
 from train_env import FastWorldEnv
+import random
 
 def test_defense_model():
     print("Creating world for testing...")
@@ -96,8 +97,15 @@ def test_herding_model():
     print("Creating world for testing...")
     #setting env
     new_sc = Sim3DConfig(dt=0.02, purs_num=1, inv_num=1, obstacle=False)
-    world = SimulationWorld(new_sc, _3d=True, herding=True, purs_speed=[4.0], purs_acc=[3.0], no_target=True) 
-    env = HerdingEnv(world_instance=world, sc=new_sc, test=True)
+    new_purs_speed = random.uniform(2.0, 8.0)
+    new_purs_acc = random.uniform(new_purs_speed/4, new_purs_speed/2)
+    new_inv_speed = random.uniform(2.0, new_purs_speed + 2.0)
+    new_inv_acc = random.uniform(new_inv_speed/4, new_inv_speed/2)
+    #brave new world
+    world = SimulationWorld(new_sc, _3d=True, purs_acc=[new_purs_acc], prime_acc=0.1, 
+        inv_acc=[new_inv_acc], purs_speed=[new_purs_speed], inv_speed=[new_inv_speed], prime_speed=0.2, inv_pos=[np.array([10.0, 10.0, 10.0])], herding=True,
+        no_target=True)
+    env = HerdingEnv(world_instance=world, sc=new_sc)
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
     #model_path = "new_obs_best" 
@@ -116,7 +124,7 @@ def test_herding_model():
     running = True
     whole_reward = 0
     episode_num = 0
-    render_every = 1
+    render_every = 4
     ep_len = 0
     #visualizer
     #vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
@@ -145,7 +153,7 @@ def test_herding_model():
             episode_num += 1
             if episode_num % 25 == 0:
                 print("Episode: " + str(episode_num))
-            if episode_num == 100:
+            if episode_num == 20:
                 break
             #plt.pause(1.0)
             obs, info = env.reset()
@@ -164,4 +172,4 @@ def test_herding_model():
     print("win rate:" + str(win_rate))
 
 if __name__ == "__main__":
-    test_defense_model()
+    test_herding_model()

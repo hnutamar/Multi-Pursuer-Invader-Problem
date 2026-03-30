@@ -126,11 +126,13 @@ class SimulationWorld:
         dim = 3 if self._3d else 2
         #no one is alive
         if not agents:
-            return (np.empty((0, dim)), np.empty((0, dim)), np.empty((0,)), np.empty((0,)), np.empty((0,)))
+            return (np.empty((0, dim)), np.empty((0, dim)), np.empty((0,)), np.empty((0,)), np.empty((0,)), np.empty((0, dim)), np.empty((0, dim)))
         #living
         pos = np.vstack([a.position for a in agents])
         vel = np.vstack([a.curr_speed for a in agents])
         rad = np.array([a.my_rad for a in agents])
+        ang = np.array([a.curr_omega for a in agents])
+        acc = np.array([a.curr_acc for a in agents])
         #in case of invaders
         try:
             p_nums = np.array([a.purs_num for a in agents])
@@ -140,7 +142,7 @@ class SimulationWorld:
         tar = np.zeros(len(agents))
         if not inv:
             tar = [a.target["target"] if a.target is not None else None for a in agents]
-        return pos, vel, rad, p_nums, tar
+        return pos, vel, rad, p_nums, tar, ang, acc
 
     def step(self, manual_invader_vel=None):
         #counter
@@ -150,8 +152,8 @@ class SimulationWorld:
         free_purs = [pur for pur in self.pursuers if not pur.crashed]
         self.free_purs = free_purs
         self.free_inv = free_inv
-        all_inv_pos, all_inv_vel, all_inv_rad, all_inv_pnums, _ = self._get_safe_agent_data(free_inv, inv=True)
-        all_purs_pos, all_purs_vel, all_purs_rad, _, all_purs_targets = self._get_safe_agent_data(free_purs, inv=False)
+        all_inv_pos, all_inv_vel, all_inv_rad, all_inv_pnums, _, all_inv_ang_vel, all_inv_acc = self._get_safe_agent_data(free_inv, inv=True)
+        all_purs_pos, all_purs_vel, all_purs_rad, _, all_purs_targets, all_purs_ang_vel, all_purs_acc = self._get_safe_agent_data(free_purs, inv=False)
         #invader move
         for i, inv in enumerate(self.invaders):
             #manual control
@@ -168,8 +170,8 @@ class SimulationWorld:
         #pursuer move
         for i, pur in enumerate(free_purs):
             #close_purs = [p for p in free_purs if (np.linalg.norm(p.position - pur.position) - p.my_rad - pur.my_rad) <= self.sc.PURS_VIS]
-            purs_acc = pur.pursue(free_inv, self.prime.curr_speed, self.prime.my_rad, self.prime.position, all_purs_targets, precalc_data=(all_inv_pos, all_inv_vel, all_inv_pnums, 
-                        all_inv_rad, all_purs_pos, all_purs_vel, all_purs_rad, i, self.obs_centers, self.obs_radii), not_testing=self.not_testing, no_target=self.no_target)
+            purs_acc = pur.pursue(free_inv, self.prime.curr_speed, self.prime.my_rad, self.prime.position, all_purs_targets, precalc_data=(all_inv_pos, all_inv_vel, all_inv_pnums,
+                        all_inv_rad, all_inv_ang_vel, all_inv_acc, all_purs_pos, all_purs_vel, all_purs_rad, all_purs_ang_vel, all_purs_acc , i, self.obs_centers, self.obs_radii), not_testing=self.not_testing, no_target=self.no_target)
             pur.move(purs_acc)
         #prime move
         prime_acc = self.prime.fly(self.way_point, free_inv, free_purs, Modes.LINE, (self.obs_centers, self.obs_radii))
@@ -270,20 +272,20 @@ class SimulationWorld:
             for idx in np.where(swarm_crash_mask)[0]:
                 free_purs[idx].crashed = True
         #ending check
-        done = self.prime.crashed or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
-        if self.prime.finished:
-            if not self.invaders[0].crashed:
-                inv_to_prime = np.linalg.norm(self.invaders[0].position - self.prime.position)
-            else:
-                inv_to_prime = np.inf
-            if not self.invaders[0].crashed:
-                inv_to_prime2 = np.linalg.norm(self.invaders[1].position - self.prime.position)
-            else:
-                inv_to_prime2 = np.inf
-            min_dist = min(inv_to_prime, inv_to_prime2)
-            print("win, dist: " + str(min_dist))
-        elif done:
-            print("lost")
+        done = self.prime.crashed #or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
+        # if self.prime.finished:
+        #     if not self.invaders[0].crashed:
+        #         inv_to_prime = np.linalg.norm(self.invaders[0].position - self.prime.position)
+        #     else:
+        #         inv_to_prime = np.inf
+        #     if not self.invaders[0].crashed:
+        #         inv_to_prime2 = np.linalg.norm(self.invaders[1].position - self.prime.position)
+        #     else:
+        #         inv_to_prime2 = np.inf
+        #     min_dist = min(inv_to_prime, inv_to_prime2)
+        #     print("win, dist: " + str(min_dist))
+        # elif done:
+        #     print("lost")
         return self.get_state(), done
 
     def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):

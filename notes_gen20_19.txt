@@ -1,0 +1,1 @@
+use visibility of obstacles at 3.0 (self.vis_range)

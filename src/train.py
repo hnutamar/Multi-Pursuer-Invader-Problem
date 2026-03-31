@@ -30,7 +30,7 @@ class UpdateSwarmCallback(BaseCallback):
         self.save_dir = os.path.abspath("./models/history")
         os.makedirs(self.save_dir, exist_ok=True) 
         #gen1
-        self.generation = 6
+        self.generation = 26
     def _on_training_start(self) -> None:
         start_step = self.model.num_timesteps
         rest = start_step % self.update_freq
@@ -43,20 +43,23 @@ class UpdateSwarmCallback(BaseCallback):
             new_brain_path = os.path.join(self.save_dir, f"gen_{self.generation}")
             self.model.save(new_brain_path)        
             #every brain in archive
-            all_brains = glob.glob(os.path.join(self.save_dir, "gen_*.zip"))        
-            #random pick
+            all_brains = glob.glob(os.path.join(self.save_dir, "gen_*.zip"))
+            # DŮLEŽITÉ: Seřadit podle času vytvoření, abychom bezpečně našli dva nejnovější
+            all_brains.sort(key=os.path.getmtime)
             if all_brains:
-                latest_brain_path = os.path.join(self.save_dir, f"gen_{self.generation}.zip")
-                #every env
+                # 1. Získáme absolutně nejnovější model (poslední v seřazeném seznamu)
+                latest_brain = all_brains[-1].replace('.zip', '')
+                # 2. Získáme předchozí model (předposlední)
+                # Pokud máme zatím jen jeden model (úplně první generace), použijeme dvakrát ten samý
+                if len(all_brains) > 1:
+                    previous_brain = all_brains[-2].replace('.zip', '')
+                else:
+                    previous_brain = latest_brain
+                # 3. Projdeme všechna vektorizovaná prostředí
                 for env_idx in range(self.env.num_envs):
-                    #if random.random() < 0.4:
-                    #    selected_brain = random.choice(all_brains)
-                    #else:
-                    selected_brain = latest_brain_path    
-                    selected_brain_clean = selected_brain.replace('.zip', '')
-                    print(f"[INFO] Env {env_idx} new brain: {os.path.basename(selected_brain_clean)}")
-                    #loading only to one env
-                    self.env.env_method("load_teammate_brain", selected_brain_clean, indices=[env_idx])   
+                    print(f"[INFO] Env {env_idx} loading brains: {os.path.basename(latest_brain)} & {os.path.basename(previous_brain)}")
+                    # 4. Magie s env_method: Předáme OBA parametry
+                    self.env.env_method("load_teammate_brain", latest_brain, model_path2=previous_brain, indices=[env_idx])
             self.next_update += self.update_freq    
         return True
     
@@ -116,14 +119,14 @@ def main_defense():
     #model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy, batch_size=256, gamma=0.99, n_steps=2048,
     #  tensorboard_log="./ppo_drone_tensorboard/", learning_rate=linear_schedule(0.0003), verbose=1)
     #init_brain_path = "new_obs_best"
-    init_brain_path = "./models/history_def/gen_20"
+    init_brain_path = "./models/history_def/gen_22"
     #model.save(init_brain_path)
     vec_env.env_method("load_teammate_brain", init_brain_path)
     custom_objects = {
         #"ent_coef": 0.0001,
         #"learning_rate": 0.00005
     }
-    model = PPO.load("./models/history_def/gen_20", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
+    model = PPO.load("./models/history_def/gen_22", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
     # with torch.no_grad():
     #     model.policy.log_std.data = torch.full_like(model.policy.log_std.data, -1.5)
     #save_freq = 500000/num_cpu
@@ -147,14 +150,15 @@ def main_herding():
     #model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy, verbose=1, 
     #    tensorboard_log="./ppo_drone_tensorboard/", learning_rate=linear_schedule(0.0003))
     #init_brain_path = "new_obs_best"
-    init_brain_path = "./models/history/gen_6"
+    init_brain_path = "./models/history/gen_26"
+    init_brain_path2 = "./models/history/gen_25"
     #model.save(init_brain_path)
-    vec_env.env_method("load_teammate_brain", init_brain_path)
+    vec_env.env_method("load_teammate_brain", init_brain_path, model_path2=init_brain_path2)
     custom_objects = {
         "ent_coef": 0.0001,
-        #"learning_rate": 0.00005
+        "learning_rate": 0.00003
     }
-    model = PPO.load("./models/history/gen_6", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
+    model = PPO.load("./models/history/gen_26", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
     #with torch.no_grad():
     #    model.policy.log_std.data = torch.full_like(model.policy.log_std.data, -1.5)
     #save_freq = 500000/num_cpu

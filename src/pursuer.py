@@ -92,7 +92,7 @@ class Pursuer(Agent):
         self.k_vel = 0.01
         self.base_rad = 0.02
         self.k_rad = 0.02
-        self.base_acc = 0.2
+        self.base_acc = 0.02
         self.k_acc = 0.02
         self.base_ang = 0.05
         self.k_ang = 0.005
@@ -602,7 +602,7 @@ class Pursuer(Agent):
             #dist to centers
             center_dists = np.linalg.norm(obs_centers - self.position, axis=1)
             #dist to edges
-            edge_dists = center_dists - obs_radii
+            edge_dists = center_dists - obs_radii - self.my_rad
             #only those in sight
             visible_mask = edge_dists <= 5.0
             visible_indices = np.where(visible_mask)[0]
@@ -629,6 +629,7 @@ class Pursuer(Agent):
             prime_to_me = self.position - self.prime_pos
             # 1. Projekce
             projection = np.dot(prime_to_me, attack_vector) / (attack_dist**2)
+            projection = np.clip(projection, -3.0, 3.0)
             # 2. Vzdálenost k ose
             cross_prod = np.cross(attack_vector, prime_to_me)
             raw_dist_to_line = np.linalg.norm(cross_prod) / attack_dist

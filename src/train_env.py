@@ -467,8 +467,8 @@ class HerdingEnv(gym.Env):
         else:
             self.teammate_brain = PPO.load(model_path2, device="cpu")
         #if self.episode_num > 800_000/10:
-        with torch.no_grad():
-            self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -2.8)
+        #    with torch.no_grad():
+        self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -3.2)
 
     def generate_safe_obstacles(self, num_obs, agent_positions, agent_radii, max_coord, is_3d, min_r=1.0, max_r=5.0, safe_margin=1.5):
         #arrays
@@ -606,7 +606,7 @@ class HerdingEnv(gym.Env):
         pursuer_positions = np.array([p.position for p in self.world.free_purs])
         #pursuer penalty
         colleague_penalty = 0.0
-        safe_drone_dist = 2.0
+        safe_drone_dist = 2.5
         other_rads = np.array([p.my_rad for p in self.world.free_purs[1:]])
         other_pos = pursuer_positions[1:]
         if len(other_pos) > 0:
@@ -642,10 +642,10 @@ class HerdingEnv(gym.Env):
         #     com_reward = max(0.0, 5.0 - invader_com_dist) * 0.1
         #     reward += com_reward
         #reward for pushing invader away
-        # critical_zone = 12.0
-        # if current_inv_prime_dist < critical_zone:
-        #     panic_penalty = ((critical_zone - current_inv_prime_dist) / critical_zone) * 0.03
-        #     reward -= panic_penalty
+        critical_zone = 15.0
+        if current_inv_prime_dist < critical_zone:
+            panic_penalty = ((critical_zone - current_inv_prime_dist) / critical_zone) * 0.1
+            reward -= panic_penalty
         #reward, positive if invader is further away from prime
         diff = current_inv_prime_dist - self.last_inv_prime_dist
         if current_inv_prime_dist < 20.0: # and diff > 0:
@@ -671,12 +671,12 @@ class HerdingEnv(gym.Env):
             #print("lost")
             #if not self.world.invaders[0].crashed:
             #    self.lost += 1
-            reward -= 40.0
+            reward -= 60.0
             terminated = True
         #reward for getting invader far
-        # safe_distance = min(current_inv_prime_dist, 20.0)
-        # safety_ratio = safe_distance / 20.0
-        # reward += safety_ratio * 0.05
+        safe_distance = min(current_inv_prime_dist, 20.0)
+        safety_ratio = safe_distance / 20.0
+        reward += safety_ratio * 0.05
         # action_penalty = np.sum(np.square(action)) * 0.005
         # reward -= action_penalty
         #penalty for invader moving too much
@@ -684,8 +684,8 @@ class HerdingEnv(gym.Env):
         #     inv_diff = np.linalg.norm(self.last_inv_pos - invader_pos)
         #     reward -= inv_diff * 0.05
         #self.last_inv_pos = invader_pos
-        if current_inv_prime_dist > 20.0:
-            reward += 0.1
+        # if current_inv_prime_dist > 20.0:
+        #     reward += 0.1
         #whole game won
         #if truncated:
             #reward += min(current_inv_prime_dist, 20.0) * 2

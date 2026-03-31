@@ -109,9 +109,9 @@ def test_herding_model():
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
     #model_path = "new_obs_best" 
-    model_path = "./models/history/gen_38" 
+    model_path = "./models/history/gen_26" 
     #model_path = "./models/gen_31" 
-    model_path2 = "./models/history/gen_37" 
+    model_path2 = "./models/history/gen_25" 
     #model_path2 = "./models/gen_30" 
     #model_path2 = "new_obs_best2"
     print(f"Loading MLP: {model_path} ...")
@@ -127,7 +127,7 @@ def test_herding_model():
     render_every = 4
     ep_len = 0
     #visualizer
-    #vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
+    vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
     while running:
         #AI action
         ep_len += 1
@@ -138,13 +138,13 @@ def test_herding_model():
         world = env.world
         state = world.get_state()
         #controlling visualizer window
-        # if hasattr(vis, 'is_open') and not vis.is_open:
-        #     print("Window closed, ending...")
-        #     running = False
-        #     break
-        # #rendering
-        # if ep_len % render_every == 0:
-        #     vis.render(state, world_instance=world)
+        if hasattr(vis, 'is_open') and not vis.is_open:
+            print("Window closed, ending...")
+            running = False
+            break
+        #rendering
+        if ep_len % render_every == 0:
+            vis.render(state, world_instance=world)
         #restarting episode
         if terminated or truncated:
             #print(f"Episode over! Reward: {whole_reward:.1f}.")
@@ -153,14 +153,14 @@ def test_herding_model():
             episode_num += 1
             if episode_num % 25 == 0:
                 print("Episode: " + str(episode_num))
-            if episode_num == 20:
+            if episode_num == 25:
                 break
-            #plt.pause(1.0)
+            plt.pause(1.0)
             obs, info = env.reset()
-            # if hasattr(vis, 'is_open') and not vis.is_open:
-            #    vis.is_open = False
-            # #visualizer
-            # vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
+            if hasattr(vis, 'is_open') and not vis.is_open:
+               vis.is_open = False
+            #visualizer
+            vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
     purs_crash = env.lost_purs_crash
     prime_purs = env.lost_pursuer_prime
     inv_prime = env.lost_invader_prime

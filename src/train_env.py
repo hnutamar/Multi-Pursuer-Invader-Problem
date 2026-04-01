@@ -460,15 +460,16 @@ class HerdingEnv(gym.Env):
         return obs, {}
     
     def load_teammate_brain(self, model_path, model_path2=None):
-        rnd_num = np.random.randint(0, 2)
+        #rnd_num = np.random.randint(0, 2)
         #updating the brain
-        if rnd_num == 0 or model_path2 is None:
-            self.teammate_brain = PPO.load(model_path, device="cpu")
-        else:
-            self.teammate_brain = PPO.load(model_path2, device="cpu")
+        #if rnd_num == 0 or model_path2 is None:
+        self.teammate_brain = PPO.load(model_path, device="cpu")
+        if model_path2 is not None:
+            self.teammate_brain2 = PPO.load(model_path2, device="cpu")
         #if self.episode_num > 800_000/10:
         #    with torch.no_grad():
-        self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -3.2)
+        self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -3.4)
+        self.teammate_brain2.policy.log_std.data = torch.full_like(self.teammate_brain2.policy.log_std.data, -3.4)
 
     def generate_safe_obstacles(self, num_obs, agent_positions, agent_radii, max_coord, is_3d, min_r=1.0, max_r=5.0, safe_margin=1.5):
         #arrays
@@ -561,10 +562,20 @@ class HerdingEnv(gym.Env):
         all_raw_actions = [action]
         #generating action of others
         if hasattr(self, 'teammate_brain') and self.teammate_brain is not None:
-            for i in range(1, self.pursuing_purs):
-                obs_i = self.world.pursuers[i].get_observation_herding() 
-                action_i, _ = self.teammate_brain.predict(obs_i, deterministic=self.test)
-                all_raw_actions.append(action_i)
+            if hasattr(self, 'teammate_brain2') and self.teammate_brain2 is not None:
+                for i in range(1, self.pursuing_purs):
+                    obs_i = self.world.pursuers[i].get_observation_herding() 
+                    rnd_num = np.random.randint(0, 2)
+                    if rnd_num == 0:
+                        action_i, _ = self.teammate_brain.predict(obs_i, deterministic=self.test)
+                    else:
+                        action_i, _ = self.teammate_brain2.predict(obs_i, deterministic=self.test)
+                    all_raw_actions.append(action_i)
+            else:
+                for i in range(1, self.pursuing_purs):
+                    obs_i = self.world.pursuers[i].get_observation_herding() 
+                    action_i, _ = self.teammate_brain.predict(obs_i, deterministic=self.test)
+                    all_raw_actions.append(action_i)
         else:
             #does nothing, if there is no brain
             for i in range(1, len(self.world.pursuers)):
@@ -592,13 +603,13 @@ class HerdingEnv(gym.Env):
         pursuer_pos = state["pursuers"][0]
         pursuer_rad = self.world.pursuers[0].my_rad
         #dist between prime nad invader
-        current_inv_prime_dist = np.linalg.norm(invader_pos - prime_pos)
+        current_inv_prime_dist = np.linalg.norm(invader_pos - prime_pos) - self.world.prime.my_rad - self.world.invaders[0].my_rad
         #if episode is too long
         truncated = self.current_step >= self.max_steps
         reward = 0.0
         reward += 0.1
         terminated = False
-        curr_dist_to_inv = np.linalg.norm(pursuer_pos - invader_pos) - 8.0
+        curr_dist_to_inv = np.linalg.norm(pursuer_pos - invader_pos) - 7.0 - self.world.prime.my_rad - pursuer_rad
         #navigating penalty to invader
         if curr_dist_to_inv > 0:
             distance_penalty = curr_dist_to_inv * 0.05
@@ -615,7 +626,7 @@ class HerdingEnv(gym.Env):
             colleague_penalty = -np.sum(violations[violations > 0]) * 0.1
             reward += colleague_penalty
         #obstacle penalty
-        safe_drone_dist = 4.0
+        safe_drone_dist = 5.0
         if len(self.obs_centers) > 0:
             obs_centers_arr = self.obs_centers
             obs_rads_arr = self.obs_rads
@@ -642,7 +653,7 @@ class HerdingEnv(gym.Env):
         #     com_reward = max(0.0, 5.0 - invader_com_dist) * 0.1
         #     reward += com_reward
         #reward for pushing invader away
-        critical_zone = 15.0
+        critical_zone = 19.0
         if current_inv_prime_dist < critical_zone:
             panic_penalty = ((critical_zone - current_inv_prime_dist) / critical_zone) * 0.1
             reward -= panic_penalty
@@ -660,22 +671,22 @@ class HerdingEnv(gym.Env):
             #print("lost")
             if not done:
                 self.lost_purs_crash += 1
-            reward -= 30.0
-            terminated = True
+            reward -= 60.0
+            #terminated = True
         #penalization for breaking the defense
-        if current_inv_prime_dist < 1.0 or done: 
-            if done:
-                self.lost_pursuer_prime += 1
-            else:
-                self.lost_invader_prime += 1
+        if done: #current_inv_prime_dist < 1.0 or done: 
+            #if done:
+            #    self.lost_pursuer_prime += 1
+            #else:
+            self.lost_invader_prime += 1
             #print("lost")
             #if not self.world.invaders[0].crashed:
             #    self.lost += 1
             reward -= 60.0
             terminated = True
         #reward for getting invader far
-        safe_distance = min(current_inv_prime_dist, 20.0)
-        safety_ratio = safe_distance / 20.0
+        safe_distance = min(current_inv_prime_dist, 25.0)
+        safety_ratio = safe_distance / 25.0
         reward += safety_ratio * 0.05
         # action_penalty = np.sum(np.square(action)) * 0.005
         # reward -= action_penalty

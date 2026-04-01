@@ -10,6 +10,14 @@ from sim_config3D import Sim3DConfig
 from train_env import HerdingEnv
 from train_env import FastWorldEnv
 import random
+import torch
+
+def lock_all_seeds(seed_value=42):
+    random.seed(seed_value)
+    np.random.seed(seed_value)
+    torch.manual_seed(seed_value)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed_value)
 
 def test_defense_model():
     print("Creating world for testing...")
@@ -94,6 +102,8 @@ def test_defense_model():
     print("win rate:" + str(win_rate))
 
 def test_herding_model():
+    seed_num = 420
+    lock_all_seeds(seed_num)
     print("Creating world for testing...")
     #setting env
     new_sc = Sim3DConfig(dt=0.02, purs_num=1, inv_num=1, obstacle=False)
@@ -108,12 +118,12 @@ def test_herding_model():
     env = HerdingEnv(world_instance=world, sc=new_sc)
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
-    #model_path = "new_obs_best" 
-    model_path = "./models/history/gen_26" 
-    #model_path = "./models/gen_31" 
-    model_path2 = "./models/history/gen_25" 
-    #model_path2 = "./models/gen_30" 
-    #model_path2 = "new_obs_best2"
+    #model_path = "brain_to_integrate" 
+    #model_path = "./models/history/gen_35" 
+    model_path = "./models/herding_modelB_2.0" 
+    #model_path2 = "./models/history/gen_35" 
+    model_path2 = "./models/herding_modelB_2.0" 
+    #model_path2 = "brain_to_integrate" 
     print(f"Loading MLP: {model_path} ...")
     print(f"Loading MLP: {model_path2} ...")
     model = PPO.load(model_path)
@@ -127,7 +137,7 @@ def test_herding_model():
     render_every = 4
     ep_len = 0
     #visualizer
-    vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
+    #vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
     while running:
         #AI action
         ep_len += 1
@@ -138,29 +148,30 @@ def test_herding_model():
         world = env.world
         state = world.get_state()
         #controlling visualizer window
-        if hasattr(vis, 'is_open') and not vis.is_open:
-            print("Window closed, ending...")
-            running = False
-            break
-        #rendering
-        if ep_len % render_every == 0:
-            vis.render(state, world_instance=world)
+        # if hasattr(vis, 'is_open') and not vis.is_open:
+        #     print("Window closed, ending...")
+        #     running = False
+        #     break
+        # #rendering
+        # if ep_len % render_every == 0:
+        #     vis.render(state, world_instance=world)
         #restarting episode
         if terminated or truncated:
             #print(f"Episode over! Reward: {whole_reward:.1f}.")
             whole_reward = 0
             ep_len = 0
             episode_num += 1
+            lock_all_seeds(seed_num + episode_num)
             if episode_num % 25 == 0:
                 print("Episode: " + str(episode_num))
-            if episode_num == 25:
+            if episode_num == 100:
                 break
-            plt.pause(1.0)
+            #plt.pause(1.0)
             obs, info = env.reset()
-            if hasattr(vis, 'is_open') and not vis.is_open:
-               vis.is_open = False
-            #visualizer
-            vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
+            # if hasattr(vis, 'is_open') and not vis.is_open:
+            #    vis.is_open = False
+            # #visualizer
+            # vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
     purs_crash = env.lost_purs_crash
     prime_purs = env.lost_pursuer_prime
     inv_prime = env.lost_invader_prime

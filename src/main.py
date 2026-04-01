@@ -18,7 +18,7 @@ def main():
     MANUAL_CONTROL = False
     #config
     if _3d:
-        sc = Sim3DConfig(dt=0.02, purs_num=20, inv_num=3, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
+        sc = Sim3DConfig(dt=0.02, purs_num=20, inv_num=2, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
     else:
         sc = Sim2DConfig(dt=0.02, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=True, 
                          obstacle_rad=[4.0, 4.0], obstacle_pos=[np.array([17.0, 6.0]), np.array([6.0, 17.0])])
@@ -26,12 +26,12 @@ def main():
     inv_pos = np.array([[25.24, 20.15, 15.58]])
     #model = PPO.load("new_obs_best")
     #model2 = PPO.load("new_obs_best2")
-    model = PPO.load("./models/history/gen_27")
-    model2 = PPO.load("./models/history/gen_26")
+    model = PPO.load("./models/history/gen_35")
+    model2 = PPO.load("./models/history/gen_35")
     def_model = PPO.load("./models/def_final_restrictive")
     world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 5.0), inv_acc=np.full(30, 4.5), prime_acc=1.3, purs_speed=np.full(30, 8.0), inv_speed=np.full(30, 7.0), prime_speed=3.5, pursue_model=(model, model2), def_model=None, not_testing=True)
     #visualization
-    SHOW_VISUALIZATION = True
+    SHOW_VISUALIZATION = False
     vis = None
     if SHOW_VISUALIZATION:
         if PYBULLET:

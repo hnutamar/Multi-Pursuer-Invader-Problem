@@ -240,7 +240,7 @@ class Pursuer(Agent):
         #closest invaders
         return [all_invaders[i] for i in sorted_indices[:max_count]]
     #MODEL B
-    def get_observation_herding(self):
+    def observation_herding(self):
         #observation for herding NN, everything normalized
         MAX_COORD = 30.0       #world
         MAX_DIST = 40.0        #max possible distance
@@ -512,7 +512,7 @@ class Pursuer(Agent):
         ]).astype(np.float32)
         return final_obs
     #MODEL C
-    def observation_herding(self):
+    def get_observation_herding(self):
         #observation for herding NN, everything normalized
         MAX_COORD = 30.0       #world
         MAX_DIST = 40.0        #max possible distance

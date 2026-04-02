@@ -656,7 +656,7 @@ class HerdingEnv(gym.Env):
             if not done:
                 self.lost_purs_crash += 1
             reward -= 60.0
-            terminated = True
+            #terminated = True
         #penalization for breaking the defense
         if done: #current_inv_prime_dist < 1.0 or done: 
             #if done:

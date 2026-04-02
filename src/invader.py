@@ -69,6 +69,33 @@ class Invader(Agent):
             dir_ = dir_ / np.linalg.norm(dir_)
         dir_ = dir_ * self.cruise_speed
         return dir_
+
+    def pursuit_constant_bearing(self, target):
+        v_tar = target.curr_speed
+        #line of sight
+        r = target.position - self.position
+        #coeficients of quadratic equation
+        a, b, c = np.dot(r, r), -2*np.dot(v_tar, r), np.dot(v_tar, v_tar) - self.cruise_speed**2
+        #discriminant
+        D = b**2 - 4*a*c
+        CB_dir = np.zeros_like(self.position)
+        #positive D
+        if D >= 1e-6:
+            lambda1, lambda2 = (-b + np.sqrt(D))/(2*a), (-b - np.sqrt(D))/(2*a)
+            CB_dir1, CB_dir2 = v_tar - lambda1*r, v_tar - lambda2*r
+            if np.dot(CB_dir1, r) > 0:
+                CB_dir = CB_dir1
+            else:
+                CB_dir = CB_dir2
+        #negative D
+        else:
+            return self.pursuit_pure_pursuit(target)
+        #norming it to the max speed
+        if np.linalg.norm(CB_dir) < 1e-12:
+            return np.zeros_like(CB_dir)
+        CB_dir = CB_dir / np.linalg.norm(CB_dir)
+        CB_dir = CB_dir * self.cruise_speed
+        return CB_dir
     
     def repulsive_force_ground(self, coll):
         total_force = np.zeros_like(self.position)

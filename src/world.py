@@ -105,21 +105,18 @@ class SimulationWorld:
 
     def get_random_invader_start(self, num_invaders=1):
         prime_pos = np.array([3.0, 3.0, 7.0])
-        # 1. Vygenerujeme vzdálenosti pro všechny invadery najednou (sloupcový vektor)
-        dists = np.random.uniform(70.0, 90.0, size=(num_invaders, 1))
-        # 2. Vygenerujeme náhodné směry pro všechny naráz (matice N x 3)
+        #distances to the prime
+        dists = np.random.uniform(50.0, 70.0, size=(num_invaders, 1))
+        #random direction
         dirs = np.random.randn(num_invaders, 3)
-        dirs[:, 2] = np.abs(dirs[:, 2]) # Všichni budou nahoře (Z > 0)
-        # 3. Normalizace směrů (vydělíme každý řádek jeho délkou)
+        dirs[:, 2] = np.abs(dirs[:, 2])
+        #normalizing
         norms = np.linalg.norm(dirs, axis=1, keepdims=True)
         dirs = dirs / norms
-        # 4. Výpočet nových pozic (Prime pozice + vektor směru * vzdálenost)
+        #pos of invaders
         new_inv_pos = prime_pos + (dirs * dists)
-        # 5. Omezení výšky (Z souřadnice nesmí klesnout pod 1.0)
+        #height limit
         new_inv_pos[:, 2] = np.maximum(1.0, new_inv_pos[:, 2])        
-        # Jinak vrátíme seznam polí (nebo můžete nechat return new_inv_pos, pokud chcete 2D Numpy matici)
-        # if num_invaders == 1:
-        #     return new_inv_pos[0]
         return list(new_inv_pos)
 
     def _get_safe_agent_data(self, agents, inv=False):

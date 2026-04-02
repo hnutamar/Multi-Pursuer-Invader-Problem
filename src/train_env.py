@@ -150,32 +150,29 @@ class FastWorldEnv(gym.Env):
 
     def get_random_invader_start(self, num_invaders=1):
         prime_pos = np.array([3.0, 3.0, 7.0])
-        # 1. Vygenerujeme vzdálenosti pro všechny invadery najednou (sloupcový vektor)
+        #distances to the prime
         dists = np.random.uniform(50.0, 70.0, size=(num_invaders, 1))
-        # 2. Vygenerujeme náhodné směry pro všechny naráz (matice N x 3)
+        #random direction
         dirs = np.random.randn(num_invaders, 3)
-        dirs[:, 2] = np.abs(dirs[:, 2]) # Všichni budou nahoře (Z > 0)
-        # 3. Normalizace směrů (vydělíme každý řádek jeho délkou)
+        dirs[:, 2] = np.abs(dirs[:, 2])
+        #normalizing
         norms = np.linalg.norm(dirs, axis=1, keepdims=True)
         dirs = dirs / norms
-        # 4. Výpočet nových pozic (Prime pozice + vektor směru * vzdálenost)
+        #pos of invaders
         new_inv_pos = prime_pos + (dirs * dists)
-        # 5. Omezení výšky (Z souřadnice nesmí klesnout pod 1.0)
+        #height limit
         new_inv_pos[:, 2] = np.maximum(1.0, new_inv_pos[:, 2])        
-        # Jinak vrátíme seznam polí (nebo můžete nechat return new_inv_pos, pokud chcete 2D Numpy matici)
-        # if num_invaders == 1:
-        #     return new_inv_pos[0]
         return list(new_inv_pos)
 
     def get_random_pursuer_starts(self, num_pursuers, inv_pos):
-        # center, prime position
+        #center, prime position
         prime_pos = np.array([3.0, 3.0, 7.0])    
-        # array for all pursuers
+        #array for all pursuers
         positions = np.zeros((num_pursuers, 3))
-        # Vzdálenost, jak daleko od Invadera (nebo Prime) se má spawnout
+        #spawn
         dist_close = np.random.uniform(2.2, 3.0)
         dir_close = np.random.randn(3)
-        dir_close[2] = abs(dir_close[2]) # Aby se spawnoval spíš nahoře
+        dir_close[2] = abs(dir_close[2])
         dir_close = dir_close / np.linalg.norm(dir_close)
         positions[0] = prime_pos + (dir_close * dist_close)
         #others can be further
@@ -282,37 +279,27 @@ class FastWorldEnv(gym.Env):
         #             reward -= 0.2
         #         else:
         #             reward += 0.5
+        #distance rewards
         if min_inv_dist < 18.0:
             delta_dist = min_inv_dist - self.last_inv_prime_dist
-            # Pokud se vzdálenost ZVĚTŠUJE (dron ho fyzicky odtlačil/vykolejil!)
             if delta_dist > 0:
-                # Tady mu dáme pořádný násobič. Když ho nárazem odhodí o 0.5 metru, 
-                # dostane okamžitý štědrý bonus. Tohle ho naučí používat kinetickou energii!
                 reward += delta_dist * 5.0 
             else:
-                # Vetřelec se blíží. Mírný trest, který ho nutí to zastavit.
                 reward += delta_dist * 0.5  
         elif min_inv_dist >= 18.0:
-            # Vetřelec je bezpečně daleko. 
-            # Přesně jak jste chtěl - dáváme 1.0 za frame. Bude se snažit je tu udržet věčně.
             reward += 1.0
         #reward for being in the formation
-        # ==========================================
-        # ODMĚNA ZA FORMACI A JEJÍ SYMETRII
-        # ==========================================
         if current_state == States.FORM:
-            # 1. Plat za to, že je hlídání bezpečné (to už máte)
+            #bonus for being in the formation
             # if min_inv_dist > 30.0:
             #     reward += 0.05
-            # 2. BONUS ZA DOKONALOU KOULI (Triks s těžištěm)
-            # Vyfiltrujeme jen ty drony, kteří aktuálně drží formaci
+            #bonus for good defending
             form_positions = [p.position for p in self.world.free_purs if p.state == States.FORM]
-            # Abychom mohli hodnotit kouli, musí v ní být rozumný počet dronů
             if len(form_positions) >= 4:
-                # Spočítáme těžiště všech strážců
+                #center of mass
                 centroid = np.mean(form_positions, axis=0)
-                # Jak moc se těžiště roje liší od pozice šéfa?
                 centroid_offset = np.linalg.norm(centroid - prime_pos)
+                #reward according to the distance to the prime
                 com_reward = max(0.0, 3.0 - centroid_offset) * 0.05
                 reward += com_reward
         #reward for invader crashing
@@ -511,28 +498,25 @@ class HerdingEnv(gym.Env):
         return new_inv_pos
 
     def get_random_pursuer_starts(self, num_pursuers, inv_pos):
-        # center, prime position
+        #center, prime position
         prime_pos = np.array([3.0, 3.0, 7.0])    
-        # array for all pursuers
+        #array for all pursuers
         positions = np.zeros((num_pursuers, 3))
-        # Vzdálenost, jak daleko od Invadera (nebo Prime) se má spawnout
+        #dist where pursuer spawns
         dist_close = np.random.uniform(2.2, 3.0)
         # if self.episode_num <= 500_000 / 10 and not self.test:
-        #     # --- FÁZE 1: SPAWN PŘESNĚ NA LOS (MEZI INVADERA A PRIME) ---
-        #     # 1. Směrový vektor: Od Invadera směrem k Prime dronovi
+        #     #spawn by Invader
         #     dir_to_prime = prime_pos - inv_pos
-        #     # 2. Normalizace: Uděláme z vektoru šipku o délce přesně 1
         #     dist_to_prime = np.linalg.norm(dir_to_prime)
         #     if dist_to_prime > 0:
         #         norm_dir = dir_to_prime / dist_to_prime
         #     else:
         #         norm_dir = np.array([0.0, 0.0, 1.0]) # Fallback    
-        #     # 3. Naspawnujeme Pursuera na Invadera a posuneme ho po LOS blíž k Prime
         #     positions[0] = inv_pos + (norm_dir * dist_close)
         # else:
-        #--- FÁZE 2: NÁHODNÝ SPAWN U PRIME DRONA ---
+        #spawn by Prime
         dir_close = np.random.randn(3)
-        dir_close[2] = abs(dir_close[2]) # Aby se spawnoval spíš nahoře
+        dir_close[2] = abs(dir_close[2])
         dir_close = dir_close / np.linalg.norm(dir_close)
         positions[0] = prime_pos + (dir_close * dist_close)
         #others can be further
@@ -672,7 +656,7 @@ class HerdingEnv(gym.Env):
             if not done:
                 self.lost_purs_crash += 1
             reward -= 60.0
-            #terminated = True
+            terminated = True
         #penalization for breaking the defense
         if done: #current_inv_prime_dist < 1.0 or done: 
             #if done:

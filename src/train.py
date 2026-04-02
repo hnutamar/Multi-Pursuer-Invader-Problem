@@ -44,21 +44,19 @@ class UpdateSwarmCallback(BaseCallback):
             self.model.save(new_brain_path)        
             #every brain in archive
             all_brains = glob.glob(os.path.join(self.save_dir, "gen_*.zip"))
-            # DŮLEŽITÉ: Seřadit podle času vytvoření, abychom bezpečně našli dva nejnovější
+            #sorting according to the time of creation
             all_brains.sort(key=os.path.getmtime)
             if all_brains:
-                # 1. Získáme absolutně nejnovější model (poslední v seřazeném seznamu)
+                #newest model
                 latest_brain = all_brains[-1].replace('.zip', '')
-                # 2. Získáme předchozí model (předposlední)
-                # Pokud máme zatím jen jeden model (úplně první generace), použijeme dvakrát ten samý
+                #second newest
                 if len(all_brains) > 1:
                     previous_brain = all_brains[-2].replace('.zip', '')
                 else:
                     previous_brain = latest_brain
-                # 3. Projdeme všechna vektorizovaná prostředí
+                #iterating through every env
                 for env_idx in range(self.env.num_envs):
                     print(f"[INFO] Env {env_idx} loading brains: {os.path.basename(latest_brain)} & {os.path.basename(previous_brain)}")
-                    # 4. Magie s env_method: Předáme OBA parametry
                     self.env.env_method("load_teammate_brain", latest_brain, model_path2=previous_brain, indices=[env_idx])
             self.next_update += self.update_freq    
         return True

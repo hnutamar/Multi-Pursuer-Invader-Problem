@@ -102,7 +102,7 @@ def test_defense_model():
     print("win rate:" + str(win_rate))
 
 def test_herding_model():
-    seed_num = 420
+    seed_num = 42
     lock_all_seeds(seed_num)
     print("Creating world for testing...")
     #setting env
@@ -121,8 +121,8 @@ def test_herding_model():
     #model_path = "brain_to_integrate" 
     #model_path = "./models/history/gen_35" 
     model_path = "./models/herding_modelB_2.0" 
-    #model_path2 = "./models/history/gen_35" 
-    model_path2 = "./models/herding_modelB_2.0" 
+    #model_path2 = "./models/history/gen_34" 
+    model_path2 = "./models/herding_modelB_2.1" 
     #model_path2 = "brain_to_integrate" 
     print(f"Loading MLP: {model_path} ...")
     print(f"Loading MLP: {model_path2} ...")

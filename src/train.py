@@ -27,10 +27,10 @@ class UpdateSwarmCallback(BaseCallback):
         self.env = env
         self.update_freq = update_freq
         self.next_update = 0
-        self.save_dir = os.path.abspath("./models/history")
+        self.save_dir = os.path.abspath("./models/history_def")
         os.makedirs(self.save_dir, exist_ok=True) 
         #gen1
-        self.generation = 40
+        self.generation = 5
     def _on_training_start(self) -> None:
         start_step = self.model.num_timesteps
         rest = start_step % self.update_freq
@@ -98,8 +98,8 @@ def make_defense_env(env_rank, seed=0):
         purs_speed = np.full(30, 8.0)
         inv_speed = np.full(30, 7.0)
         #brave new world
-        model = PPO.load("./models/history/gen_38")
-        model2 = PPO.load("./models/history/gen_37")
+        model = PPO.load("./models/herding_modelC_0")
+        model2 = PPO.load("./models/herding_modelC_0")
         world = SimulationWorld(new_sc, _3d=True, purs_acc=purs_acc, prime_acc=0.1, pursue_model=(model, model2),
             inv_acc=inv_acc, purs_speed=purs_speed, inv_speed=inv_speed, prime_speed=0.2, inv_pos=[np.array([10.0, 10.0, 10.0])], not_testing=True)
         env = FastWorldEnv(world_instance=world, sc=new_sc)
@@ -117,14 +117,14 @@ def main_defense():
     #model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy, batch_size=256, gamma=0.99, n_steps=2048,
     #  tensorboard_log="./ppo_drone_tensorboard/", learning_rate=linear_schedule(0.0003), verbose=1)
     #init_brain_path = "new_obs_best"
-    init_brain_path = "./models/history_def/gen_22"
+    init_brain_path = "./models/history_def/gen_5"
     #model.save(init_brain_path)
     vec_env.env_method("load_teammate_brain", init_brain_path)
     custom_objects = {
         #"ent_coef": 0.0001,
         #"learning_rate": 0.00005
     }
-    model = PPO.load("./models/history_def/gen_22", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
+    model = PPO.load("./models/history_def/gen_5", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
     # with torch.no_grad():
     #     model.policy.log_std.data = torch.full_like(model.policy.log_std.data, -1.5)
     #save_freq = 500000/num_cpu
@@ -132,8 +132,8 @@ def main_defense():
     #    name_prefix='herding_brain')
     #train
     print("Starting training...")
-    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=200_000)
-    model.learn(total_timesteps=5_000_000, callback=swarm_callback, tb_log_name="PPO_Defense", reset_num_timesteps=False)
+    swarm_callback = UpdateSwarmCallback(vec_env, update_freq=300_000)
+    model.learn(total_timesteps=10_000_000, callback=swarm_callback, tb_log_name="PPO_Defense", reset_num_timesteps=False)
     #saving result
     print("Training done...")
     model.save("drone_defense_brain")
@@ -171,7 +171,7 @@ def main_herding():
     model.save("drone_herding_brain_gen2")
 
 if __name__ == "__main__":
-    main_herding()
+    main_defense()
     
 #UNUSED CODE
     # #new config

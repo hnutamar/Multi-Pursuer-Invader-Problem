@@ -721,7 +721,249 @@ class Pursuer(Agent):
     def get_observation(self):
         #observation for herding NN, everything normalized
         MAX_COORD = 30.0       #world
-        MAX_DIST = 30.0        #max possible distance
+        MAX_DIST = 40.0        #max possible distance
+        MAX_SPEED = 8.5        #max speed
+        MAX_DENSITY = 15.0     #max pursuer density
+        OTHER_PURS = 5.0       #max pursuer density
+        MAX_RADIUS = 5.0       #max obstacle radius
+        MAX_DRONE_RAD = 0.7
+        FAR_AWAY = 3.0         #far away, bigger number
+        MAX_ACC = 8.0
+        MAX_ANG_VEL = 2.0
+        MAX_COOLDOWN = 5.0   
+        #STATE STATE
+        #flag is attacking
+        is_attacking = 1.0 if self.state == States.PURSUE else 0.0
+        #cooldown
+        cooldown_obs = self.cooldown / MAX_COOLDOWN
+        #tactic currently used
+        tactic_obs = [0.0, 0.0, 0.0]
+        if self.state == States.PURSUE and self.target is not None:
+            actual_strat = self.target["purs_type"]
+            if actual_strat == self.purs_types["pure_pursuit"]:
+                tactic_obs[0] = 1.0
+            elif actual_strat == self.purs_types["const_bear"]:
+                tactic_obs[1] = 1.0
+            elif actual_strat == self.purs_types["circling"]:
+                tactic_obs[2] = 1.0
+        is_overridden = 1.0 if getattr(self, 'override_active', False) else 0.0
+        state_obs = np.array([is_attacking, cooldown_obs, is_overridden] + tactic_obs, dtype=np.float32)
+        #MY STATE
+        my_speed_mag = np.linalg.norm(self.curr_speed)
+        my_acc_mag = np.linalg.norm(self.curr_acc)
+        my_obs = np.concatenate([
+            self.curr_speed / MAX_SPEED,      #velocity
+            self.curr_acc / MAX_ACC,          #acceleration
+            [my_speed_mag / MAX_SPEED],       #speed norm
+            [my_acc_mag / MAX_ACC],           #acc norm
+            [self.position[2] / MAX_COORD],   #height
+            [self.my_rad / MAX_DRONE_RAD],    #radius
+            [self.cruise_speed / MAX_SPEED],  #cruise velocity (maximum)
+            [self.max_acc / MAX_ACC],         #acceleration maximum
+            [self.curr_omega / MAX_ANG_VEL],  #angular speed
+            [self.max_omega / MAX_ANG_VEL]    #angular maximum
+        ]) 
+        #PRIME STATE
+        #radius
+        prime_rad_obs = np.array([self.prime_rad / MAX_DRONE_RAD], dtype=np.float32)
+        #rel velocity
+        prime_rel_vel = self.prime_vel - self.curr_speed
+        prime_pos = (self.prime_pos - self.position) / MAX_DIST
+        #dist to me surface - surface
+        raw_prime_dist = np.linalg.norm(self.prime_pos - self.position)
+        surf_prime_dist = max(0.0, raw_prime_dist - self.prime_rad - self.my_rad)
+        #normalizing
+        prime_purs_dist = surf_prime_dist / MAX_DIST
+        prime_obs = np.concatenate([
+            prime_pos, 
+            prime_rel_vel / (MAX_SPEED * 2.0),
+            prime_rad_obs,
+            [prime_purs_dist]
+        ])
+        #PURSER FILTER
+        other_purs_pos = []
+        other_purs_vel = []
+        other_purs_rads = []
+        other_purs_acc = []
+        other_purs_ang_vel = []
+        #in formation everyone is visible
+        if self.state == States.FORM:
+            other_purs_pos = list(self.all_purs_pos)
+            other_purs_vel = list(self.all_purs_vel)
+            other_purs_rads = list(self.all_purs_rads)
+            other_purs_acc = list(self.all_purs_acc)
+            other_purs_ang_vel = list(self.all_purs_ang_vel)  
+        else:
+            #in pursue only those also pursuing same target are relevant
+            for i, tar in enumerate(self.all_purs_tars):
+                if tar is not None and tar is self.target["target"]:
+                    other_purs_pos.append(self.all_purs_pos[i])
+                    other_purs_vel.append(self.all_purs_vel[i])
+                    other_purs_rads.append(self.all_purs_rads[i])
+                    other_purs_acc.append(self.all_purs_acc[i])
+                    other_purs_ang_vel.append(self.all_purs_ang_vel[i])  
+        new_purs_pos = np.array(other_purs_pos)
+        new_purs_vel = np.array(other_purs_vel)
+        new_purs_rads = np.array(other_purs_rads)
+        new_purs_acc = np.array(other_purs_acc)
+        new_purs_ang_vel = np.array(other_purs_ang_vel)
+        #PURSUERS STATE
+        pursuers_obs = np.full(42, FAR_AWAY, dtype=np.float32)
+        #default
+        for i in range(3):
+            start = i * 14
+            pursuers_obs[start+3 : start+6] = 0.0  #rel velocity
+            pursuers_obs[start+6] = 0.0            #radius
+            pursuers_obs[start+8 : start+11] = 0.0 #rel acc
+            pursuers_obs[start+11] = 0.0           #angular speed
+            pursuers_obs[start+12] = 0.0 #mate speed
+            pursuers_obs[start+13] = 0.0 #mate acc mag
+        density = 0
+        if len(new_purs_pos) > 0:
+            density = len(new_purs_pos)
+            #normalized dist to me
+            norm_rel_positions = (new_purs_pos - self.position) / self.vis_range
+            norm_dists = np.linalg.norm(norm_rel_positions, axis=1)
+            #three closest
+            closest_indices = np.argsort(norm_dists)[:3]
+            for i, idx in enumerate(closest_indices):
+                start = i * 14
+                #rel pos
+                pursuers_obs[start : start+3] = norm_rel_positions[idx]    
+                #rel velocity
+                rel_vel = new_purs_vel[idx] - self.curr_speed
+                pursuers_obs[start+3 : start+6] = rel_vel / (MAX_SPEED * 2.0)    
+                #radius
+                pursuers_obs[start+6] = new_purs_rads[idx] / MAX_DRONE_RAD    
+                #dist to me surface - surface
+                raw_mate_to_me_dist = np.linalg.norm(new_purs_pos[idx] - self.position)
+                surf_mate_to_me_dist = max(0.0, raw_mate_to_me_dist - new_purs_rads[idx] - self.my_rad)
+                pursuers_obs[start+7] = surf_mate_to_me_dist / self.vis_range
+                #rel acceleration
+                rel_acc = new_purs_acc[idx] - self.curr_acc
+                pursuers_obs[start+8 : start+11] = rel_acc / (MAX_ACC * 2.0)
+                #angular speed
+                pursuers_obs[start+11] = new_purs_ang_vel[idx] / MAX_ANG_VEL
+                #norm of rel speed
+                mate_speed = np.linalg.norm(new_purs_vel[idx])
+                pursuers_obs[start+12] = mate_speed / MAX_SPEED
+                #norm of rel acc
+                mate_acc_mag = np.linalg.norm(new_purs_acc[idx])
+                pursuers_obs[start+13] = mate_acc_mag / MAX_ACC
+        #DENSITY STATE
+        density_obs = np.array([density / MAX_DENSITY], dtype=np.float32)
+        #INVADER STATE
+        invaders_obs = np.full(36, FAR_AWAY, dtype=np.float32) 
+        #default
+        for i in range(2):
+            start = i * 18
+            invaders_obs[start+3 : start+6] = 0.0 #velocity
+            invaders_obs[start+6] = 0.0           #cosinus
+            invaders_obs[start+10] = 0.0          #num of pusuers
+            invaders_obs[start+12:start+15] = 0.0 #rel acc
+            invaders_obs[start+15] = 0.0          #norm speed
+        if len(self.all_inv_pos) > 0:
+            #two closest interest us
+            inv_dists = np.linalg.norm(self.all_inv_pos - self.position, axis=1)
+            sorted_inv_indices = np.argsort(inv_dists)
+            closest_inv_indices = sorted_inv_indices[:2]
+            for i, idx in enumerate(closest_inv_indices):
+                start = i * 18
+                #rel position
+                inv_rel_pos = (self.all_inv_pos[idx] - self.position) / MAX_DIST
+                #rel velocity
+                inv_rel_vel = self.all_inv_vel[idx] - self.curr_speed
+                #cosinus shield
+                me_to_prime = self.prime_pos - self.position
+                me_to_inv = self.all_inv_pos[idx] - self.position
+                dist_prime = np.linalg.norm(me_to_prime)
+                dist_inv = np.linalg.norm(me_to_inv)
+                if dist_prime > 0.001 and dist_inv > 0.001:
+                    cos_angle = np.dot(me_to_prime, me_to_inv) / (dist_prime * dist_inv)
+                else:
+                    cos_angle = 0.0
+                #dist to prime surface - surface
+                raw_inv_prime_dist = np.linalg.norm(self.prime_pos - self.all_inv_pos[idx])
+                surf_inv_prime_dist = max(0.0, raw_inv_prime_dist - self.all_inv_rads[idx] - self.prime_rad)
+                #dist to me surface - surface
+                raw_inv_purs_dist = np.linalg.norm(self.all_inv_pos[idx] - self.position)
+                surf_inv_purs_dist = max(0.0, raw_inv_purs_dist - self.all_inv_rads[idx] - self.my_rad)
+                #rel pos
+                invaders_obs[start : start+3] = inv_rel_pos
+                #rel velocity
+                invaders_obs[start+3 : start+6] = inv_rel_vel / (MAX_SPEED * 2.0)
+                #cosinus angle
+                invaders_obs[start+6] = cos_angle
+                #dist to prime
+                invaders_obs[start+7] = surf_inv_prime_dist / MAX_COORD
+                #dist to me
+                invaders_obs[start+8] = surf_inv_purs_dist / MAX_COORD
+                #radius
+                invaders_obs[start+9] = self.all_inv_rads[idx] / MAX_DRONE_RAD
+                #num of pursuers already chasing them
+                invaders_obs[start+10] = self.all_inv_purs_num[idx] / OTHER_PURS  
+                #if invader is targetable
+                if surf_inv_prime_dist < 15.0:
+                    max_attackers = 4
+                else:
+                    max_attackers = 2
+                is_targetable = 1.0 if self.all_inv_purs_num[idx] < max_attackers else -1.0
+                invaders_obs[start+11] = is_targetable
+                #rel acc
+                invaders_obs[start+12:start+15] = (self.all_inv_acc[idx] - self.curr_acc) / (MAX_ACC * 2.0)
+                #norm of speed
+                invaders_obs[start+15] = np.linalg.norm(self.all_inv_vel[idx] / MAX_SPEED)
+                #norm of acc
+                invaders_obs[start+16] = np.linalg.norm(self.all_inv_acc[idx] / MAX_ACC)
+                #angular speed
+                invaders_obs[start+17] = self.all_inv_ang_vel[idx] / MAX_ANG_VEL
+        #OBSTACLES STATE
+        obstacles_obs = np.full(20, FAR_AWAY, dtype=np.float32)
+        #default
+        obstacles_obs[3] = 0.0 
+        obstacles_obs[8] = 0.0 
+        obstacles_obs[13] = 0.0 
+        obstacles_obs[18] = 0.0 
+        obs_centers = self.obs_centers
+        obs_radii = self.obs_radii
+        if obs_centers is not None and len(obs_centers) > 0:
+            #dist surface - surface
+            center_dists = np.linalg.norm(obs_centers - self.position, axis=1)
+            edge_dists = center_dists - obs_radii - self.my_rad
+            #filtering those in sight
+            visible_mask = edge_dists <= self.vis_range
+            visible_indices = np.where(visible_mask)[0]
+            if len(visible_indices) > 0:
+                #sorting visible obstacles, four closest
+                visible_edge_dists = edge_dists[visible_indices]
+                sorted_local_indices = np.argsort(visible_edge_dists)[:4]
+                closest_obs_indices = visible_indices[sorted_local_indices]
+                #writing to obs space
+                for i, idx in enumerate(closest_obs_indices):
+                    start = i * 5
+                    #rel pos
+                    obs_pos = (obs_centers[idx] - self.position) / self.vis_range
+                    obstacles_obs[start : start+3] = obs_pos
+                    #radius
+                    obstacles_obs[start+3] = obs_radii[idx] / MAX_RADIUS
+                    #dist
+                    obstacles_obs[start+4] = np.linalg.norm(obs_pos)
+        #final vector
+        final_obs = np.concatenate([
+            state_obs,      # 6
+            my_obs,         # 14
+            prime_obs,      # 8
+            density_obs,    # 1
+            pursuers_obs,   # 42
+            invaders_obs,   # 36
+            obstacles_obs   # 20
+        ]).astype(np.float32)
+        return final_obs
+    
+    def get_observation_restrictive(self):
+        #observation for herding NN, everything normalized
+        MAX_COORD = 30.0       #world
+        MAX_DIST = 40.0        #max possible distance
         MAX_SPEED = 8.5        #max speed
         MAX_DENSITY = 15.0     #max pursuer density
         OTHER_PURS = 5.0       #max pursuer density
@@ -855,10 +1097,10 @@ class Pursuer(Agent):
                 #num of pursuers already chasing them
                 invaders_obs[start+10] = self.all_inv_purs_num[idx] / OTHER_PURS  
                 #if invader is targetable
-                if surf_inv_prime_dist < 10.0:
-                    max_attackers = 10
-                else:
+                if surf_inv_prime_dist < 15.0:
                     max_attackers = 4
+                else:
+                    max_attackers = 2
                 is_targetable = 1.0 if self.all_inv_purs_num[idx] < max_attackers else -1.0
                 invaders_obs[start+11] = is_targetable
         #OBSTACLES STATE
@@ -1005,7 +1247,7 @@ class Pursuer(Agent):
         #reset of cooldown
         if self.target is not None:
             dist_to_prime = np.linalg.norm(self.prime_pos - self.target["tar_pos"]) - self.target["tar_rad"] - self.prime_rad
-            if dist_to_prime < 20.0:
+            if dist_to_prime < 15.0:
                 self.cooldown = 0    
         #controlling cooldown
         if self.cooldown > 0:
@@ -1664,8 +1906,8 @@ class Pursuer(Agent):
             target["purs_type"] = self.purs_types['pure_pursuit']
             return self.pursuit_pure_pursuit(target)
         #still too fast for encirclement, CB him
-        elif tar_speed >= my_speed/1.2 or target["purs_type"] == self.purs_types['const_bear']:
-            if tar_speed >= my_speed/1.2:
+        elif tar_speed >= my_speed*0.85 or target["purs_type"] == self.purs_types['const_bear']:
+            if tar_speed >= my_speed*0.85:
                 self.override_active = True
                 #print("override active")
             target["purs_type"] = self.purs_types['const_bear']

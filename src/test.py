@@ -29,15 +29,15 @@ def test_defense_model():
     purs_speed = np.full(30, 8.0)
     inv_speed = np.full(30, 7.0)
     #brave new world
-    model = PPO.load("./models/history/gen_38")
-    model2 = PPO.load("./models/history/gen_37")
+    model = PPO.load("./models/herding_modelC_0")
+    model2 = PPO.load("./models/herding_modelC_0")
     world = SimulationWorld(new_sc, _3d=True, purs_acc=purs_acc, prime_acc=0.1, pursue_model=(model, model2),
         inv_acc=inv_acc, purs_speed=purs_speed, inv_speed=inv_speed, prime_speed=0.2, inv_pos=[np.array([10.0, 10.0, 10.0])], not_testing=True)
     env = FastWorldEnv(world_instance=world, sc=new_sc)
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
     #model_path = "new_obs_best" 
-    model_path = "./models/history_def/gen_13" 
+    model_path = "./models/history_def/gen_9" 
     #model_path = "./models/gen_31" 
     #model_path2 = "./models/gen_30" 
     #model_path2 = "new_obs_best2"
@@ -183,4 +183,4 @@ def test_herding_model():
     print("win rate:" + str(win_rate))
 
 if __name__ == "__main__":
-    test_herding_model()
+    test_defense_model()

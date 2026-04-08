@@ -56,7 +56,7 @@ class FastWorldEnv(gym.Env):
         self.new_purs_accs = np.full(new_purs_num, new_purs_acc, dtype=np.float32)
         max_purs_speed = np.max(new_purs_speeds)
         #invaders
-        new_invs_num = np.random.randint(1, min(new_purs_num, 4))
+        new_invs_num = np.random.randint(1, min(new_purs_num, 5))
         new_inv_speed = np.random.uniform(2.0, max_purs_speed*0.9, size=new_invs_num)
         new_inv_acc = np.random.uniform(new_inv_speed / 2.0, new_inv_speed / 1.3)
         #prime
@@ -201,7 +201,7 @@ class FastWorldEnv(gym.Env):
         self.current_step += 1
         all_invaders = self.world.free_inv
         #first pursuer is learning
-        vis_inv_0 = self.world.pursuers[0].get_closest_invaders(all_invaders, 2)
+        vis_inv_0 = self.world.pursuers[0].current_tactical_invaders
         self.world.pursuers[0].set_rl_action(action, vis_inv_0)
         #other pursuers
         for i in range(1, len(self.world.pursuers)):
@@ -210,7 +210,7 @@ class FastWorldEnv(gym.Env):
                 obs_i = self.world.pursuers[i].get_observation()
                 #getting action
                 action_i, _ = self.teammate_brain.predict(obs_i, deterministic=self.test)
-                vis_inv_i = self.world.pursuers[i].get_closest_invaders(all_invaders, 2)
+                vis_inv_i = self.world.pursuers[i].current_tactical_invaders
                 self.world.pursuers[i].set_rl_action(action_i, vis_inv_i)
             else:
                 #not having prev model
@@ -226,7 +226,7 @@ class FastWorldEnv(gym.Env):
                 state, done = self.world.step()
                 prime_pos = state["prime"]
                 for inv in self.world.free_inv:
-                    dist = np.linalg.norm(inv.position - prime_pos)
+                    dist = np.linalg.norm(inv.position - prime_pos) - inv.my_rad - self.world.prime.my_rad
                     if dist < min_inv_dist:
                         min_inv_dist = dist
                     if inv.crashed:
@@ -255,7 +255,7 @@ class FastWorldEnv(gym.Env):
         reward += 0.05
         #penalty for switching state too much
         if current_state != self.last_state:
-            reward -= 1.0
+            reward -= 0.5
         self.last_state = current_state
         #penalty for pursuing target with a lot of pursuers
         # if in_pursue and target:
@@ -313,10 +313,10 @@ class FastWorldEnv(gym.Env):
                 if dist_to_prime > 15.0:
                     reward += 0.5
                 else:
-                    reward += 1.0
+                    reward += 0.5
             else:
                 #no involvement
-                reward += 0.25
+                reward += 0.5
         if len(self.world.free_inv) == 0:
             self.all_invaders_dead += 1
             terminated = True
@@ -332,7 +332,7 @@ class FastWorldEnv(gym.Env):
         if self.world.pursuers[0].crashed:
             if not done:
                 self.lost_purs_crash += 1
-            reward -= 25.0 
+            reward -= 10.0 
             terminated = True
         #penalty for trying attacking when too much attackers attacks
         # if self.world.pursuers[0].tried_invalid_attack:

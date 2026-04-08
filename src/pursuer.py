@@ -124,9 +124,12 @@ class Pursuer(Agent):
     
     def defense(self, targets):
         observation = self.get_observation()
+        #observation = self.get_observation_restrictive()
         action, _ = self.def_model.predict(observation, deterministic=True)
-        vis_inv_0 = self.get_closest_invaders(targets, 2)
-        self.set_rl_action_restrictive(action, vis_inv_0)
+        #vis_inv_0 = self.get_closest_invaders(targets, 2)
+        vis_inv_0 = self.current_tactical_invaders
+        #self.set_rl_action_restrictive(action, vis_inv_0)
+        self.set_rl_action(action, vis_inv_0)
         
     def pursue(self, targets: list[Invader], prime_vel, prime_rad, prime_pos, all_purs_tars, precalc_data, not_testing=False, no_target=False):
         if not_testing:
@@ -146,6 +149,7 @@ class Pursuer(Agent):
             all_inv_pos.copy(), all_inv_vel.copy(), all_inv_rads.copy(), accs=all_inv_acc.copy(), ang_vels=all_inv_ang_vel.copy(), max_range=30.0, apply_noise=True)
         self.all_inv_purs_num = self.all_inv_purs_num[inv_mask]
         targets = [obj for obj, m in zip(targets, inv_mask) if m]
+        self.targets = targets
         #Obstacles
         if obs_centers is not None and len(obs_centers) > 0:
             self.obs_centers, _, self.obs_radii, _, _, _ = self.filter_visible_objects(
@@ -853,6 +857,7 @@ class Pursuer(Agent):
         #DENSITY STATE
         density_obs = np.array([density / MAX_DENSITY], dtype=np.float32)
         #INVADER STATE
+        self.current_tactical_invaders = []
         invaders_obs = np.full(36, FAR_AWAY, dtype=np.float32) 
         #default
         for i in range(2):
@@ -864,9 +869,26 @@ class Pursuer(Agent):
             invaders_obs[start+15] = 0.0          #norm speed
         if len(self.all_inv_pos) > 0:
             #two closest interest us
-            inv_dists = np.linalg.norm(self.all_inv_pos - self.position, axis=1)
-            sorted_inv_indices = np.argsort(inv_dists)
+            # inv_dists = np.linalg.norm(self.all_inv_pos - self.position, axis=1)
+            # sorted_inv_indices = np.argsort(inv_dists)
+            tactical_scores = np.zeros(len(self.all_inv_pos), dtype=np.float32)
+            #dist to prime
+            raw_dists_to_prime = np.linalg.norm(self.all_inv_pos - self.prime_pos, axis=1)
+            for idx in range(len(self.all_inv_pos)):
+                #surface dist to Prime
+                surf_dist_to_prime = max(0.0, raw_dists_to_prime[idx] - self.all_inv_rads[idx] - self.prime_rad)
+                pursuers_count = self.all_inv_purs_num[idx]
+                if surf_dist_to_prime < 20.0:
+                    #critical zone, high priority
+                    tactical_scores[idx] = surf_dist_to_prime + (pursuers_count * 1.0)
+                else:
+                    #safe dist, go after free invaders
+                    tactical_scores[idx] = surf_dist_to_prime + (pursuers_count * 50.0)
+            #sorting
+            sorted_inv_indices = np.argsort(tactical_scores)
+            #two tactically most important
             closest_inv_indices = sorted_inv_indices[:2]
+            self.current_tactical_invaders = [self.targets[idx] for idx in closest_inv_indices]
             for i, idx in enumerate(closest_inv_indices):
                 start = i * 18
                 #rel position
@@ -1049,6 +1071,7 @@ class Pursuer(Agent):
         #DENSITY STATE
         density_obs = np.array([density / MAX_DENSITY], dtype=np.float32)
         #INVADER STATE
+        self.current_tactical_invaders = []
         invaders_obs = np.full(24, FAR_AWAY, dtype=np.float32) 
         #default
         for i in range(2):
@@ -1061,6 +1084,7 @@ class Pursuer(Agent):
             inv_dists = np.linalg.norm(self.all_inv_pos - self.position, axis=1)
             sorted_inv_indices = np.argsort(inv_dists)
             closest_inv_indices = sorted_inv_indices[:2]
+            self.current_tactical_invaders = [self.targets[idx] for idx in closest_inv_indices]
             for i, idx in enumerate(closest_inv_indices):
                 start = i * 12
                 #rel position

@@ -37,7 +37,7 @@ def test_defense_model():
     #loading the model
     #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
     #model_path = "new_obs_best" 
-    model_path = "./models/history_def/gen_9" 
+    model_path = "./models/history_def/gen_15" 
     #model_path = "./models/gen_31" 
     #model_path2 = "./models/gen_30" 
     #model_path2 = "new_obs_best2"

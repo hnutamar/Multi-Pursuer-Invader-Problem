@@ -166,10 +166,10 @@ class MatplotlibVisualizer:
             #color according to the state
             if p_state[0] == States.PURSUE:
                 #circling
-                if p_state[1][1] == 1:
+                if p_state[1][1] == 1 or p_state[1][1] == 6:
                     p_dot.set_color("#000000")
                 #const bear
-                elif p_state[1][1] == 4:
+                elif p_state[1][1] == 4 or p_state[1][1] == 2:
                     p_dot.set_color("#714900")
                 #pure pursuit
                 else:

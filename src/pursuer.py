@@ -73,7 +73,8 @@ class Pursuer(Agent):
                            "const_bear1": 2,
                            "pure_pursuit1": 3,
                            "const_bear": 4,
-                           "pure_pursuit": 5}
+                           "pure_pursuit": 5,
+                           "circling_too_far": 6}
         self.capture_cooldown = 100
         if self.pos_length == 3:
             self.MAX_PURSUERS = 3
@@ -111,6 +112,8 @@ class Pursuer(Agent):
         self.new_acc_vector = acc_vector
         
     def pursue_herding(self):
+        if self.target is None:
+            return np.zeros_like(self.position)
         observation = self.get_observation_herding()
         action, _ = self.pursue_model.predict(observation, deterministic=True)
         raw_act = np.array(action, dtype=np.float32)
@@ -123,13 +126,13 @@ class Pursuer(Agent):
         return
     
     def defense(self, targets):
-        observation = self.get_observation()
-        #observation = self.get_observation_restrictive()
+        #observation = self.get_observation()
+        observation = self.get_observation_restrictive()
         action, _ = self.def_model.predict(observation, deterministic=True)
         #vis_inv_0 = self.get_closest_invaders(targets, 2)
         vis_inv_0 = self.current_tactical_invaders
-        #self.set_rl_action_restrictive(action, vis_inv_0)
-        self.set_rl_action(action, vis_inv_0)
+        self.set_rl_action_restrictive(action, vis_inv_0)
+        #self.set_rl_action(action, vis_inv_0)
         
     def pursue(self, targets: list[Invader], prime_vel, prime_rad, prime_pos, all_purs_tars, precalc_data, not_testing=False, no_target=False):
         if not_testing:
@@ -146,14 +149,14 @@ class Pursuer(Agent):
             all_purs_pos.copy(), all_purs_vel.copy(), all_purs_rads.copy(), all_purs_tars, all_purs_acc.copy(), all_purs_ang_vel.copy(), gaussian=True)    
         #Invaders
         self.all_inv_pos, self.all_inv_vel, self.all_inv_rads, self.all_inv_acc, self.all_inv_ang_vel, inv_mask = self.filter_visible_objects(
-            all_inv_pos.copy(), all_inv_vel.copy(), all_inv_rads.copy(), accs=all_inv_acc.copy(), ang_vels=all_inv_ang_vel.copy(), max_range=30.0, apply_noise=True)
+            all_inv_pos.copy(), all_inv_vel.copy(), all_inv_rads.copy(), accs=all_inv_acc.copy(), ang_vels=all_inv_ang_vel.copy(), max_range=60.0, apply_noise=True)
         self.all_inv_purs_num = self.all_inv_purs_num[inv_mask]
         targets = [obj for obj, m in zip(targets, inv_mask) if m]
         self.targets = targets
         #Obstacles
         if obs_centers is not None and len(obs_centers) > 0:
             self.obs_centers, _, self.obs_radii, _, _, _ = self.filter_visible_objects(
-                obs_centers.copy(), None, obs_radii.copy(), max_range=30.0, apply_noise=True, obstacles=True)
+                obs_centers.copy(), None, obs_radii.copy(), max_range=60.0, apply_noise=True, obstacles=True)
         else:
             self.obs_centers, self.obs_radii = None, None
         #The rest
@@ -724,8 +727,8 @@ class Pursuer(Agent):
     
     def get_observation(self):
         #observation for herding NN, everything normalized
-        MAX_COORD = 30.0       #world
-        MAX_DIST = 40.0        #max possible distance
+        MAX_COORD = 60.0       #world
+        MAX_DIST = 60.0        #max possible distance
         MAX_SPEED = 8.5        #max speed
         MAX_DENSITY = 15.0     #max pursuer density
         OTHER_PURS = 5.0       #max pursuer density
@@ -735,10 +738,15 @@ class Pursuer(Agent):
         MAX_ACC = 8.0
         MAX_ANG_VEL = 2.0
         MAX_COOLDOWN = 5.0   
+        MAX_DENSITY_INV = 6.0
         #STATE STATE
         #flag is attacking
         is_attacking = 1.0 if self.state == States.PURSUE else 0.0
         #cooldown
+        if self.target is not None:
+            dist_to_prime = np.linalg.norm(self.prime_pos - self.target["tar_pos"]) - self.target["tar_rad"] - self.prime_rad
+            if dist_to_prime < 30.0:
+                self.cooldown = 0  
         cooldown_obs = self.cooldown / MAX_COOLDOWN
         #tactic currently used
         tactic_obs = [0.0, 0.0, 0.0]
@@ -878,7 +886,7 @@ class Pursuer(Agent):
                 #surface dist to Prime
                 surf_dist_to_prime = max(0.0, raw_dists_to_prime[idx] - self.all_inv_rads[idx] - self.prime_rad)
                 pursuers_count = self.all_inv_purs_num[idx]
-                if surf_dist_to_prime < 20.0:
+                if surf_dist_to_prime < 30.0:
                     #critical zone, high priority
                     tactical_scores[idx] = surf_dist_to_prime + (pursuers_count * 1.0)
                 else:
@@ -886,8 +894,22 @@ class Pursuer(Agent):
                     tactical_scores[idx] = surf_dist_to_prime + (pursuers_count * 50.0)
             #sorting
             sorted_inv_indices = np.argsort(tactical_scores)
+            closest_inv_indices = []
+            # 1. POKUD ÚTOČÍM, MŮJ CÍL JE VŽDYCKY ČÍSLO 1
+            if self.state == States.PURSUE and self.target is not None:
+                # Najdeme index našeho cíle v poli všech invaderů
+                my_target_inv = self.target["target"]
+                my_target_idx = self.targets.index(my_target_inv) # (přizpůsobte podle toho, jak ukládáte targety)
+                closest_inv_indices.append(my_target_idx)
+                # 2. JAKO DRUHÉHO PŘIDÁME TOHO NEJNEBEZPEČNĚJŠÍHO ZBYTKU
+                for idx in sorted_inv_indices:
+                    if idx != my_target_idx:
+                        closest_inv_indices.append(idx)
+                        break # Máme dva, končíme        
+            # POKUD NEÚTOČÍM, VEZMU PROSTĚ DVA NEJLEPŠÍ JAKO DOTEAĎ
+            else:
+                closest_inv_indices = sorted_inv_indices[:2]
             #two tactically most important
-            closest_inv_indices = sorted_inv_indices[:2]
             self.current_tactical_invaders = [self.targets[idx] for idx in closest_inv_indices]
             for i, idx in enumerate(closest_inv_indices):
                 start = i * 18
@@ -925,7 +947,7 @@ class Pursuer(Agent):
                 #num of pursuers already chasing them
                 invaders_obs[start+10] = self.all_inv_purs_num[idx] / OTHER_PURS  
                 #if invader is targetable
-                if surf_inv_prime_dist < 15.0:
+                if surf_inv_prime_dist < 30.0:
                     max_attackers = 4
                 else:
                     max_attackers = 2
@@ -939,6 +961,8 @@ class Pursuer(Agent):
                 invaders_obs[start+16] = np.linalg.norm(self.all_inv_acc[idx] / MAX_ACC)
                 #angular speed
                 invaders_obs[start+17] = self.all_inv_ang_vel[idx] / MAX_ANG_VEL
+        #INVADER DENSITY STATE
+        density_obs_inv = np.array([len(self.all_inv_pos) / MAX_DENSITY_INV], dtype=np.float32)
         #OBSTACLES STATE
         obstacles_obs = np.full(20, FAR_AWAY, dtype=np.float32)
         #default
@@ -978,6 +1002,7 @@ class Pursuer(Agent):
             density_obs,    # 1
             pursuers_obs,   # 42
             invaders_obs,   # 36
+            density_obs_inv,# 1
             obstacles_obs   # 20
         ]).astype(np.float32)
         return final_obs
@@ -998,7 +1023,7 @@ class Pursuer(Agent):
         #flag is attacking
         is_attacking = 1.0 if self.state == States.PURSUE else 0.0
         #cooldown
-        cooldown_obs = self.cooldown / MAX_COOLDOWN
+        cooldown_obs = 0.0#self.cooldown / MAX_COOLDOWN
         #tactic currently used
         tactic_obs = [0.0, 0.0, 0.0]
         if self.state == States.PURSUE and self.target is not None:
@@ -1009,8 +1034,8 @@ class Pursuer(Agent):
                 tactic_obs[1] = 1.0
             elif actual_strat == self.purs_types["circling"]:
                 tactic_obs[2] = 1.0
-        is_overridden = 1.0 if getattr(self, 'override_active', False) else 0.0
-        state_obs = np.array([is_attacking, cooldown_obs, is_overridden] + tactic_obs, dtype=np.float32)
+        #is_overridden = 1.0 if getattr(self, 'override_active', False) else 0.0
+        state_obs = np.array([is_attacking, cooldown_obs] + tactic_obs, dtype=np.float32)
         #MY STATE
         my_obs = np.concatenate([self.curr_speed / MAX_SPEED, self.curr_acc / MAX_ACC, [self.position[2] / MAX_COORD], 
                                  [self.my_rad / MAX_DRONE_RAD], [self.cruise_speed / MAX_SPEED], [self.max_speed / MAX_SPEED], [self.max_acc / MAX_ACC]]) 
@@ -1121,7 +1146,7 @@ class Pursuer(Agent):
                 #num of pursuers already chasing them
                 invaders_obs[start+10] = self.all_inv_purs_num[idx] / OTHER_PURS  
                 #if invader is targetable
-                if surf_inv_prime_dist < 15.0:
+                if surf_inv_prime_dist < 30.0:
                     max_attackers = 4
                 else:
                     max_attackers = 2
@@ -1195,7 +1220,7 @@ class Pursuer(Agent):
         #check max allowed pursuers if in attack
         if attack_intent and tar is not None:
             prime_inv_dist = np.linalg.norm(self.prime_pos - tar.position) - tar.my_rad - self.prime_rad
-            max_allowed = 4 if prime_inv_dist < 15.0 else 2
+            max_allowed = 4 if prime_inv_dist < 30.0 else 2
             #how many other pursuers are pursuing
             others_attacking = tar.purs_num - 1 if is_already_my_target else tar.purs_num
             #too much pursuers, retreat
@@ -1269,21 +1294,20 @@ class Pursuer(Agent):
         self.is_rl_controlled = True
         self.tried_invalid_attack = False
         #reset of cooldown
-        if self.target is not None:
-            dist_to_prime = np.linalg.norm(self.prime_pos - self.target["tar_pos"]) - self.target["tar_rad"] - self.prime_rad
-            if dist_to_prime < 15.0:
-                self.cooldown = 0    
+        # if self.target is not None:
+        #     dist_to_prime = np.linalg.norm(self.prime_pos - self.target["tar_pos"]) - self.target["tar_rad"] - self.prime_rad
+        #     if dist_to_prime < 30.0:
+        #         self.cooldown = 0    
         #controlling cooldown
         if self.cooldown > 0:
             self.cooldown -= 1
-            pass 
         else:
             raw_attack_intent = action_array[11] > 0.0
             #emergancy override
             if getattr(self, 'override_active', False) and self.target is not None and self.target["target"].crashed == False:
                 attack_intent = True
                 tar = self.target["target"]
-                is_already_my_target = True 
+                #is_already_my_target = True 
             #normal state
             else:
                 if raw_attack_intent and len(visible_invaders) > 0:
@@ -1922,12 +1946,18 @@ class Pursuer(Agent):
     def pursue_rl_target(self, target):
         tar_speed = np.linalg.norm(target["target"].curr_speed) #np.linalg.norm(target["tar_vel"])
         my_speed = self.max_speed * 0.75
+        tar_purs_dist = np.linalg.norm(target["tar_pos"] - self.position) - self.my_rad - target["tar_rad"]
+        circling_too_far = tar_purs_dist >= 30.0 and (target["purs_type"] == self.purs_types['circling'] or target["purs_type"] == self.purs_types['circling_too_far'])
         #if target is faster then pursuer, just pure pursue him
-        if tar_speed >= my_speed or target["purs_type"] == self.purs_types['pure_pursuit']:
+        if tar_speed >= my_speed or target["purs_type"] == self.purs_types['pure_pursuit'] or circling_too_far:
             if tar_speed >= my_speed:
                 self.override_active = True
                 #print("override active")
-            target["purs_type"] = self.purs_types['pure_pursuit']
+                target["purs_type"] = self.purs_types['pure_pursuit']
+            elif circling_too_far:
+                target["purs_type"] = self.purs_types['circling_too_far']
+            else:
+                target["purs_type"] = self.purs_types['pure_pursuit']
             return self.pursuit_pure_pursuit(target)
         #still too fast for encirclement, CB him
         elif tar_speed >= my_speed*0.85 or target["purs_type"] == self.purs_types['const_bear']:
@@ -1938,6 +1968,7 @@ class Pursuer(Agent):
             return self.pursuit_constant_bearing(target)
         else:
             self.override_active = False
+            target["purs_type"] = self.purs_types['circling']
             return self.pursue_herding()
     
     def pursue_target(self, target):
@@ -1952,7 +1983,7 @@ class Pursuer(Agent):
                 target["purs_type"] = self.purs_types['pure_pursuit1']
             return self.pursuit_pure_pursuit(target)
         #still too fast for encirclement, CB him
-        elif tar_speed >= my_speed/1.2 or target["purs_type"] == self.purs_types['const_bear'] or prime_inv_dist <= 15.0:
+        elif tar_speed >= my_speed*0.85 or target["purs_type"] == self.purs_types['const_bear'] or prime_inv_dist <= 15.0:
             if prime_inv_dist > 15.0:
                 target["purs_type"] = self.purs_types['const_bear']
             else:

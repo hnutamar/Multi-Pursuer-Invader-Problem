@@ -184,10 +184,12 @@ class Pursuer(Agent):
         #pursuer having no target, finding target, if found, pursue it
         if self.target == None and not self.is_rl_controlled and not no_target:
             if self.strategy_capture_cone(targets, self.num_iter, cooldown=self.capture_cooldown*self.dt):
+                self.target["target"].purs_num += 1
                 tar_vel = self.pursue_target(self.target)
                 if self.target["purs_type"] == self.purs_types["circling"] and self.pursue_model is not None:
                     return self.new_acc
             elif self.strategy_target_close(targets):
+                self.target["target"].purs_num += 1
                 tar_vel = self.pursue_target(self.target)
                 if self.target["purs_type"] == self.purs_types["circling"] and self.pursue_model is not None:
                     return self.new_acc
@@ -203,6 +205,8 @@ class Pursuer(Agent):
                 return self.new_acc
         #if target dir is zero, pursuer has no target -> keep the formation
         if np.array_equal(tar_vel, form_vel):
+            if self.target is not None and not self.is_rl_controlled:
+                self.target["target"].purs_num -= 1
             self.target = None
             self.state = States.FORM
             if self.pos_length == 2:

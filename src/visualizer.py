@@ -173,7 +173,7 @@ class MatplotlibVisualizer:
                     p_dot.set_color("#714900")
                 #pure pursuit
                 else:
-                    p_dot.set_color("#006168")
+                    p_dot.set_color("#C300CE")
             else:
                 p_dot.set_color('#d62728')
                 

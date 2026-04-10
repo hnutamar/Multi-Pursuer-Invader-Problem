@@ -106,7 +106,7 @@ class SimulationWorld:
     def get_random_invader_start(self, num_invaders=1):
         prime_pos = np.array([3.0, 3.0, 7.0])
         #distances to the prime
-        dists = np.random.uniform(50.0, 70.0, size=(num_invaders, 1))
+        dists = np.random.uniform(70.0, 100.0, size=(num_invaders, 1))
         #random direction
         dirs = np.random.randn(num_invaders, 3)
         dirs[:, 2] = np.abs(dirs[:, 2])
@@ -269,20 +269,19 @@ class SimulationWorld:
             for idx in np.where(swarm_crash_mask)[0]:
                 free_purs[idx].crashed = True
         #ending check
-        done = self.prime.crashed #or self.prime.finished #or (self.captured_count == self.sc.INVADER_NUM) 
-        # if self.prime.finished or self.captured_count == self.sc.INVADER_NUM:
-        #     if not self.invaders[0].crashed:
-        #         inv_to_prime = np.linalg.norm(self.invaders[0].position - self.prime.position)
-        #     else:
-        #         inv_to_prime = np.inf
-        #     if not self.invaders[0].crashed:
-        #         inv_to_prime2 = np.linalg.norm(self.invaders[1].position - self.prime.position)
-        #     else:
-        #         inv_to_prime2 = np.inf
-        #     min_dist = min(inv_to_prime, inv_to_prime2)
-        #     print("win, dist: " + str(min_dist))
-        # elif done:
-        #     print("lost")
+        done = self.prime.crashed or self.prime.finished or (self.captured_count == self.sc.INVADER_NUM) 
+        if self.prime.finished or self.captured_count == self.sc.INVADER_NUM:
+            dists = np.zeros(len(self.invaders))
+            for i, inv in enumerate(self.invaders):
+                if not inv.crashed:
+                    inv_to_prime = np.linalg.norm(inv.position - self.prime.position) - inv.my_rad - self.prime.my_rad
+                else:
+                    inv_to_prime = 0.0
+                dists[i] = inv_to_prime
+            min_dist = np.min(dists)
+            print("win, dist: " + str(min_dist))
+        elif done:
+            print("lost")
         return self.get_state(), done
 
     def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):

@@ -34,6 +34,7 @@ class FastWorldEnv(gym.Env):
             self.max_steps = 250
         #needed for reward
         self.last_inv_prime_dist = 60.0
+        self.purs_update_num = len(self.world.pursuers)
         self.last_state = States.FORM
         # self.last_dist_to_inv = np.linalg.norm(self.world.pursuers[0].position - self.world.invaders[0].position)
         # self.last_inv_pos = self.world.invaders[0].position
@@ -56,7 +57,7 @@ class FastWorldEnv(gym.Env):
         self.new_purs_accs = np.full(new_purs_num, new_purs_acc, dtype=np.float32)
         max_purs_speed = np.max(new_purs_speeds)
         #invaders
-        new_invs_num = np.random.randint(1, min(new_purs_num//2, 5))
+        new_invs_num = np.random.randint(1, min(new_purs_num//2, 7))
         new_inv_speed = np.random.uniform(2.0, max_purs_speed*0.9, size=new_invs_num)
         new_inv_acc = np.random.uniform(new_inv_speed / 2.0, new_inv_speed / 1.3)
         #prime
@@ -104,6 +105,7 @@ class FastWorldEnv(gym.Env):
         #reseting steps
         self.current_step = 0
         self.last_inv_prime_dist = 60.0
+        self.purs_update_num = len(self.world.pursuers)
         self.last_state = States.FORM
         # self.last_dist_to_inv = np.linalg.norm(self.world.pursuers[0].position - self.world.invaders[0].position)
         # self.last_inv_pos = self.world.invaders[0].position
@@ -116,9 +118,9 @@ class FastWorldEnv(gym.Env):
             self.teammate_brain = PPO.load(model_path, device="cpu")
         else:
             self.teammate_brain = PPO.load(model_path2, device="cpu")
-        #if self.episode_num > 800_000/10:
-        with torch.no_grad():
-            self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -2.8)
+        #if self.episode_num > 100_000/8:
+        #    with torch.no_grad():
+        self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -2.8)
 
     def generate_safe_obstacles(self, num_obs, agent_positions, agent_radii, max_coord, is_3d, min_r=1.0, max_r=5.0, safe_margin=1.5):
         #arrays
@@ -204,7 +206,7 @@ class FastWorldEnv(gym.Env):
         vis_inv_0 = self.world.pursuers[0].current_tactical_invaders
         self.world.pursuers[0].set_rl_action(action, vis_inv_0)
         #other pursuers
-        for i in range(1, len(self.world.pursuers)):
+        for i in range(1, self.purs_update_num):
             if self.teammate_brain is not None:
                 #AI from prev generation
                 obs_i = self.world.pursuers[i].get_observation()
@@ -260,9 +262,9 @@ class FastWorldEnv(gym.Env):
         if in_pursue and target and self.last_state == States.FORM:
             target_invader = self.world.pursuers[0].target["target"]
             pursuers_on_target = target_invader.purs_num
-            if pursuers_on_target > 2:
-                reward -= 0.5 * (pursuers_on_target - 2)
-            else:
+            if pursuers_on_target > 3:
+                reward -= 7.5 * (pursuers_on_target - 3)
+            elif pursuers_on_target <= 2:
                 reward += 1.0
         #safe distance
         # safe_distance = min(min_inv_dist, 20.0)
@@ -293,7 +295,7 @@ class FastWorldEnv(gym.Env):
             #     reward += 0.05
             #bonus for good defending
             form_positions = [p.position for p in self.world.free_purs if p.state == States.FORM]
-            if len(form_positions) >= 4:
+            if len(form_positions) >= 2:
                 #center of mass
                 centroid = np.mean(form_positions, axis=0)
                 centroid_offset = np.linalg.norm(centroid - prime_pos)
@@ -310,14 +312,15 @@ class FastWorldEnv(gym.Env):
             dist_to_agent = np.linalg.norm(agent_pos - inv.position)
             physically_involved = dist_to_agent < 5.0
             if is_my_target or physically_involved:
-                #giving reward
-                if dist_to_prime > 30.0:
-                    reward += 1.5
-                else:
-                    reward += 1.5
-            else:
-                #no involvement
                 reward += 1.5
+                #giving reward
+                # if dist_to_prime > 30.0:
+                #     reward += 1.5
+                # else:
+                #     reward += 1.5
+            # else:
+            #     #no involvement
+            #     reward += 1.5
         if len(self.world.free_inv) == 0:
             self.all_invaders_dead += 1
             terminated = True
@@ -341,6 +344,18 @@ class FastWorldEnv(gym.Env):
         # Update last distance for next step
         self.last_inv_prime_dist = min(min_inv_dist, 60.0)
         self.last_state = current_state
+        self.purs_update_num = np.random.randint(1, len(self.world.pursuers))
+        for i in range(self.purs_update_num, len(self.world.pursuers)):
+            if self.teammate_brain is not None:
+                #AI from prev generation
+                obs_i = self.world.pursuers[i].get_observation()
+                #getting action
+                action_i, _ = self.teammate_brain.predict(obs_i, deterministic=self.test)
+                vis_inv_i = self.world.pursuers[i].current_tactical_invaders
+                self.world.pursuers[i].set_rl_action(action_i, vis_inv_i)
+            else:
+                #not having prev model
+                self.world.pursuers[i].is_rl_controlled = False
         obs = self._get_obs()
         return obs, reward, terminated, truncated, {}
 

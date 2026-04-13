@@ -30,7 +30,7 @@ class UpdateSwarmCallback(BaseCallback):
         self.save_dir = os.path.abspath("./models/history_def")
         os.makedirs(self.save_dir, exist_ok=True) 
         #gen1
-        self.generation = 11
+        self.generation = 7
     def _on_training_start(self) -> None:
         start_step = self.model.num_timesteps
         rest = start_step % self.update_freq
@@ -121,7 +121,7 @@ def main_defense():
     #model = PPO("MlpPolicy", vec_env, policy_kwargs=custom_policy, batch_size=256, gamma=0.99, n_steps=2048,
     #  tensorboard_log="./ppo_drone_tensorboard/", learning_rate=linear_schedule(0.0003), verbose=1)
     #init_brain_path = "new_obs_best"
-    init_brain_path = "./models/history_def/gen_11"
+    init_brain_path = "./models/history_def/gen_7"
     #init_brain_path2 = "./models/history_def/gen_14"
     #model.save(init_brain_path)
     vec_env.env_method("load_teammate_brain", init_brain_path)
@@ -129,7 +129,7 @@ def main_defense():
         #"ent_coef": 0.0001,
         #"learning_rate": 0.00005
     }
-    model = PPO.load("./models/history_def/gen_11", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
+    model = PPO.load("./models/history_def/gen_7", env=vec_env, custom_objects=custom_objects, tensorboard_log="./ppo_drone_tensorboard/", verbose=1)
     # with torch.no_grad():
     #     model.policy.log_std.data = torch.full_like(model.policy.log_std.data, -1.5)
     #save_freq = 500000/num_cpu

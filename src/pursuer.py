@@ -869,34 +869,39 @@ class Pursuer(Agent):
         density_obs = np.array([density / MAX_DENSITY], dtype=np.float32)
         #INVADER STATE
         self.current_tactical_invaders = []
-        invaders_obs = np.full(36, FAR_AWAY, dtype=np.float32) 
+        invaders_obs = np.full(32, FAR_AWAY, dtype=np.float32) 
         #default
         for i in range(2):
-            start = i * 18
+            start = i * 16
             invaders_obs[start+3 : start+6] = 0.0 #velocity
             invaders_obs[start+6] = 0.0           #cosinus
-            invaders_obs[start+10] = 0.0          #num of pusuers
-            invaders_obs[start+12:start+15] = 0.0 #rel acc
-            invaders_obs[start+15] = 0.0          #norm speed
+            invaders_obs[start+10:start+13] = 0.0 #rel acc
+            invaders_obs[start+13] = 0.0          #norm speed
+            invaders_obs[start+14] = 0.0          #norm acc (DOPLNĚNO)
+            invaders_obs[start+15] = 0.0          #angular speed (DOPLNĚNO)
         if len(self.all_inv_pos) > 0:
-            #two closest interest us
-            # inv_dists = np.linalg.norm(self.all_inv_pos - self.position, axis=1)
-            # sorted_inv_indices = np.argsort(inv_dists)
-            tactical_scores = np.zeros(len(self.all_inv_pos), dtype=np.float32)
-            #dist to prime
-            raw_dists_to_prime = np.linalg.norm(self.all_inv_pos - self.prime_pos, axis=1)
-            for idx in range(len(self.all_inv_pos)):
-                #surface dist to Prime
-                surf_dist_to_prime = max(0.0, raw_dists_to_prime[idx] - self.all_inv_rads[idx] - self.prime_rad)
-                pursuers_count = self.all_inv_purs_num[idx]
-                if surf_dist_to_prime < 30.0:
-                    #critical zone, high priority
-                    tactical_scores[idx] = surf_dist_to_prime + (pursuers_count * 1.0)
-                else:
-                    #safe dist, go after free invaders
-                    tactical_scores[idx] = surf_dist_to_prime + (pursuers_count * 50.0)
-            #sorting
-            sorted_inv_indices = np.argsort(tactical_scores)
+            inv_dists = np.linalg.norm(self.all_inv_pos - self.position, axis=1)
+            sorted_inv_indices = np.argsort(inv_dists)
+            # closest_inv_indices = sorted_inv_indices[:2]
+            # self.current_tactical_invaders = [self.targets[idx] for idx in closest_inv_indices]
+            # #two closest interest us
+            # # inv_dists = np.linalg.norm(self.all_inv_pos - self.position, axis=1)
+            # # sorted_inv_indices = np.argsort(inv_dists)
+            # tactical_scores = np.zeros(len(self.all_inv_pos), dtype=np.float32)
+            # #dist to prime
+            # raw_dists_to_prime = np.linalg.norm(self.all_inv_pos - self.prime_pos, axis=1)
+            # for idx in range(len(self.all_inv_pos)):
+            #     #surface dist to Prime
+            #     surf_dist_to_prime = max(0.0, raw_dists_to_prime[idx] - self.all_inv_rads[idx] - self.prime_rad)
+            #     pursuers_count = self.all_inv_purs_num[idx]
+            #     if surf_dist_to_prime < 30.0:
+            #         #critical zone, high priority
+            #         tactical_scores[idx] = surf_dist_to_prime + (pursuers_count * 1.0)
+            #     else:
+            #         #safe dist, go after free invaders
+            #         tactical_scores[idx] = surf_dist_to_prime + (pursuers_count * 50.0)
+            # #sorting
+            # sorted_inv_indices = np.argsort(tactical_scores)
             closest_inv_indices = []
             # 1. POKUD ÚTOČÍM, MŮJ CÍL JE VŽDYCKY ČÍSLO 1
             if self.state == States.PURSUE and self.target is not None:
@@ -915,7 +920,7 @@ class Pursuer(Agent):
             #two tactically most important
             self.current_tactical_invaders = [self.targets[idx] for idx in closest_inv_indices]
             for i, idx in enumerate(closest_inv_indices):
-                start = i * 18
+                start = i * 16
                 #rel position
                 inv_rel_pos = (self.all_inv_pos[idx] - self.position) / MAX_DIST
                 #rel velocity
@@ -947,23 +952,23 @@ class Pursuer(Agent):
                 invaders_obs[start+8] = surf_inv_purs_dist / MAX_COORD
                 #radius
                 invaders_obs[start+9] = self.all_inv_rads[idx] / MAX_DRONE_RAD
-                #num of pursuers already chasing them
-                invaders_obs[start+10] = self.all_inv_purs_num[idx] / OTHER_PURS  
-                #if invader is targetable
-                if surf_inv_prime_dist < 30.0:
-                    max_attackers = 4
-                else:
-                    max_attackers = 2
-                is_targetable = 1.0 if self.all_inv_purs_num[idx] < max_attackers else -1.0
-                invaders_obs[start+11] = is_targetable
+                # #num of pursuers already chasing them
+                # invaders_obs[start+10] = self.all_inv_purs_num[idx] / OTHER_PURS  
+                # #if invader is targetable
+                # if surf_inv_prime_dist < 30.0:
+                #     max_attackers = 4
+                # else:
+                #     max_attackers = 2
+                # is_targetable = 1.0 if self.all_inv_purs_num[idx] < max_attackers else -1.0
+                # invaders_obs[start+11] = is_targetable
                 #rel acc
-                invaders_obs[start+12:start+15] = (self.all_inv_acc[idx] - self.curr_acc) / (MAX_ACC * 2.0)
+                invaders_obs[start+10:start+13] = (self.all_inv_acc[idx] - self.curr_acc) / (MAX_ACC * 2.0)
                 #norm of speed
-                invaders_obs[start+15] = np.linalg.norm(self.all_inv_vel[idx] / MAX_SPEED)
+                invaders_obs[start+13] = np.linalg.norm(self.all_inv_vel[idx] / MAX_SPEED)
                 #norm of acc
-                invaders_obs[start+16] = np.linalg.norm(self.all_inv_acc[idx] / MAX_ACC)
+                invaders_obs[start+14] = np.linalg.norm(self.all_inv_acc[idx] / MAX_ACC)
                 #angular speed
-                invaders_obs[start+17] = self.all_inv_ang_vel[idx] / MAX_ANG_VEL
+                invaders_obs[start+15] = self.all_inv_ang_vel[idx] / MAX_ANG_VEL
         #INVADER DENSITY STATE
         density_obs_inv = np.array([len(self.all_inv_pos) / MAX_DENSITY_INV], dtype=np.float32)
         #OBSTACLES STATE
@@ -1549,7 +1554,7 @@ class Pursuer(Agent):
         cand_t_idxs = [
             i for i, inv in enumerate(targets)
             if near_and_forward[i] and inv not in self.ignored_targs
-            and inv.purs_num < self.MAX_PURSUERS
+            #and inv.purs_num < self.MAX_PURSUERS
         ]
         #those behind go to ignore list, if not already there
         behind_idxs = [
@@ -1601,7 +1606,7 @@ class Pursuer(Agent):
         #dists surface to surface
         dists_surface = dists_center - self.my_rad - t_rads
         #mask, only those close enough with a few pursuers
-        mask = (dists_surface < self.target_close) & (t_purs_num < self.MAX_PURSUERS)
+        mask = (dists_surface < self.target_close) #& (t_purs_num < self.MAX_PURSUERS)
         #choosing target
         if np.any(mask):
             #first one (faster)

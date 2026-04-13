@@ -17,7 +17,7 @@ class FastWorldEnv(gym.Env):
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(16,), dtype=np.float32)
         #obs space
         #self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(101,), dtype=np.float32)
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(128,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(124,), dtype=np.float32)
         #episode limits
         self.current_step = 0
         self.test = test
@@ -58,7 +58,7 @@ class FastWorldEnv(gym.Env):
         max_purs_speed = np.max(new_purs_speeds)
         #invaders
         new_invs_num = np.random.randint(1, min(new_purs_num//2, 7))
-        new_inv_speed = np.random.uniform(2.0, max_purs_speed*0.9, size=new_invs_num)
+        new_inv_speed = np.random.uniform(4.0, max_purs_speed*0.9, size=new_invs_num)
         new_inv_acc = np.random.uniform(new_inv_speed / 2.0, new_inv_speed / 1.3)
         #prime
         new_prime_speed = 1.0
@@ -259,13 +259,13 @@ class FastWorldEnv(gym.Env):
         if current_state != self.last_state:
             reward -= 0.5
         #penalty for pursuing target with a lot of pursuers
-        if in_pursue and target and self.last_state == States.FORM:
-            target_invader = self.world.pursuers[0].target["target"]
-            pursuers_on_target = target_invader.purs_num
-            if pursuers_on_target > 3:
-                reward -= 7.5 * (pursuers_on_target - 3)
-            elif pursuers_on_target <= 2:
-                reward += 1.0
+        # if in_pursue and target and self.last_state == States.FORM:
+        #     target_invader = self.world.pursuers[0].target["target"]
+        #     pursuers_on_target = target_invader.purs_num
+        #     if pursuers_on_target > 3:
+        #         reward -= 7.5 * (pursuers_on_target - 3)
+        #     elif pursuers_on_target <= 2:
+        #         reward += 1.0
         #safe distance
         # safe_distance = min(min_inv_dist, 20.0)
         # safety_ratio = safe_distance / 20.0

@@ -51,14 +51,14 @@ class FastWorldEnv(gym.Env):
         self.pursuing_purs = new_purs_num
         #self.pursuing_purs = np.random.randint(1, new_purs_num // 2) #new_purs_num // 2 
         #pursuers
-        new_purs_speed = np.random.uniform(6.0, 8.0)
+        new_purs_speed = np.random.uniform(7.0, 12.0)
         new_purs_speeds = np.full(new_purs_num, new_purs_speed, dtype=np.float32)
         new_purs_acc = np.random.uniform(low=new_purs_speed / 2.0, high=new_purs_speed / 1.3)
         self.new_purs_accs = np.full(new_purs_num, new_purs_acc, dtype=np.float32)
         max_purs_speed = np.max(new_purs_speeds)
         #invaders
         new_invs_num = np.random.randint(1, min(new_purs_num, 9))
-        new_inv_speed = np.random.uniform(4.0, max_purs_speed, size=new_invs_num)
+        new_inv_speed = np.random.uniform(5.0, max_purs_speed, size=new_invs_num)
         new_inv_acc = np.random.uniform(new_inv_speed / 2.0, new_inv_speed / 1.3)
         #prime
         new_prime_speed = 1.0

@@ -18,7 +18,7 @@ def main():
     MANUAL_CONTROL = False
     #config
     if _3d:
-        sc = Sim3DConfig(dt=0.02, purs_num=20, inv_num=10, obstacle=False, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
+        sc = Sim3DConfig(dt=0.02, purs_num=20, inv_num=7, obstacle=False, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
     else:
         sc = Sim2DConfig(dt=0.02, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=True, 
                          obstacle_rad=[4.0, 4.0], obstacle_pos=[np.array([17.0, 6.0]), np.array([6.0, 17.0])])
@@ -29,8 +29,10 @@ def main():
     model = PPO.load("./models/history/gen_35")
     model2 = PPO.load("./models/history/gen_35")
     #def_model = PPO.load("./models/def_final_restrictive")
-    def_model = PPO.load("./models/history_def/gen_18")
-    world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 5.0), inv_acc=np.full(30, 4.5), prime_acc=1.3, purs_speed=np.full(30, 8.0), inv_speed=np.full(30, 7.0), prime_speed=3.5, pursue_model=(model, model2), def_model=None, not_testing=True)
+    #def_model = PPO.load("./models/history_def/gen_19")
+    def_model = None
+    print("def model: " + str(def_model))
+    world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 6.5), inv_acc=np.full(30, 6.5), prime_acc=1.3, purs_speed=np.full(30, 11.0), inv_speed=np.full(30, 11.0), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True)
     #visualization
     SHOW_VISUALIZATION = False
     vis = None
@@ -46,7 +48,7 @@ def main():
         EPISODE_NUM = 1
     else:
         RENDER_EVERY = 5
-        EPISODE_NUM = 20
+        EPISODE_NUM = 40
     step_counter = 1
     current_episode = 1
     SYNC_INTERVAL = 20

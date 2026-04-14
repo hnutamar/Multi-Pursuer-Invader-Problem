@@ -52,7 +52,7 @@ class Pursuer(Agent):
         self.capture_max = 60.0
         #radiuses for target circling
         self.t_circle = 1.0
-        self.target_close = 2.0
+        self.target_close = 20.0
         self.safe_circle_r = 3.0
         self.rep_invs_r = 8.0
         self.circle_tan_max = 3.0

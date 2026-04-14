@@ -106,7 +106,7 @@ class SimulationWorld:
     def get_random_invader_start(self, num_invaders=1):
         prime_pos = np.array([3.0, 3.0, 7.0])
         #distances to the prime
-        dists = np.random.uniform(70.0, 150.0, size=(num_invaders, 1))
+        dists = np.random.uniform(70.0, 100.0, size=(num_invaders, 1))
         #random direction
         dirs = np.random.randn(num_invaders, 3)
         dirs[:, 2] = np.abs(dirs[:, 2])

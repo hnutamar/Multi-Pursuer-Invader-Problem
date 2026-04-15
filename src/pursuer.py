@@ -2011,18 +2011,18 @@ class Pursuer(Agent):
             else:
                 target["purs_type"] = self.purs_types['const_bear1']
             return self.pursuit_constant_bearing(target)
-        # elif self.pursue_model is not None:
-        #     target["purs_type"] = self.purs_types['circling']
-        #     return self.pursue_herding()
-        # #if more then one is chasing him and he is further from unit, circle him
-        # if np.linalg.norm(self.prime_pos - target["tar_pos"]) >= self.safe_circle_r:
-        #     # for p in purs:
-        #     #     if p is not self and p.target != None and p.target[0] is target[0]:
-        #     if target["target"].purs_num >= 2:
-        #         if self.pos_length == 2:
-        #             return self.pursuit_circling(target)
-        #         else:
-        #             return self.pursuit_sphering(target)
+        elif self.pursue_model is not None:
+            target["purs_type"] = self.purs_types['circling']
+            return self.pursue_herding()
+        #if more then one is chasing him and he is further from unit, circle him
+        if np.linalg.norm(self.prime_pos - target["tar_pos"]) >= self.safe_circle_r:
+            # for p in purs:
+            #     if p is not self and p.target != None and p.target[0] is target[0]:
+            if target["target"].purs_num >= 2:
+                if self.pos_length == 2:
+                    return self.pursuit_circling(target)
+                else:
+                    return self.pursuit_sphering(target)
         #no one else is chasing him, catch him
         target["purs_type"] = self.purs_types['const_bear1']
         return self.pursuit_constant_bearing(target)

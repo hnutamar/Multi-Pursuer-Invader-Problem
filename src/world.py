@@ -9,6 +9,7 @@ from scipy.spatial.distance import cdist
 class SimulationWorld:
     def __init__(self, sc_config, _3d=False, purs_acc=None, purs_speed=None, prime_acc=None, prime_speed=None, inv_acc=None, inv_speed=None,
                  prime_pos=None, inv_pos=None, purs_pos=None, purs_num=None, herding=False, pursue_model=None, def_model=None, not_testing=False, no_target=False):
+        self.episodes_won = 0
         self.not_testing = not_testing
         self.no_target = no_target
         self.sc = sc_config
@@ -106,7 +107,7 @@ class SimulationWorld:
     def get_random_invader_start(self, num_invaders=1):
         prime_pos = np.array([3.0, 3.0, 7.0])
         #distances to the prime
-        dists = np.random.uniform(70.0, 100.0, size=(num_invaders, 1))
+        dists = np.random.uniform(70.0, 110.0, size=(num_invaders, 1))
         #random direction
         dirs = np.random.randn(num_invaders, 3)
         dirs[:, 2] = np.abs(dirs[:, 2])
@@ -280,6 +281,7 @@ class SimulationWorld:
                 dists[i] = inv_to_prime
             min_dist = np.min(dists)
             print("win, dist: " + str(min_dist))
+            self.episodes_won += 1
         elif done:
             print("lost")
         return self.get_state(), done

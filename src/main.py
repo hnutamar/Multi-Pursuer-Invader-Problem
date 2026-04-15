@@ -11,8 +11,19 @@ from pybullet_visualizer import PyBulletVisualizer
 from toronto_visualizer import TorontoVisualizer
 from mpl_toolkits.mplot3d import Axes3D
 from stable_baselines3 import PPO
+import torch
+import random
+
+def lock_all_seeds(seed_value=42):
+    random.seed(seed_value)
+    np.random.seed(seed_value)
+    torch.manual_seed(seed_value)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed_value)
 
 def main():
+    seed_num = 520
+    lock_all_seeds(seed_num)
     _3d = True
     PYBULLET = False
     MANUAL_CONTROL = False
@@ -32,7 +43,7 @@ def main():
     #def_model = PPO.load("./models/history_def/gen_19")
     def_model = None
     print("def model: " + str(def_model))
-    world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 6.5), inv_acc=np.full(30, 6.5), prime_acc=1.3, purs_speed=np.full(30, 11.0), inv_speed=np.full(30, 11.0), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True)
+    world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 6.0), inv_acc=np.full(30, 5.5), prime_acc=1.3, purs_speed=np.full(30, 12.0), inv_speed=np.full(30, 10.0), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True)
     #visualization
     SHOW_VISUALIZATION = False
     vis = None
@@ -93,16 +104,16 @@ def main():
                 plt.pause(0.001)
         #end of episode check
         if done:
-            #print("End of episode!")
             if EPISODE_NUM == current_episode:
+                print("End of sim, " + str(world.episodes_won) + " won")
                 running = False
                 break
+            lock_all_seeds(seed_num + current_episode)
             world.reset()
             step_counter = 1
             current_episode += 1
     if vis and PYBULLET:
         vis.close()
-        
     plt.ioff()
     #post-processing
     print("Generating graph of trajectories")

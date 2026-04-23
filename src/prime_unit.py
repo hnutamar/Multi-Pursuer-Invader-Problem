@@ -34,12 +34,12 @@ class Prime_unit(Agent):
         obs_vel = self.repulsive_force_obs(self.coll_obs)
         ground_vel = self.repulsive_force_ground(self.coll_gr)
         if pursuers:
-            rep_vel_p = self.repulsive_force(pursuers, pursuers[0].formation_r_min + 0.1, True)
+            rep_vel_p = self.repulsive_force(pursuers, 3.0, True)
         #direction of the goal
-        if mode == Modes.CIRCLE:
-            goal_vel = self.vortex_circle(way_point)
-        elif mode == Modes.LINE:
-            goal_vel = self.goal_force(way_point)
+        # if mode == Modes.CIRCLE:
+        #     goal_vel = self.vortex_circle(way_point)
+        # elif mode == Modes.LINE:
+        goal_vel = self.goal_force(way_point)
         #summing all the velocities
         sum_vel = goal_vel + self.rep_force * rep_vel_i + self.rep_force * rep_vel_p + self.rep_obs * obs_vel + ground_vel
         #norming speed to the possible limit
@@ -77,14 +77,15 @@ class Prime_unit(Agent):
             if drone is self:
                 continue
             diff = self.position - drone.position
-            dist = np.linalg.norm(diff) - self.my_rad - drone.my_rad
-            if purs:
-                rel_unit_pos = drone.position - self.position
-                #radius is combination of two according to prime fly direction
-                sigm = self.sigmoid(np.dot(self.curr_speed, rel_unit_pos))
-                coll = sigm * drone.formation_r + (1 - sigm) * drone.formation_r_min + 0.1
+            dist_center = np.linalg.norm(diff)
+            dist = dist_center - self.my_rad - drone.my_rad
+            # if purs:
+            #     rel_unit_pos = drone.position - self.position
+            #     #radius is combination of two according to prime fly direction
+            #     sigm = self.sigmoid(np.dot(self.curr_speed, rel_unit_pos))
+            #     coll = sigm * drone.formation_r + (1 - sigm) * drone.formation_r_min + 0.1
             if dist < coll and dist > 0.001:
-                push_dir = diff / dist
+                push_dir = diff / dist_center
                 #hyperbolic repulsive
                 magnitude = (1.0 / dist - 1.0 / coll) 
                 # magnitude = (coll - dist) / coll
@@ -114,15 +115,16 @@ class Prime_unit(Agent):
         push_dirs = valid_diffs / valid_dists_center[:, np.newaxis]
         magnitudes = (1.0 / valid_dists_surface) - (1.0 / coll)
         #total force
-        return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0) * self.cruise_speed
+        return np.sum(push_dirs * magnitudes[:, np.newaxis], axis=0) * self.biggest_poss_speed
     
     def repulsive_force_ground(self, coll):
         total_force = np.zeros_like(self.position)
         if len(total_force) == 2:
             return total_force
-        if self.position[2] - self.my_rad < coll:
-            magnitude = (1.0 / self.position[2]) - (1.0 / coll)
+        dist_surface = self.position[2] - self.my_rad
+        if dist_surface < coll and dist_surface > 0.001:
+            magnitude = (1.0 / dist_surface) - (1.0 / coll)
             rep_dir = np.array([0, 0, 1])
-            total_force = rep_dir * magnitude * self.cruise_speed
+            total_force = rep_dir * magnitude * self.biggest_poss_speed
         #total force
         return total_force

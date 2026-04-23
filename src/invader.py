@@ -101,10 +101,11 @@ class Invader(Agent):
         total_force = np.zeros_like(self.position)
         if len(total_force) == 2:
             return total_force
-        if self.position[2] - self.my_rad < coll:
-            magnitude = (1.0 / self.position[2]) - (1.0 / coll)
+        dist_surface = self.position[2] - self.my_rad
+        if dist_surface < coll and dist_surface > 0.001:
+            magnitude = (1.0 / dist_surface) - (1.0 / coll)
             rep_dir = np.array([0, 0, 1])
-            total_force = rep_dir * magnitude * self.cruise_speed
+            total_force = rep_dir * magnitude * self.biggest_poss_speed
         #total force
         return total_force
     

@@ -61,11 +61,12 @@ class SimulationWorld:
         self.prime = Prime_unit(position=pos_u, max_speed=speed_prime, max_acc=acc_prime, max_omega=1.0, my_rad=self.sc.UNIT_RAD, dt=self.sc.DT)
         #init positions and acceleration of agents (random)
         if self._3d:
-            rnd_points_purs = purs_pos if purs_pos is not None else np.random.uniform(
-                low=[-self.sc.PURSUER_NUM/2 - 1 + pos_u[0], -self.sc.PURSUER_NUM/2 - 1 + pos_u[1], pos_u[2]], 
-                high=[self.sc.PURSUER_NUM/2 + 1 + pos_u[0], self.sc.PURSUER_NUM/2 + 1 + pos_u[1], self.sc.PURSUER_NUM/2 + 1 +  pos_u[2]], 
-                size=(self.sc.PURSUER_NUM, 3)
-            )
+            # rnd_points_purs = purs_pos if purs_pos is not None else np.random.uniform(
+            #     low=[-self.sc.PURSUER_NUM/2 - 1 + pos_u[0], -self.sc.PURSUER_NUM/2 - 1 + pos_u[1], pos_u[2]], 
+            #     high=[self.sc.PURSUER_NUM/2 + 1 + pos_u[0], self.sc.PURSUER_NUM/2 + 1 + pos_u[1], self.sc.PURSUER_NUM/2 + 1 +  pos_u[2]], 
+            #     size=(self.sc.PURSUER_NUM, 3)
+            # )
+            rnd_points_purs = purs_pos if purs_pos is not None else self.get_random_pursuer_starts(self.sc.PURSUER_NUM, pos_u)
             # rnd_points_inv = inv_pos if inv_pos is not None else np.random.uniform(
             #     low=[-2*self.sc.WORLD_WIDTH, -2*self.sc.WORLD_HEIGHT, pos_u[2]], 
             #     high=[2*self.sc.WORLD_WIDTH, 2*self.sc.WORLD_HEIGHT, pos_u[2] + 15], 
@@ -103,11 +104,43 @@ class SimulationWorld:
         for i in range(self.sc.INVADER_NUM):
             inv = Invader(position=rnd_points_inv[i], max_speed=speed_inv[i], max_acc=acc_inv[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD, dt=self.sc.DT)
             self.invaders.append(inv)
+            
+    def get_random_pursuer_starts(self, num_pursuers, inv_pos=None):
+        #center, prime position
+        prime_pos = np.array([3.0, 3.0, 7.0])    
+        #array for all pursuers
+        positions = np.zeros((num_pursuers, 3))
+        #spawn
+        dist_close = np.random.uniform(2.2, 3.0)
+        dir_close = np.random.randn(3)
+        dir_close[2] = abs(dir_close[2])
+        dir_close = dir_close / np.linalg.norm(dir_close)
+        positions[0] = prime_pos + (dir_close * dist_close)
+        #others can be further
+        if num_pursuers > 1:
+            num_far = num_pursuers - 1
+            #dist from prime
+            dists_far = np.random.uniform(3.0, 12.0, size=num_far)    
+            #random directions
+            dirs_far = np.random.randn(num_far, 3)
+            dirs_far[:, 2] = np.abs(dirs_far[:, 2])   
+            #normalization
+            norms = np.linalg.norm(dirs_far, axis=1, keepdims=True)
+            dirs_far = dirs_far / norms    
+            #computing final pos
+            positions[1:] = prime_pos + (dirs_far * dists_far[:, np.newaxis])    
+        #safe clip
+        positions[:, 2] = np.clip(positions[:, 2], 1.0, np.inf)
+        #so that learning pursuer is not always by prime
+        rnd_num = np.random.randint(0, 5)
+        if rnd_num != 1:
+            np.random.shuffle(positions)
+        return positions
 
     def get_random_invader_start(self, num_invaders=1):
         prime_pos = np.array([3.0, 3.0, 7.0])
         #distances to the prime
-        dists = np.random.uniform(70.0, 110.0, size=(num_invaders, 1))
+        dists = np.random.uniform(70.0, 100.0, size=(num_invaders, 1))
         #random direction
         dirs = np.random.randn(num_invaders, 3)
         dirs[:, 2] = np.abs(dirs[:, 2])

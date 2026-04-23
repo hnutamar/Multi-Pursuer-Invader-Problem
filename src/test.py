@@ -132,7 +132,7 @@ def test_herding_model():
     print("Start")
     #running forever
     running = True
-    whole_reward = 0
+    whole_reward = 0 
     episode_num = 0
     render_every = 4
     ep_len = 0

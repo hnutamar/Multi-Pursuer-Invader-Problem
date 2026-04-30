@@ -200,9 +200,10 @@ class Pursuer(Agent):
                 if self.target["purs_type"] == self.purs_types["circling"] and self.pursue_model is not None:
                     return self.new_acc
         elif self.target != None and self.target["target"].crashed == False and self.is_rl_controlled:
-            tar_vel = self.pursue_rl_target(self.target)
-            if self.target["purs_type"] == self.purs_types["circling"]:
-                return self.new_acc
+            if not (self.target["purs_type"] != self.purs_types["circling"] and np.linalg.norm(self.position - self.prime_pos) - self.my_rad - prime_rad > self.capture_max):
+                tar_vel = self.pursue_rl_target(self.target)
+                if self.target["purs_type"] == self.purs_types["circling"]:
+                    return self.new_acc
         #if target dir is zero, pursuer has no target -> keep the formation
         if np.array_equal(tar_vel, form_vel):
             if self.target is not None and not self.is_rl_controlled:

@@ -105,7 +105,7 @@ class Invader(Agent):
         if dist_surface < coll and dist_surface > 0.001:
             magnitude = (1.0 / dist_surface) - (1.0 / coll)
             rep_dir = np.array([0, 0, 1])
-            total_force = rep_dir * magnitude * self.biggest_poss_speed
+            total_force = rep_dir * magnitude * self.cruise_speed
         #total force
         return total_force
     

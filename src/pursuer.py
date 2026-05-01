@@ -904,18 +904,17 @@ class Pursuer(Agent):
             # #sorting
             # sorted_inv_indices = np.argsort(tactical_scores)
             closest_inv_indices = []
-            # 1. POKUD ÚTOČÍM, MŮJ CÍL JE VŽDYCKY ČÍSLO 1
+            #my target always number one
             if self.state == States.PURSUE and self.target is not None:
-                # Najdeme index našeho cíle v poli všech invaderů
                 my_target_inv = self.target["target"]
-                my_target_idx = self.targets.index(my_target_inv) # (přizpůsobte podle toho, jak ukládáte targety)
+                my_target_idx = self.targets.index(my_target_inv)
                 closest_inv_indices.append(my_target_idx)
-                # 2. JAKO DRUHÉHO PŘIDÁME TOHO NEJNEBEZPEČNĚJŠÍHO ZBYTKU
+                #second the closest
                 for idx in sorted_inv_indices:
                     if idx != my_target_idx:
                         closest_inv_indices.append(idx)
                         break # Máme dva, končíme        
-            # POKUD NEÚTOČÍM, VEZMU PROSTĚ DVA NEJLEPŠÍ JAKO DOTEAĎ
+            #if not attacking, the closest two
             else:
                 closest_inv_indices = sorted_inv_indices[:2]
             #two tactically most important

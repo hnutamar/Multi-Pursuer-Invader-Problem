@@ -529,6 +529,17 @@ class Pursuer(Agent):
         FAR_AWAY = 3.0  #far away, bigger number
         MAX_ACC = 8.0
         MAX_ANG_VEL = 2.0
+        dummy_target = False
+        if self.target is None:
+            dummy_target = True
+            self.target = {
+                "tar_pos": np.zeros(3),
+                "tar_vel": np.zeros(3),
+                "tar_acc": np.zeros(3),
+                "tar_rad": 0.1,
+                "tar_ang": 0.0,
+                "target": None
+            }
         #MY STATE
         my_speed_mag = np.linalg.norm(self.curr_speed)
         my_acc_mag = np.linalg.norm(self.curr_acc)
@@ -712,6 +723,8 @@ class Pursuer(Agent):
             vector_to_line = np.zeros(3)
         #connecting
         los_obs = np.concatenate([[projection], [raw_dist_to_line / MAX_DIST], vector_to_line / MAX_DIST]).astype(np.float32)
+        if dummy_target:
+            self.target = None
         #final vector
         final_obs = np.concatenate([
             my_obs,         # 14

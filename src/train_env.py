@@ -382,7 +382,7 @@ class HerdingEnv(gym.Env):
         self.lost_purs_crash = 0
         if test:
             self.episode_num = 1#np.inf
-            self.max_steps = 500
+            self.max_steps = 300
         else:
             self.episode_num = 1
             self.max_steps = 1000
@@ -392,26 +392,30 @@ class HerdingEnv(gym.Env):
         self.last_inv_pos = self.world.invaders[0].position
         self.obs_centers = []
         self.obs_rads = []
+        self.dist_in_the_end = []
+        self.dist_in_time = []
+        self.all_dists = []
+        self.step_fail = []
         
-    def reset(self, seed=None, options=None):
+    def reset(self, inv_rate=0.5, obstacle=False, seed=None, options=None):
         super().reset(seed=seed)
         #num of purs in episode
         #new_purs_num = np.random.randint(4, 21)
-        new_purs_num = np.random.randint(1, 5)
+        new_purs_num = 4 #np.random.randint(1, 5)
         self.pursuing_purs = new_purs_num
         #self.pursuing_purs = np.random.randint(1, new_purs_num // 2) #new_purs_num // 2 
         #pursuers
-        new_purs_speed = np.random.uniform(6.0, 8.0)
+        new_purs_speed = 7 #np.random.uniform(6.0, 8.0)
         new_purs_speeds = np.full(new_purs_num, new_purs_speed, dtype=np.float32)
-        new_purs_acc = np.random.uniform(low=new_purs_speed / 2.0, high=new_purs_speed / 1.3)
+        new_purs_acc = new_purs_speed / 1.7#np.random.uniform(low=new_purs_speed / 2.0, high=new_purs_speed / 1.3)
         self.new_purs_accs = np.full(new_purs_num, new_purs_acc, dtype=np.float32)
         max_purs_speed = np.max(new_purs_speeds)
         #invaders
-        new_inv_speed = np.random.uniform(3.0, max_purs_speed*0.9)
-        new_inv_acc = np.random.uniform(new_inv_speed / 2.0, new_inv_speed / 1.3)
+        new_inv_speed = max_purs_speed * inv_rate #np.random.uniform(3.0, max_purs_speed*0.9)
+        new_inv_acc = new_inv_speed / 1.7 #np.random.uniform(new_inv_speed / 2.0, new_inv_speed / 1.3)
         #prime
-        new_prime_speed = 1.0
-        new_prime_acc = np.random.uniform(new_prime_speed / 4.0, new_prime_speed / 2.0)
+        new_prime_speed = 0.001
+        new_prime_acc = new_prime_speed / 3.0 #np.random.uniform(new_prime_speed / 4.0, new_prime_speed / 2.0)
         #positions
         inv_pos = self.get_random_invader_start()
         purs_positions = self.get_random_pursuer_starts(new_purs_num, inv_pos)
@@ -423,7 +427,10 @@ class HerdingEnv(gym.Env):
         self.world.sc.DRONE_RAD = drone_rad
         self.world.sc.UNIT_RAD = prime_rad
         #obstacles
-        num_obs = random.choice([4, 5, 6, 7, 8])
+        if obstacle:
+            num_obs = 12 #random.choice([4, 5, 6, 7, 8])
+        else:
+            num_obs = 0
         #num_obs = random.choice([1, 2, 3, 4, 5])
         if num_obs > 0:
             #array of pos and radii
@@ -458,6 +465,7 @@ class HerdingEnv(gym.Env):
         self.last_inv_prime_dist = np.linalg.norm(self.world.prime.position - self.world.invaders[0].position)
         self.last_dist_to_inv = np.linalg.norm(self.world.pursuers[0].position - self.world.invaders[0].position)
         self.last_inv_pos = self.world.invaders[0].position
+        self.dist_in_time = []
         return obs, {}
     
     def load_teammate_brain(self, model_path, model_path2=None):
@@ -667,8 +675,8 @@ class HerdingEnv(gym.Env):
         #penalization for crash
         if self.world.pursuers[0].crashed:
             #print("lost")
-            if not done:
-                self.lost_purs_crash += 1
+            # if not done:
+            #     self.lost_purs_crash += 1
             reward -= 60.0
             #terminated = True
         #penalization for breaking the defense
@@ -676,12 +684,13 @@ class HerdingEnv(gym.Env):
             #if done:
             #    self.lost_pursuer_prime += 1
             #else:
-            self.lost_invader_prime += 1
+            #self.lost_invader_prime += 1
             #print("lost")
             #if not self.world.invaders[0].crashed:
             #    self.lost += 1
             reward -= 60.0
             terminated = True
+            self.step_fail.append(self.current_step)
         #reward for getting invader far
         safe_distance = min(current_inv_prime_dist, 25.0)
         safety_ratio = safe_distance / 25.0
@@ -698,7 +707,12 @@ class HerdingEnv(gym.Env):
         #whole game won
         #if truncated:
             #reward += min(current_inv_prime_dist, 20.0) * 2
+        self.dist_in_time.append(self.last_inv_prime_dist)
         self.last_inv_prime_dist = current_inv_prime_dist    
+        if truncated and not done:
+            self.dist_in_the_end.append(self.last_inv_prime_dist)
+            self.dist_in_time.append(self.last_inv_prime_dist)
+            self.all_dists.append(self.dist_in_time)
         obs = self._get_obs()
         return obs, reward, terminated, truncated, {}
 

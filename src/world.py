@@ -21,9 +21,17 @@ class SimulationWorld:
             'purs_acc': purs_acc, 'purs_speed': purs_speed, 'prime_acc': prime_acc, 'prime_speed': prime_speed, 'inv_acc': inv_acc, 'inv_speed': inv_speed,
             'prime_pos': prime_pos, 'inv_pos': inv_pos, 'purs_pos': purs_pos, 'purs_num': purs_num
         }
+        self.purs_purs_coll = 0
+        self.purs_gr_coll = 0
+        self.purs_obs_coll = 0
+        self.purs_prime_coll = 0
+        self.inv_prime_coll = 0
+        self.prime_crash = 0
+        self.first_time = False
         self.reset()
 
     def reset(self, **kwargs):
+        self.first_time = False
         for key, value in kwargs.items():
             if value is not None and key in self.init_params:
                 self.init_params[key] = value
@@ -224,11 +232,13 @@ class SimulationWorld:
                 dist_p_i = cdist(prime_pos, all_inv_pos)[0]
                 if np.any(dist_p_i < prime_rad + all_inv_rad):
                     self.prime.crashed = True
+                    self.inv_prime_coll += 1
             #Prime vs Pursuers
             if len(all_purs_pos) > 0 and not self.prime.crashed:
                 dist_p_p = cdist(prime_pos, all_purs_pos)[0]
                 if np.any(dist_p_p < prime_rad + all_purs_rad):
                     #print("yeet")
+                    self.purs_prime_coll += 1
                     self.prime.crashed = True
             #Prime vs Obstacles
             if self.obs_centers is not None and not self.prime.crashed:
@@ -251,6 +261,7 @@ class SimulationWorld:
                 # To samé pro vaše agenty
                 crashed_purs_ground_mask = all_purs_pos[:, 2] < all_purs_rad
                 for idx in np.where(crashed_purs_ground_mask)[0]:
+                    self.purs_gr_coll += 1
                     free_purs[idx].crashed = True
         #Agents vs Obstacles
         if self.obs_centers is not None:
@@ -273,6 +284,7 @@ class SimulationWorld:
                 #collision of invader in any obstacle
                 crashed_purs_mask = np.any(dists_p_o < limits_p_o, axis=1)
                 for idx in np.where(crashed_purs_mask)[0]:
+                    self.purs_obs_coll += 1
                     free_purs[idx].crashed = True
         #Pursuers vs Invaders
         if len(all_purs_pos) > 0 and len(all_inv_pos) > 0:
@@ -301,22 +313,26 @@ class SimulationWorld:
             swarm_crash_mask = np.any(dists_p_p < limits_p_p, axis=1)
             #those who crashed labeled as crashed
             for idx in np.where(swarm_crash_mask)[0]:
+                self.purs_purs_coll += 1
                 free_purs[idx].crashed = True
         #ending check
-        done = self.prime.crashed or self.prime.finished or (self.captured_count == self.sc.INVADER_NUM) 
-        if self.prime.finished or self.captured_count == self.sc.INVADER_NUM:
-            dists = np.zeros(len(self.invaders))
-            for i, inv in enumerate(self.invaders):
-                if not inv.crashed:
-                    inv_to_prime = np.linalg.norm(inv.position - self.prime.position) - inv.my_rad - self.prime.my_rad
-                else:
-                    inv_to_prime = np.inf
-                dists[i] = inv_to_prime
-            min_dist = np.min(dists)
-            print("win, dist: " + str(min_dist))
-            self.episodes_won += 1
-        elif done:
-            print("lost")
+        done = self.prime.crashed #or self.prime.finished or (self.captured_count == self.sc.INVADER_NUM) 
+        if done and not self.first_time:
+            self.prime_crash += 1
+            self.first_time = True
+        # if self.prime.finished or self.captured_count == self.sc.INVADER_NUM:
+        #     dists = np.zeros(len(self.invaders))
+        #     for i, inv in enumerate(self.invaders):
+        #         if not inv.crashed:
+        #             inv_to_prime = np.linalg.norm(inv.position - self.prime.position) - inv.my_rad - self.prime.my_rad
+        #         else:
+        #             inv_to_prime = np.inf
+        #         dists[i] = inv_to_prime
+        #     min_dist = np.min(dists)
+        #     print("win, dist: " + str(min_dist))
+        #     self.episodes_won += 1
+        # elif done:
+        #     print("lost")
         return self.get_state(), done
 
     def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):

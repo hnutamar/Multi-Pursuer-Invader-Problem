@@ -401,7 +401,7 @@ class HerdingEnv(gym.Env):
         super().reset(seed=seed)
         #num of purs in episode
         #new_purs_num = np.random.randint(4, 21)
-        new_purs_num = 4 #np.random.randint(1, 5)
+        new_purs_num = 1 #np.random.randint(1, 5)
         self.pursuing_purs = new_purs_num
         #self.pursuing_purs = np.random.randint(1, new_purs_num // 2) #new_purs_num // 2 
         #pursuers

@@ -256,6 +256,17 @@ class Pursuer(Agent):
         MAX_DRONE_RAD = 0.7
         FAR_AWAY = 3.0  #far away, bigger number
         MAX_ACC = 8.0
+        dummy_target = False
+        if self.target is None:
+            dummy_target = True
+            self.target = {
+                "tar_pos": np.zeros(3),
+                "tar_vel": np.zeros(3),
+                "tar_acc": np.zeros(3),
+                "tar_rad": 0.1,
+                "tar_ang": 0.0,
+                "target": None
+            }
         #MY STATE
         my_obs = np.concatenate([self.curr_speed / MAX_SPEED, self.curr_acc / MAX_ACC, [self.position[2] / MAX_COORD], 
                                  [self.my_rad / MAX_DRONE_RAD], [self.cruise_speed / MAX_SPEED], [self.max_acc / MAX_ACC]]) 
@@ -391,6 +402,8 @@ class Pursuer(Agent):
                     obstacles_obs[start+3] = obs_radii[idx] / MAX_RADIUS
                     #distance to obstacle
                     obstacles_obs[start+4] = np.linalg.norm(obs_pos)
+        if dummy_target:
+            self.target = None
         #final vector
         final_obs = np.concatenate([
             my_obs,         # 10
@@ -413,6 +426,17 @@ class Pursuer(Agent):
         MAX_DRONE_RAD = 0.7
         FAR_AWAY = 3.0  #far away, bigger number
         MAX_ACC = 8.0
+        dummy_target = False
+        if self.target is None:
+            dummy_target = True
+            self.target = {
+                "tar_pos": np.zeros(3),
+                "tar_vel": np.zeros(3),
+                "tar_acc": np.zeros(3),
+                "tar_rad": 0.1,
+                "tar_ang": 0.0,
+                "target": None
+            }
         #MY STATE
         my_obs = np.concatenate([self.curr_speed / MAX_SPEED, self.curr_acc / MAX_ACC, [self.position[2] / MAX_COORD], 
                                  [self.my_rad / MAX_DRONE_RAD], [self.cruise_speed / MAX_SPEED], [self.max_acc / MAX_ACC]]) 
@@ -508,6 +532,8 @@ class Pursuer(Agent):
                     #distance
                     obstacles_obs[start+4] = np.linalg.norm(obs_pos)
         #final vector
+        if dummy_target:
+            self.target = None
         final_obs = np.concatenate([
             my_obs,         # 10
             prime_obs,      # 8

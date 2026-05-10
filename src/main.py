@@ -25,121 +25,132 @@ def main():
     win_rates = []
     coll_rates = []
     mean_dists = []
+    cap_rates = []
+    model_name = "Variant 2 (20 vs 8)"
     seed_num = 640
-    lock_all_seeds(seed_num)
     _3d = True
     PYBULLET = False
     MANUAL_CONTROL = False
-    #config
-    if _3d:
-        sc = Sim3DConfig(dt=0.02, purs_num=20, inv_num=5, obstacle=True, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
-    else:
-        sc = Sim2DConfig(dt=0.02, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=True, 
-                         obstacle_rad=[4.0, 4.0], obstacle_pos=[np.array([17.0, 6.0]), np.array([6.0, 17.0])])
-    #world, physics
-    inv_pos = np.array([[25.24, 20.15, 15.58]])
+    obstacles = False
     #MODEL C
     model = PPO.load("./models/herding_modelC_0")
     model2 = PPO.load("./models/herding_modelC_0")
     #VARIANT 1
     #def_model = PPO.load("./models/def_final_restrictive")
     #VARIANT 2
-    #def_model = PPO.load("./models/def_B_final")
+    def_model = PPO.load("./models/def_B_final")
     #HARDCODED
-    def_model = None
+    #def_model = None
     print("def model: " + str(def_model))
-    world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 3.0), inv_acc=np.full(30, 2.5), prime_acc=1.3, purs_speed=np.full(30, 7.0), inv_speed=np.full(30, 5.5), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True)
-    #visualization
-    SHOW_VISUALIZATION = False
-    vis = None
-    if SHOW_VISUALIZATION:
-        if PYBULLET:
-            #vis = PyBulletVisualizer(sc_config=sc, _3d=_3d)
-            initial_state = world.get_state()
-            vis = TorontoVisualizer(sc_config=sc, _3d=_3d, init_state=initial_state)
+    for i in range(1):
+        lock_all_seeds(seed_num)
+        #config
+        if _3d:
+            sc = Sim3DConfig(dt=0.02, purs_num=20, inv_num=8, obstacle=obstacles, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
         else:
-            vis = MatplotlibVisualizer(sc_config=sc, _3d=_3d, quiver=False)
-    if PYBULLET:
-        RENDER_EVERY = 1
-        EPISODE_NUM = 1
-    else:
-        RENDER_EVERY = 5
-        EPISODE_NUM = 40
-    step_counter = 1
-    current_episode = 1
-    SYNC_INTERVAL = 20
-    sync_counter = 0
-    #loop of the simulator
-    running = True
-    #memory for graph
-    history_p = []
-    history_i = []
-    history_u = []
-    while running:
-        #manual control of invader
-        manual_action = None
-        if vis and MANUAL_CONTROL:
-            manual_action = vis.manual_vel
-        #physics step
-        state, done = world.step(manual_invader_vel=manual_action)
-        #for graph
-        #history_p.append(np.array(state['pursuers']))
-        #history_i.append(np.array(state['invaders']))
-        #history_u.append(np.array(state['prime']))
-        step_counter += 1
-        #graphics
-        if vis and step_counter % RENDER_EVERY == 0:
+            sc = Sim2DConfig(dt=0.02, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=True, 
+                            obstacle_rad=[4.0, 4.0], obstacle_pos=[np.array([17.0, 6.0]), np.array([6.0, 17.0])])
+        #world, physics
+        inv_pos = np.array([[25.24, 20.15, 15.58]])
+        world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 3.0), inv_acc=np.full(30, 2.5), prime_acc=1.3, purs_speed=np.full(30, 7.0), inv_speed=np.full(30, 5.5), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True)
+        #visualization
+        SHOW_VISUALIZATION = False
+        vis = None
+        if SHOW_VISUALIZATION:
             if PYBULLET:
-                sync_counter += 1
-                success, real_state = vis.render(state, world_instance=world)
-                if not success or not vis.is_open:
-                    print("Simulation ends!")
-                    running = False
-                    break
-                #synchronizing reality with virtual world
-                if sync_counter >= SYNC_INTERVAL:
-                    world.synchronize_with_reality(real_state)
-                    sync_counter = 0
+                #vis = PyBulletVisualizer(sc_config=sc, _3d=_3d)
+                initial_state = world.get_state()
+                vis = TorontoVisualizer(sc_config=sc, _3d=_3d, init_state=initial_state)
             else:
-                if not vis.is_open:
-                    print("Simulation ends!")
+                vis = MatplotlibVisualizer(sc_config=sc, _3d=_3d, quiver=False)
+        if PYBULLET:
+            RENDER_EVERY = 1
+            EPISODE_NUM = 1
+        else:
+            RENDER_EVERY = 5
+            EPISODE_NUM = 40
+        step_counter = 1
+        current_episode = 1
+        SYNC_INTERVAL = 20
+        sync_counter = 0
+        #loop of the simulator
+        running = True
+        #memory for graph
+        history_p = []
+        history_i = []
+        history_u = []
+        while running:
+            #manual control of invader
+            manual_action = None
+            if vis and MANUAL_CONTROL:
+                manual_action = vis.manual_vel
+            #physics step
+            state, done = world.step(manual_invader_vel=manual_action)
+            #for graph
+            history_p.append(np.array(state['pursuers']))
+            history_i.append(np.array(state['invaders']))
+            history_u.append(np.array(state['prime']))
+            step_counter += 1
+            #graphics
+            if vis and step_counter % RENDER_EVERY == 0:
+                if PYBULLET:
+                    sync_counter += 1
+                    success, real_state = vis.render(state, world_instance=world)
+                    if not success or not vis.is_open:
+                        print("Simulation ends!")
+                        running = False
+                        break
+                    #synchronizing reality with virtual world
+                    if sync_counter >= SYNC_INTERVAL:
+                        world.synchronize_with_reality(real_state)
+                        sync_counter = 0
+                else:
+                    if not vis.is_open:
+                        print("Simulation ends!")
+                        running = False
+                        break
+                    vis.render(state, world_instance=world)
+                    plt.pause(0.001)
+            #end of episode check
+            if done:
+                if EPISODE_NUM == current_episode:
+                    print("End of sim, " + str(world.episodes_won) + " won")
                     running = False
                     break
-                vis.render(state, world_instance=world)
-                plt.pause(0.001)
-        #end of episode check
-        if done:
-            if EPISODE_NUM == current_episode:
-                print("End of sim, " + str(world.episodes_won) + " won")
-                running = False
-                break
-            lock_all_seeds(seed_num + current_episode)
-            world.reset()
-            step_counter = 1
-            current_episode += 1
-    if vis and PYBULLET:
-        vis.close()
-    #data for plots    
-    purs_purs_crash = world.purs_purs_coll
-    purs_obs_crash = world.purs_obs_coll
-    purs_prime_crash = world.purs_prime_coll
-    purs_gr_crash = world.purs_gr_coll
-    inv_prime = world.inv_prime_coll
-    lost = world.prime_crash
-    #normalized data
-    win_rate = 1 - (lost / float(EPISODE_NUM))
-    total_coll = purs_obs_crash + purs_prime_crash + purs_purs_crash + purs_gr_crash
-    coll_rate = total_coll / float(EPISODE_NUM)
+                lock_all_seeds(seed_num + current_episode)
+                world.reset()
+                step_counter = 1
+                current_episode += 1
+        if vis and PYBULLET:
+            vis.close()
+        #data for plots    
+        purs_purs_crash = world.purs_purs_coll
+        purs_obs_crash = world.purs_obs_coll
+        purs_prime_crash = world.purs_prime_coll
+        purs_gr_crash = world.purs_gr_coll
+        inv_prime = world.inv_prime_coll
+        lost = world.prime_crash
+        #normalized data
+        win_rate = 1 - (lost / float(EPISODE_NUM))
+        total_coll = purs_obs_crash + purs_prime_crash + purs_purs_crash + purs_gr_crash
+        coll_rate = total_coll / float(EPISODE_NUM)
+        cap_rate = world.capture_time
 
-    win_rates.append(win_rate)
-    coll_rates.append(coll_rate)
+        win_rates.append(win_rate)
+        coll_rates.append(coll_rate)
+        cap_rates.append(cap_rate)
     #saving
-    #clean_name = model_name.replace(" ", "_").replace("(", "").replace(")", "")
-    #filename = f"fails_{clean_name}_rate_{inv_rate}_obs_{obstacles}.npy"
+    clean_name = model_name.replace(" ", "_").replace("(", "").replace(")", "")
+    filename_win = f"win_{clean_name}_rate_obs_{obstacles}.npy"
+    filename_coll = f"coll_{clean_name}_rate_obs_{obstacles}.npy"
+    filename_cap = f"coll_{clean_name}_rate_obs_{obstacles}.npy"
     
     #np array
-    #np.save(filename, np.array(env.step_fail))
+    np.save(filename_win, np.array(win_rates))
+    np.save(filename_coll, np.array(coll_rates))
+    np.save(filename_cap, np.array(cap_rates))
     #print(f"Data saved to {filename}")
+    #plot_tracks(history_p, history_i, history_u)
     return
 
 

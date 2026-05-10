@@ -28,6 +28,7 @@ class SimulationWorld:
         self.inv_prime_coll = 0
         self.prime_crash = 0
         self.first_time = False
+        self.capture_time = []
         self.reset()
 
     def reset(self, **kwargs):
@@ -37,6 +38,7 @@ class SimulationWorld:
                 self.init_params[key] = value
         #resets to initial state
         self.time = 0.0
+        self.step_count = 0
         self.captured_count = 0
         #inits of agents
         self._init_agents(**self.init_params)
@@ -186,6 +188,7 @@ class SimulationWorld:
     def step(self, manual_invader_vel=None):
         #counter
         self.time += self.sc.DT
+        self.step_count += 1
         #filtering living drones
         free_inv = [inv for inv in self.invaders if not inv.crashed]
         free_purs = [pur for pur in self.pursuers if not pur.crashed]
@@ -316,23 +319,26 @@ class SimulationWorld:
                 self.purs_purs_coll += 1
                 free_purs[idx].crashed = True
         #ending check
-        done = self.prime.crashed #or self.prime.finished or (self.captured_count == self.sc.INVADER_NUM) 
+        capture_check = self.captured_count == self.sc.INVADER_NUM
+        done = self.prime.crashed or capture_check or self.step_count == 1500 #or self.prime.finished 
+        if capture_check:
+            self.capture_time.append(self.step_count)
         if done and not self.first_time:
             self.prime_crash += 1
             self.first_time = True
-        # if self.prime.finished or self.captured_count == self.sc.INVADER_NUM:
-        #     dists = np.zeros(len(self.invaders))
-        #     for i, inv in enumerate(self.invaders):
-        #         if not inv.crashed:
-        #             inv_to_prime = np.linalg.norm(inv.position - self.prime.position) - inv.my_rad - self.prime.my_rad
-        #         else:
-        #             inv_to_prime = np.inf
-        #         dists[i] = inv_to_prime
-        #     min_dist = np.min(dists)
-        #     print("win, dist: " + str(min_dist))
-        #     self.episodes_won += 1
-        # elif done:
-        #     print("lost")
+        if self.step_count == 1500 or self.captured_count == self.sc.INVADER_NUM: #or self.prime.finished 
+            dists = np.zeros(len(self.invaders))
+            for i, inv in enumerate(self.invaders):
+                if not inv.crashed:
+                    inv_to_prime = np.linalg.norm(inv.position - self.prime.position) - inv.my_rad - self.prime.my_rad
+                else:
+                    inv_to_prime = np.inf
+                dists[i] = inv_to_prime
+            min_dist = np.min(dists)
+            print("win, dist: " + str(min_dist))
+            self.episodes_won += 1
+        elif done:
+            print("lost")
         return self.get_state(), done
 
     def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):

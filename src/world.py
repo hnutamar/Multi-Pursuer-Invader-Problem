@@ -8,7 +8,7 @@ from scipy.spatial.distance import cdist
 
 class SimulationWorld:
     def __init__(self, sc_config, _3d=False, purs_acc=None, purs_speed=None, prime_acc=None, prime_speed=None, inv_acc=None, inv_speed=None,
-                 prime_pos=None, inv_pos=None, purs_pos=None, purs_num=None, herding=False, pursue_model=None, def_model=None, not_testing=False, no_target=False):
+                 prime_pos=None, inv_pos=None, purs_pos=None, purs_num=None, herding=False, pursue_model=None, def_model=None, not_testing=False, no_target=False, kamikadze=None):
         self.episodes_won = 0
         self.not_testing = not_testing
         self.no_target = no_target
@@ -19,7 +19,7 @@ class SimulationWorld:
         self.def_model = def_model
         self.init_params = {
             'purs_acc': purs_acc, 'purs_speed': purs_speed, 'prime_acc': prime_acc, 'prime_speed': prime_speed, 'inv_acc': inv_acc, 'inv_speed': inv_speed,
-            'prime_pos': prime_pos, 'inv_pos': inv_pos, 'purs_pos': purs_pos, 'purs_num': purs_num
+            'prime_pos': prime_pos, 'inv_pos': inv_pos, 'purs_pos': purs_pos, 'purs_num': purs_num, 'kamikadze': kamikadze
         }
         self.purs_purs_coll = 0
         self.purs_gr_coll = 0
@@ -44,13 +44,7 @@ class SimulationWorld:
         self._init_agents(**self.init_params)
         return self.get_state()
 
-    def _init_agents(self, purs_acc, purs_speed, prime_acc, prime_speed, inv_acc, inv_speed, prime_pos, inv_pos, purs_pos, purs_num):
-        #obstacle
-        self.obs_centers = None
-        self.obs_radii = None
-        if self.sc.obstacle:
-            self.obs_centers = np.array(self.sc.obs_pos, dtype=float)
-            self.obs_radii = np.array(self.sc.obs_rads, dtype=float)
+    def _init_agents(self, purs_acc, purs_speed, prime_acc, prime_speed, inv_acc, inv_speed, prime_pos, inv_pos, purs_pos, purs_num, kamikadze):
         #borders and waypoints
         x_border = self.sc.WORLD_WIDTH / 6
         y_border = self.sc.WORLD_HEIGHT / 6
@@ -112,8 +106,51 @@ class SimulationWorld:
         #invader init
         self.invaders = []
         for i in range(self.sc.INVADER_NUM):
-            inv = Invader(position=rnd_points_inv[i], max_speed=speed_inv[i], max_acc=acc_inv[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD, dt=self.sc.DT)
+            inv = Invader(position=rnd_points_inv[i], max_speed=speed_inv[i], max_acc=acc_inv[i], max_omega=1.5, my_rad=self.sc.DRONE_RAD, dt=self.sc.DT, kamikadze=kamikadze)
             self.invaders.append(inv)
+        #obstacle
+        self.obs_centers = None
+        self.obs_radii = None
+        self.sc.obs_pos = None
+        self.sc.obs_rads = None
+        if self.sc.obstacle > 0:
+            # self.obs_centers = np.array(self.sc.obs_pos, dtype=float)
+            # self.obs_radii = np.array(self.sc.obs_rads, dtype=float)
+            #array of pos and radii
+            all_agents_pos = np.vstack([rnd_points_inv, rnd_points_purs, [pos_u]])
+            all_agents_rad = np.concatenate([np.full(self.sc.INVADER_NUM, self.sc.DRONE_RAD), np.full(self.sc.PURSUER_NUM, self.sc.DRONE_RAD), [self.sc.UNIT_RAD]])
+            #obs centers and radii
+            self.obs_centers, self.obs_radii = self.generate_safe_obstacles(self.sc.obstacle, all_agents_pos, all_agents_rad, 30, True)
+            
+    def generate_safe_obstacles(self, num_obs, agent_positions, agent_radii, max_coord, is_3d, min_r=1.0, max_r=5.0, safe_margin=1.5):
+        #arrays
+        centers = []
+        radii = []
+        for _ in range(num_obs):
+            placed = False
+            #searching only 100 times, otherwise map could be full
+            for _ in range(100): 
+                #random rad
+                r = np.random.uniform(min_r, max_r)
+                #random pos
+                if is_3d:
+                    c = np.random.uniform(max_coord, size=3)
+                    c[2] = np.random.uniform(r, max_coord - 10) 
+                else:
+                    c = np.random.uniform(-max_coord, max_coord, size=2)
+                #collision check
+                dists = np.linalg.norm(agent_positions - c, axis=1)
+                #with safe margin
+                safe_dists = r + agent_radii + safe_margin
+                #everything safe
+                if not np.any(dists < safe_dists):
+                    centers.append(c)
+                    radii.append(r)
+                    placed = True
+                    break
+        self.sc.obs_pos = centers
+        self.sc.obs_rads = radii
+        return np.array(centers), np.array(radii)      
             
     def get_random_pursuer_starts(self, num_pursuers, inv_pos=None):
         #center, prime position

@@ -31,7 +31,10 @@ def main():
     _3d = True
     PYBULLET = False
     MANUAL_CONTROL = False
-    obstacles = False
+    obses = [5, 5, 0, 0]
+    INV_NUM = [1, 8, 1, 8]
+    PUR_NUM = [5, 20, 5, 20]
+    kamikadze = [False, True, False, True]
     #MODEL C
     model = PPO.load("./models/herding_modelC_0")
     model2 = PPO.load("./models/herding_modelC_0")
@@ -42,19 +45,21 @@ def main():
     #HARDCODED
     #def_model = None
     print("def model: " + str(def_model))
-    for i in range(1):
+    for i in range(len(INV_NUM)):
+        obstacles = obses[i]
         lock_all_seeds(seed_num)
         #config
         if _3d:
-            sc = Sim3DConfig(dt=0.02, purs_num=20, inv_num=8, obstacle=obstacles, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
+            sc = Sim3DConfig(dt=0.02, purs_num=PUR_NUM[i], inv_num=INV_NUM[i], obstacle=obstacles, obstacle_rad=[3.0, 4.0], obstacle_pos=[np.array([13.0, 13.0, 6.0]), np.array([17.0, 6.0, 3.0])])
         else:
             sc = Sim2DConfig(dt=0.02, world_height=30, world_width=30, purs_num=20, inv_num=5, obstacle=True, 
                             obstacle_rad=[4.0, 4.0], obstacle_pos=[np.array([17.0, 6.0]), np.array([6.0, 17.0])])
         #world, physics
         inv_pos = np.array([[25.24, 20.15, 15.58]])
-        world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 3.0), inv_acc=np.full(30, 2.5), prime_acc=1.3, purs_speed=np.full(30, 7.0), inv_speed=np.full(30, 5.5), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True)
+        world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 3.0), inv_acc=np.full(30, 2.5), prime_acc=1.3, purs_speed=np.full(30, 7.0), inv_speed=np.full(30, 5.5), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True,
+                                kamikadze=kamikadze[i])
         #visualization
-        SHOW_VISUALIZATION = False
+        SHOW_VISUALIZATION = True
         vis = None
         if SHOW_VISUALIZATION:
             if PYBULLET:
@@ -68,7 +73,7 @@ def main():
             EPISODE_NUM = 1
         else:
             RENDER_EVERY = 5
-            EPISODE_NUM = 40
+            EPISODE_NUM = 200
         step_counter = 1
         current_episode = 1
         SYNC_INTERVAL = 20
@@ -113,6 +118,8 @@ def main():
                     plt.pause(0.001)
             #end of episode check
             if done:
+                if current_episode % 25 == 0:
+                    print("Episode: " + str(current_episode))
                 if EPISODE_NUM == current_episode:
                     print("End of sim, " + str(world.episodes_won) + " won")
                     running = False
@@ -143,12 +150,15 @@ def main():
     clean_name = model_name.replace(" ", "_").replace("(", "").replace(")", "")
     filename_win = f"win_{clean_name}_rate_obs_{obstacles}.npy"
     filename_coll = f"coll_{clean_name}_rate_obs_{obstacles}.npy"
-    filename_cap = f"coll_{clean_name}_rate_obs_{obstacles}.npy"
+    filename_cap = f"cap_{clean_name}_rate_obs_{obstacles}.npy"
     
     #np array
-    np.save(filename_win, np.array(win_rates))
-    np.save(filename_coll, np.array(coll_rates))
-    np.save(filename_cap, np.array(cap_rates))
+    # np.save(filename_win, np.array(win_rates))
+    # np.save(filename_coll, np.array(coll_rates))
+    # np.save(filename_cap, np.array(cap_rates))
+    print("win rates: " + str(win_rates))
+    print("coll rates: " + str(coll_rates))
+    print("cap rates: " + str(cap_rates))
     #print(f"Data saved to {filename}")
     #plot_tracks(history_p, history_i, history_u)
     return

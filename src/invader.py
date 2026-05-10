@@ -3,7 +3,7 @@ from agent import Agent
 import random
 
 class Invader(Agent):
-    def __init__(self, position, max_speed, max_acc, max_omega, my_rad, dt):
+    def __init__(self, position, max_speed, max_acc, max_omega, my_rad, dt, kamikadze=None):
         super().__init__(position, max_speed, max_acc, max_omega, dt, my_rad)
         #number of pursuers pursuing this invader
         self.purs_num = 0
@@ -17,6 +17,8 @@ class Invader(Agent):
         self.my_clock = 0
         self.u_dir = np.zeros_like(self.position)
         self.kamikadze = False#random.random() < 0.5
+        if kamikadze is not None:
+            self.kamikadze = kamikadze
         
     def evade(self, pursuers, target, obstacles):
         self.my_clock += 1

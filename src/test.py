@@ -41,12 +41,10 @@ def test_defense_model():
         inv_acc=inv_acc, purs_speed=purs_speed, inv_speed=inv_speed, prime_speed=0.2, inv_pos=[np.array([10.0, 10.0, 10.0])], not_testing=True)
     env = FastWorldEnv(world_instance=world, sc=new_sc)
     #loading the model
-    #model_path = "./models_checkpoints/herding_brain_1000000_steps" 
-    #model_path = "new_obs_best" 
-    model_path = "./models/history_def/gen_9" 
-    #model_path = "./models/gen_31" 
-    #model_path2 = "./models/gen_30" 
-    #model_path2 = "new_obs_best2"
+    #VARIANT 1
+    model_path = "./models/def_final_restrictive"
+    #VARIANT 2
+    #model_path = "./models/def_B_final"
     print(f"Loading MLP: {model_path} ...")
     #print(f"Loading MLP: {model_path2} ...")
     model = PPO.load(model_path)
@@ -110,26 +108,25 @@ def test_defense_model():
 def plot_failure_histogram(failure_steps, max_seconds=30, title="Distribution of Failure Times"):
     if len(failure_steps) == 0:
         return
-    # --- PŘEVOD NA SEKUNDY ---
+    #to secs
     failure_seconds = np.array(failure_steps) * 0.1
     fig, ax = plt.subplots(figsize=(8, 4.5))
-    # Koše po 2 sekundách (0, 2, 4 ... až 30)
+    #two seconds bins
     bins = np.arange(0, max_seconds + 2, 2)
     main_color = '#93C47D'
-    # Kreslíme failure_seconds místo steps
+    #secs steps
     ax.hist(failure_seconds, bins=bins, color=main_color, edgecolor='white', linewidth=1.0, alpha=0.8, zorder=3)
     mean_fail = np.mean(failure_seconds)
-    # Úprava popisku průměru
+    #average
     ax.axvline(mean_fail, color='#999999', linestyle='--', linewidth=1.5, 
                 label=f'Mean Failure Time: {mean_fail:.1f} s', zorder=4)
-    # ... skrytí rámečků jako minule ...
+    #hiding frame
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible('#DDDDDD')
     ax.spines['bottom'].set_color('#DDDDDD')
-    
     ax.set_title(title, color='#333333', pad=15)
-    # Změna popisku osy X
+    #x change
     ax.set_xlabel("Time When Invader Crashed into Prime (s)", color='#555555', labelpad=10)
     ax.set_ylabel("Number of Episodes", color='#555555', labelpad=10)
     ax.legend(frameon=False, labelcolor='#555555')
@@ -141,16 +138,19 @@ def test_herding_model():
     win_rates = []
     coll_rates = []
     mean_dists = []
-    inv_rates = [1.0, 0.75, 1.0, 0.5, 0.75, 1.0]
-    obses = [True, False, False, True, True, True]
-    
-    # --- TVŮJ HLAVNÍ STRING PRO IDENTIFIKACI TESTU ---
+    inv_rates = [0.5, 0.75, 1.0, 0.5, 0.75, 1.0]
+    obses = [False, False, False, True, True, True]
+    #model identification
+    #MODEL A
+    #model_path = "./models/herding_modelA"
+    #MODEL B
+    #model_path = "./models/herding_modelB_2.0" 
+    #MODEL C
+    model_path = "./models/herding_modelC_0"
     model_name = "Model C (1 vs 1)"
-    
-    # PŘÍPRAVA MŘÍŽKY PRO 6 GRAFŮ
+    #six graphs
     fig_dists, axs_dists = plt.subplots(2, 3, figsize=(14, 8), sharey=True, dpi=300)
     axs_dists_flat = axs_dists.flatten() 
-    
     for i in range(1):
         inv_rate = inv_rates[i]
         obstacles = obses[i]
@@ -168,15 +168,9 @@ def test_herding_model():
             inv_acc=[new_inv_acc], purs_speed=[new_purs_speed], inv_speed=[new_inv_speed], prime_speed=0.2, inv_pos=[np.array([10.0, 10.0, 10.0])], herding=True,
             no_target=True)
         env = HerdingEnv(world_instance=world, sc=new_sc, test=True)
-        #model_path = "brain_to_integrate" 
-        #model_path = "./models/herding_modelB_2.0" 
-        model_path = "./models/history/gen_35" 
-        model_path2 = "./models/history/gen_35" 
-        #model_path2 = "./models/herding_modelB_2.0" 
-        #model_path2 = "brain_to_integrate" 
         print(f"Loading MLP: {model_path} ...")
         model = PPO.load(model_path)
-        env.load_teammate_brain(model_path, model_path2=model_path2)
+        env.load_teammate_brain(model_path)
         obs, info = env.reset(inv_rate=inv_rate, obstacle=obstacles)
         print("Start")
         
@@ -225,7 +219,7 @@ def test_herding_model():
         clean_name = model_name.replace(" ", "_").replace("(", "").replace(")", "")
         filename = f"fails_{clean_name}_rate_{inv_rate}_obs_{obstacles}.npy"
         
-        # Uložíme jako numpy pole
+        #np array
         np.save(filename, np.array(env.step_fail))
         print(f"Data saved to {filename}")
         return
@@ -262,13 +256,13 @@ def test_herding_model():
                 ax.legend(frameon=False, labelcolor='#555555', loc='upper right')
                 
         if i == 5:
-            # --- ZDE VKLÁDÁME NÁZEV MODELU DO HISTOGRAMU ---
+            #histogram plot
             plot_failure_histogram(env.step_fail, title=f"{model_name}: Failure Times Distribution")
             
-    # --- ZDE PŘIDÁME HLAVNÍ NADPIS PRO MŘÍŽKU VZDÁLENOSTÍ ---
+    #main heading
     fig_dists.suptitle(f"{model_name}: Distance from Prime over Time", fontsize=16, color='#333333')
     fig_dists.tight_layout()
-    # Aby nadpis mřížky nesplynul s horními grafy, přidáme malý padding
+    #small padding
     fig_dists.subplots_adjust(top=0.90) 
     fig_dists.savefig("herding_dists_combined_grid.png", bbox_inches='tight')
     plt.close(fig_dists)
@@ -317,7 +311,6 @@ def test_herding_model():
             plt.savefig(filename, bbox_inches='tight')
         plt.close(fig)
 
-    # --- ZDE POUŽIJEME MODEL_NAME PŘI VYKRESLOVÁNÍ SLOUUCOVÝCH GRAFŮ ---
     # 1. Win Rate Chart
     plot_comparison_bar_chart(
         data=win_rates, 

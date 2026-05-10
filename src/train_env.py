@@ -473,12 +473,9 @@ class HerdingEnv(gym.Env):
         #updating the brain
         #if rnd_num == 0 or model_path2 is None:
         self.teammate_brain = PPO.load(model_path, device="cpu")
-        if model_path2 is not None:
-            self.teammate_brain2 = PPO.load(model_path2, device="cpu")
         #if self.episode_num > 800_000/10:
         #    with torch.no_grad():
         self.teammate_brain.policy.log_std.data = torch.full_like(self.teammate_brain.policy.log_std.data, -3.4)
-        self.teammate_brain2.policy.log_std.data = torch.full_like(self.teammate_brain2.policy.log_std.data, -3.4)
 
     def generate_safe_obstacles(self, num_obs, agent_positions, agent_radii, max_coord, is_3d, min_r=1.0, max_r=5.0, safe_margin=1.5):
         #arrays

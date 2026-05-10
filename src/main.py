@@ -22,6 +22,9 @@ def lock_all_seeds(seed_value=42):
         torch.cuda.manual_seed_all(seed_value)
 
 def main():
+    win_rates = []
+    coll_rates = []
+    mean_dists = []
     seed_num = 640
     lock_all_seeds(seed_num)
     _3d = True
@@ -35,15 +38,17 @@ def main():
                          obstacle_rad=[4.0, 4.0], obstacle_pos=[np.array([17.0, 6.0]), np.array([6.0, 17.0])])
     #world, physics
     inv_pos = np.array([[25.24, 20.15, 15.58]])
-    #model = PPO.load("new_obs_best")
-    #model2 = PPO.load("new_obs_best2")
-    model = PPO.load("./models/history/gen_35")
-    model2 = PPO.load("./models/history/gen_35")
+    #MODEL C
+    model = PPO.load("./models/herding_modelC_0")
+    model2 = PPO.load("./models/herding_modelC_0")
+    #VARIANT 1
     #def_model = PPO.load("./models/def_final_restrictive")
-    #def_model = PPO.load("./models/history_def/gen_19")
+    #VARIANT 2
+    #def_model = PPO.load("./models/def_B_final")
+    #HARDCODED
     def_model = None
     print("def model: " + str(def_model))
-    world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 4.0), inv_acc=np.full(30, 3.5), prime_acc=1.3, purs_speed=np.full(30, 8.0), inv_speed=np.full(30, 7.0), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True)
+    world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 3.0), inv_acc=np.full(30, 2.5), prime_acc=1.3, purs_speed=np.full(30, 7.0), inv_speed=np.full(30, 5.5), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True)
     #visualization
     SHOW_VISUALIZATION = False
     vis = None
@@ -114,6 +119,31 @@ def main():
             current_episode += 1
     if vis and PYBULLET:
         vis.close()
+    #data for plots    
+    purs_purs_crash = world.purs_purs_coll
+    purs_obs_crash = world.purs_obs_coll
+    purs_prime_crash = world.purs_prime_coll
+    purs_gr_crash = world.purs_gr_coll
+    inv_prime = world.inv_prime_coll
+    lost = world.prime_crash
+    #normalized data
+    win_rate = 1 - (lost / float(EPISODE_NUM))
+    total_coll = purs_obs_crash + purs_prime_crash + purs_purs_crash + purs_gr_crash
+    coll_rate = total_coll / float(EPISODE_NUM)
+
+    win_rates.append(win_rate)
+    coll_rates.append(coll_rate)
+    #saving
+    #clean_name = model_name.replace(" ", "_").replace("(", "").replace(")", "")
+    #filename = f"fails_{clean_name}_rate_{inv_rate}_obs_{obstacles}.npy"
+    
+    #np array
+    #np.save(filename, np.array(env.step_fail))
+    #print(f"Data saved to {filename}")
+    return
+
+
+def plot_tracks(history_p, history_i, history_u):
     plt.ioff()
     #post-processing
     print("Generating graph of trajectories")

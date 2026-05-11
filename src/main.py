@@ -26,27 +26,29 @@ def main():
     coll_rates = []
     mean_dists = []
     cap_rates = []
-    model_name = "Variant 2 (20 vs 8)"
+    kill_rates = []
+    model_name = "Variant 1"
     seed_num = 640
     _3d = True
     PYBULLET = False
     MANUAL_CONTROL = False
-    obses = [5, 5, 0, 0]
+    obses = [6, 6, 0, 0]
     INV_NUM = [1, 8, 1, 8]
     PUR_NUM = [5, 20, 5, 20]
-    kamikadze = [False, True, False, True]
+    kamikadze = [False, False, False, False]
     #MODEL C
     model = PPO.load("./models/herding_modelC_0")
     model2 = PPO.load("./models/herding_modelC_0")
     #VARIANT 1
-    #def_model = PPO.load("./models/def_final_restrictive")
+    def_model = PPO.load("./models/def_final_restrictive")
     #VARIANT 2
-    def_model = PPO.load("./models/def_B_final")
+    #def_model = PPO.load("./models/def_B_final")
     #HARDCODED
     #def_model = None
     print("def model: " + str(def_model))
     for i in range(len(INV_NUM)):
         obstacles = obses[i]
+        kam = kamikadze[i]
         lock_all_seeds(seed_num)
         #config
         if _3d:
@@ -57,9 +59,9 @@ def main():
         #world, physics
         inv_pos = np.array([[25.24, 20.15, 15.58]])
         world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 3.0), inv_acc=np.full(30, 2.5), prime_acc=1.3, purs_speed=np.full(30, 7.0), inv_speed=np.full(30, 5.5), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True,
-                                kamikadze=kamikadze[i])
+                                kamikadze=kam)
         #visualization
-        SHOW_VISUALIZATION = True
+        SHOW_VISUALIZATION = False
         vis = None
         if SHOW_VISUALIZATION:
             if PYBULLET:
@@ -126,6 +128,8 @@ def main():
                     break
                 lock_all_seeds(seed_num + current_episode)
                 world.reset()
+                if vis:
+                    vis.reset()
                 step_counter = 1
                 current_episode += 1
         if vis and PYBULLET:
@@ -141,28 +145,30 @@ def main():
         win_rate = 1 - (lost / float(EPISODE_NUM))
         total_coll = purs_obs_crash + purs_prime_crash + purs_purs_crash + purs_gr_crash
         coll_rate = total_coll / float(EPISODE_NUM)
-        cap_rate = world.capture_time
+        #cap_rate = world.capture_time
+        kill_rate = world.invaders_killed
 
         win_rates.append(win_rate)
         coll_rates.append(coll_rate)
-        cap_rates.append(cap_rate)
+        #cap_rates.append(cap_rate)
+        kill_rates.append(kill_rate)
     #saving
     clean_name = model_name.replace(" ", "_").replace("(", "").replace(")", "")
-    filename_win = f"win_{clean_name}_rate_obs_{obstacles}.npy"
-    filename_coll = f"coll_{clean_name}_rate_obs_{obstacles}.npy"
-    filename_cap = f"cap_{clean_name}_rate_obs_{obstacles}.npy"
+    filename_win = f"win_{clean_name}_rate_obs_{obstacles}_kamikadze_{kam}.npy"
+    filename_coll = f"coll_{clean_name}_rate_obs_{obstacles}_kamikadze_{kam}.npy"
+    #filename_cap = f"cap_{clean_name}_rate_obs_{obstacles}_kamikadze_{kam}.npy"
+    filename_kill = f"kill_{clean_name}_rate_obs_{obstacles}_kamikadze_{kam}.npy"
     
-    #np array
-    # np.save(filename_win, np.array(win_rates))
-    # np.save(filename_coll, np.array(coll_rates))
-    # np.save(filename_cap, np.array(cap_rates))
     print("win rates: " + str(win_rates))
     print("coll rates: " + str(coll_rates))
-    print("cap rates: " + str(cap_rates))
+    print("kill rates: " + str(kill_rates))
+    #np array
+    np.save(filename_win, np.array(win_rates))
+    np.save(filename_coll, np.array(coll_rates))
+    np.save(filename_kill, np.array(kill_rates))
     #print(f"Data saved to {filename}")
     #plot_tracks(history_p, history_i, history_u)
     return
-
 
 def plot_tracks(history_p, history_i, history_u):
     plt.ioff()

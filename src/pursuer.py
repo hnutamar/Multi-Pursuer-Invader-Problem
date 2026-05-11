@@ -126,13 +126,13 @@ class Pursuer(Agent):
         return
     
     def defense(self, targets):
-        observation = self.get_observation()
-        #observation = self.get_observation_restrictive()
+        #observation = self.get_observation()
+        observation = self.get_observation_restrictive()
         action, _ = self.def_model.predict(observation, deterministic=True)
         #vis_inv_0 = self.get_closest_invaders(targets, 2)
         vis_inv_0 = self.current_tactical_invaders
-        #self.set_rl_action_restrictive(action, vis_inv_0)
-        self.set_rl_action(action, vis_inv_0)
+        self.set_rl_action_restrictive(action, vis_inv_0)
+        #self.set_rl_action(action, vis_inv_0)
         
     def pursue(self, targets: list[Invader], prime_vel, prime_rad, prime_pos, all_purs_tars, precalc_data, not_testing=False, no_target=False):
         if not_testing:
@@ -2006,8 +2006,8 @@ class Pursuer(Agent):
         tar_purs_dist = np.linalg.norm(target["tar_pos"] - self.position) - self.my_rad - target["tar_rad"]
         circling_too_far = tar_purs_dist >= 30.0 and (target["purs_type"] == self.purs_types['circling'] or target["purs_type"] == self.purs_types['circling_too_far'])
         #if target is faster then pursuer, just pure pursue him
-        if tar_speed >= my_speed or target["purs_type"] == self.purs_types['pure_pursuit'] or circling_too_far:
-            if tar_speed >= my_speed:
+        if tar_speed >= 1.25*my_speed or target["purs_type"] == self.purs_types['pure_pursuit'] or circling_too_far:
+            if tar_speed >= 1.25*my_speed:
                 self.override_active = True
                 #print("override active")
                 target["purs_type"] = self.purs_types['pure_pursuit']
@@ -2019,10 +2019,9 @@ class Pursuer(Agent):
                 target["purs_type"] = self.purs_types['pure_pursuit']
             return self.pursuit_pure_pursuit(target)
         #still too fast for encirclement, CB him
-        elif tar_speed >= my_speed*0.85 or target["purs_type"] == self.purs_types['const_bear']:
-            if tar_speed >= my_speed*0.85:
-                self.override_active = True
-                #print("override active")
+        elif target["purs_type"] == self.purs_types['const_bear']:
+            #self.override_active = True
+            #print("override active")
             target["purs_type"] = self.purs_types['const_bear']
             return self.pursuit_constant_bearing(target)
         else:

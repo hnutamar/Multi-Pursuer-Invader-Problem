@@ -1,55 +1,57 @@
-
 import numpy as np
 import matplotlib as mpl
-mpl.use('TkAgg')
 import matplotlib.pyplot as plt
-plt.style.use('default')
-mpl.rcParams['font.family'] = 'sans-serif'
-mpl.rcParams['font.size'] = 10
-mpl.rcParams['axes.titlesize'] = 13
+import seaborn as sns
+
+# Global style configuration
+sns.set_theme(style="whitegrid")
 mpl.rcParams['figure.dpi'] = 300
 
 def plot_master_comparison(data_dict, speeds, filename='comparison_coll_rate_4vs1.png'):
+    """
+    Plots a side-by-side bar chart comparing collision rates with and without obstacles.
+    """
     x = np.arange(len(speeds))
-    width = 0.25  #width of column
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
-    #colors of columns
+    width = 0.25
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7), sharey=True)
+    
+    # Custom color palette to match the histogram
     colors = ['#4A90E2', '#50C878', '#FF9F43']
     models = list(data_dict.keys())
-    #left graph
+
     for i, model in enumerate(models):
+        # Data without obstacles (first 3 values)
         no_obs = data_dict[model][:3]
         ax1.bar(x + (i - 1) * width, no_obs, width, label=model, 
-                color=colors[i], edgecolor='white', alpha=0.9, zorder=3)
-    ax1.set_title('Scenario 4 vs 1: Without Obstacles', fontsize=14, pad=15)
-    ax1.set_ylabel('Collision Rate', fontsize=12)
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(speeds)
-    ax1.grid(axis='y', linestyle='--', alpha=0.3, zorder=0)
-    #right graph
-    for i, model in enumerate(models):
+                color=colors[i], edgecolor='white', alpha=0.9)
+        
+        # Data with obstacles (last 3 values)
         with_obs = data_dict[model][3:]
         ax2.bar(x + (i - 1) * width, with_obs, width, label=model, 
-                color=colors[i], edgecolor='white', alpha=0.9, zorder=3)
+                color=colors[i], edgecolor='white', alpha=0.9)
 
-    ax2.set_title('Scenario 4 vs 1: With Obstacles', fontsize=14, pad=15)
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(speeds)
-    ax2.grid(axis='y', linestyle='--', alpha=0.3, zorder=0)
-    #both
+    # Title and axis labeling consistent with the histogram style
+    ax1.set_title('Scenario 4 vs 1: Without Obstacles', fontsize=16, pad=15)
+    ax2.set_title('Scenario 4 vs 1: With Obstacles', fontsize=16, pad=15)
+    
+    ax1.set_ylabel('Collision Rate', fontsize=13)
     for ax in [ax1, ax2]:
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.set_xlabel('Target Speed Multiplier', fontsize=12)
-        ax.set_ylim(0, 0.8)
-        #adding to top
+        ax.set_xlabel('Target Speed Multiplier', fontsize=13)
+        ax.set_xticks(x)
+        ax.set_xticklabels(speeds)
+        ax.set_ylim(0, 0.85) 
+        sns.despine(ax=ax) # Removes top and right spines
+
+        # Add value annotations on top of each bar
         for p in ax.patches:
             ax.annotate(f'{p.get_height():.2f}', (p.get_x() + p.get_width() / 2., p.get_height()),
-                        ha='center', va='center', xytext=(0, 7), textcoords='offset points', fontsize=8)
-    #legend
+                        ha='center', va='center', xytext=(0, 8), textcoords='offset points', fontsize=9)
+
+    # Global legend configuration
     handles, labels = ax1.get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper center', ncol=3, frameon=False, fontsize=12)
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    
+    plt.tight_layout(rect=[0, 0.03, 1, 0.92])
     if filename:
         plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()
@@ -81,4 +83,4 @@ if __name__ == "__main__":
         'Model B': [0.10, 0.09, 0.1, 0.76, 0.65, 0.53],
         'Model C': [0.06, 0.09, 0.26, 0.61, 0.66, 0.67]
     }
-    plot_master_comparison(data_cr4v1, speeds)
+    plot_master_comparison(data_wr1v1, speeds)

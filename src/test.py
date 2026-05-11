@@ -11,11 +11,11 @@ from train_env import HerdingEnv
 from train_env import FastWorldEnv
 import random
 # Čistý, minimalistický základ
-plt.style.use('default')
-mpl.rcParams['font.family'] = 'sans-serif'
-mpl.rcParams['font.size'] = 10
-mpl.rcParams['axes.titlesize'] = 13
-mpl.rcParams['figure.dpi'] = 300
+# plt.style.use('default')
+# mpl.rcParams['font.family'] = 'sans-serif'
+# mpl.rcParams['font.size'] = 10
+# mpl.rcParams['axes.titlesize'] = 13
+# mpl.rcParams['figure.dpi'] = 300
 import torch
 
 def lock_all_seeds(seed_value=42):
@@ -151,6 +151,7 @@ def test_herding_model():
     #six graphs
     fig_dists, axs_dists = plt.subplots(2, 3, figsize=(14, 8), sharey=True, dpi=300)
     axs_dists_flat = axs_dists.flatten() 
+    render_every = 5
     for i in range(1):
         inv_rate = inv_rates[i]
         obstacles = obses[i]
@@ -178,6 +179,8 @@ def test_herding_model():
         whole_reward = 0 
         episode_num = 0
         ep_len = 0
+        #visualizer
+        vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
         
         while running:
             ep_len += 1
@@ -186,6 +189,14 @@ def test_herding_model():
             whole_reward += reward
             world = env.world
             state = world.get_state()
+            #controlling visualizer window
+            if hasattr(vis, 'is_open') and not vis.is_open:
+                print("Window closed, ending...")
+                running = False
+                break
+            #rendering
+            if ep_len % render_every == 0:
+                vis.render(state, world_instance=world)
             
             if terminated or truncated:
                 whole_reward = 0
@@ -196,7 +207,12 @@ def test_herding_model():
                     print("Episode: " + str(episode_num))
                 if episode_num == 200:
                     break
-                obs, info = env.reset(inv_rate=inv_rate, obstacle=obstacles)
+                plt.pause(1.0)
+                obs, info = env.reset()
+                if hasattr(vis, 'is_open') and not vis.is_open:
+                    vis.is_open = False
+                #visualizer
+                vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
                 
         purs_purs_crash = world.purs_purs_coll
         purs_obs_crash = world.purs_obs_coll

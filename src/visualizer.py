@@ -194,6 +194,43 @@ class MatplotlibVisualizer:
 
         self.fig.canvas.draw_idle()
         self.fig.canvas.flush_events()
+        
+    def reset(self):
+        """
+        Clears old obstacles and redraws them based on the updated sc_config.
+        Call this every time the environment resets.
+        """
+        # 1. Remove old obstacle objects from the axes
+        if self.obs_patch:
+            for patch in self.obs_patch:
+                patch.remove()
+            self.obs_patch = []
+
+        # 2. Draw new obstacles based on current self.sc positions and radii
+        if self.sc.obstacle:
+            if not self._3d:
+                # 2D Obstacles (Circles)
+                from matplotlib.patches import Circle
+                for i in range(len(self.sc.obs_rads)):
+                    obs_pos = self.sc.obs_pos[i]
+                    obs_rad = self.sc.obs_rads[i]
+                    patch = Circle(obs_pos, obs_rad, color='black', zorder=5)
+                    self.obs_patch.append(self.ax.add_patch(patch))
+            else:
+                # 3D Obstacles (Wireframes)
+                u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:10j]
+                for i in range(len(self.sc.obs_rads)):
+                    obs_pos = self.sc.obs_pos[i]
+                    obs_rad = self.sc.obs_rads[i]
+                    x = obs_pos[0] + obs_rad * np.cos(u) * np.sin(v)
+                    y = obs_pos[1] + obs_rad * np.sin(u) * np.sin(v)
+                    z = obs_pos[2] + obs_rad * np.cos(v)
+                    self.obs_patch.append(self.ax.plot_wireframe(x, y, z, color="black"))
+        
+        # Optional: Clear paths if you decide to use them again
+        # for path in self.p_paths + self.i_paths:
+        #     path.set_data([], [])
+        self.fig.canvas.draw_idle()
 
     def _update_vector_field(self, world):
         #making quiver graph, visualizing vortex field

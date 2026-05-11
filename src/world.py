@@ -29,6 +29,7 @@ class SimulationWorld:
         self.prime_crash = 0
         self.first_time = False
         self.capture_time = []
+        self.invaders_killed = []
         self.reset()
 
     def reset(self, **kwargs):
@@ -360,22 +361,29 @@ class SimulationWorld:
         done = self.prime.crashed or capture_check or self.step_count == 1500 #or self.prime.finished 
         if capture_check:
             self.capture_time.append(self.step_count)
-        if done and not self.first_time:
+        #FOR RL HERDING TEST
+        # if done and not self.first_time:
+        #     self.prime_crash += 1
+        #     self.first_time = True
+        #FOR DEFENSE TEST
+        if done and self.prime.crashed:
             self.prime_crash += 1
             self.first_time = True
-        if self.step_count == 1500 or self.captured_count == self.sc.INVADER_NUM: #or self.prime.finished 
-            dists = np.zeros(len(self.invaders))
-            for i, inv in enumerate(self.invaders):
-                if not inv.crashed:
-                    inv_to_prime = np.linalg.norm(inv.position - self.prime.position) - inv.my_rad - self.prime.my_rad
-                else:
-                    inv_to_prime = np.inf
-                dists[i] = inv_to_prime
-            min_dist = np.min(dists)
-            print("win, dist: " + str(min_dist))
-            self.episodes_won += 1
-        elif done:
-            print("lost")
+        if done and not self.prime.crashed:
+            self.invaders_killed.append(self.captured_count)
+        # if self.step_count == 1500 or self.captured_count == self.sc.INVADER_NUM: #or self.prime.finished 
+        #     dists = np.zeros(len(self.invaders))
+        #     for i, inv in enumerate(self.invaders):
+        #         if not inv.crashed:
+        #             inv_to_prime = np.linalg.norm(inv.position - self.prime.position) - inv.my_rad - self.prime.my_rad
+        #         else:
+        #             inv_to_prime = np.inf
+        #         dists[i] = inv_to_prime
+        #     min_dist = np.min(dists)
+        #     print("win, dist: " + str(min_dist))
+        #     self.episodes_won += 1
+        # elif done:
+        #     print("lost")
         return self.get_state(), done
 
     def get_lookahead_point_on_trajectory(self, real_pos, path_points, lookahead_steps=5):

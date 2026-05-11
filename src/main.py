@@ -35,7 +35,7 @@ def main():
     obses = [6, 6, 0, 0]
     INV_NUM = [1, 8, 1, 8]
     PUR_NUM = [5, 20, 5, 20]
-    kamikadze = [False, False, False, False]
+    kamikadze = [True, True, True, True]
     #MODEL C
     model = PPO.load("./models/herding_modelC_0")
     model2 = PPO.load("./models/herding_modelC_0")
@@ -145,27 +145,29 @@ def main():
         win_rate = 1 - (lost / float(EPISODE_NUM))
         total_coll = purs_obs_crash + purs_prime_crash + purs_purs_crash + purs_gr_crash
         coll_rate = total_coll / float(EPISODE_NUM)
-        #cap_rate = world.capture_time
-        kill_rate = world.invaders_killed
+        cap_rate = world.capture_time
+        #kill_rate = world.invaders_killed
 
         win_rates.append(win_rate)
         coll_rates.append(coll_rate)
-        #cap_rates.append(cap_rate)
-        kill_rates.append(kill_rate)
+        cap_rates.append(cap_rate)
+        #kill_rates.append(kill_rate)
     #saving
     clean_name = model_name.replace(" ", "_").replace("(", "").replace(")", "")
     filename_win = f"win_{clean_name}_rate_obs_{obstacles}_kamikadze_{kam}.npy"
     filename_coll = f"coll_{clean_name}_rate_obs_{obstacles}_kamikadze_{kam}.npy"
-    #filename_cap = f"cap_{clean_name}_rate_obs_{obstacles}_kamikadze_{kam}.npy"
-    filename_kill = f"kill_{clean_name}_rate_obs_{obstacles}_kamikadze_{kam}.npy"
+    filename_cap = f"cap_{clean_name}_rate_obs_{obstacles}_kamikadze_{kam}.npy"
+    #filename_kill = f"kill_{clean_name}_rate_obs_{obstacles}_kamikadze_{kam}.npy"
     
     print("win rates: " + str(win_rates))
     print("coll rates: " + str(coll_rates))
-    print("kill rates: " + str(kill_rates))
+    print("cap rates: " + str(cap_rates))
+    #print("kill rates: " + str(kill_rates))
     #np array
     np.save(filename_win, np.array(win_rates))
     np.save(filename_coll, np.array(coll_rates))
-    np.save(filename_kill, np.array(kill_rates))
+    np.save(filename_cap, np.array(cap_rates))
+    #np.save(filename_kill, np.array(kill_rates))
     #print(f"Data saved to {filename}")
     #plot_tracks(history_p, history_i, history_u)
     return

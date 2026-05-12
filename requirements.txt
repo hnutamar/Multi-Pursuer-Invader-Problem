@@ -7,3 +7,4 @@ pybullet
 gym-pybullet-drones
 stable-baseline3[extra]
 seaborn
+pandas

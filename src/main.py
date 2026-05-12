@@ -40,11 +40,11 @@ def main():
     model = PPO.load("./models/herding_modelC_0")
     model2 = PPO.load("./models/herding_modelC_0")
     #VARIANT 1
-    def_model = PPO.load("./models/def_final_restrictive")
+    #def_model = PPO.load("./models/def_final_restrictive")
     #VARIANT 2
     #def_model = PPO.load("./models/def_B_final")
     #HARDCODED
-    #def_model = None
+    def_model = None
     print("def model: " + str(def_model))
     for i in range(len(INV_NUM)):
         obstacles = obses[i]

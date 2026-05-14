@@ -55,13 +55,13 @@ class MatplotlibVisualizer:
         self.ax.tick_params(axis='both', which='both', labelsize=8, colors='#555')
         #pursuers
         for _ in range(self.sc.PURSUER_NUM):
-            p_dot, = self.ax.plot([], [], 'o', color='#d62728', label='Pursuer', markersize=self.sc.drone_marker_size)
+            p_dot, = self.ax.plot([], [], 'o', color='#1f77b4', label='Pursuer', markersize=self.sc.drone_marker_size)
             self.p_dots.append(p_dot)
             #p_path, = self.ax.plot([], [], '--', color='#d62728', alpha=0.6, linewidth=1.5)
             #self.p_paths.append(p_path)
         #invaders
         for _ in range(self.sc.INVADER_NUM):
-            i_dot, = self.ax.plot([], [], 'o', color='#1f77b4', label='Invader', markersize=self.sc.drone_marker_size)
+            i_dot, = self.ax.plot([], [], 'o', color='#d62728', label='Invader', markersize=self.sc.drone_marker_size)
             self.i_dots.append(i_dot)
             #i_path, = self.ax.plot([], [], '--', color='#1f77b4', alpha=0.6, linewidth=1.5)
             #self.i_paths.append(i_path)
@@ -108,13 +108,13 @@ class MatplotlibVisualizer:
         #self.obs_in_pixels = self.drone_in_pixels * (self.OBS_RAD/self.DRONE_RAD)
         #pursuers
         for _ in range(self.sc.PURSUER_NUM):
-            p_dot, = self.ax.plot([], [], 'o', color='#d62728', label='Pursuer', markersize=self.drone_in_pixels)
+            p_dot, = self.ax.plot([], [], 'o', color='#1f77b4', label='Pursuer', markersize=self.drone_in_pixels)
             self.p_dots.append(p_dot)
             #p_path, = self.ax.plot([], [], '--', color='#d62728', alpha=0.6, linewidth=1.5)
             #self.p_paths.append(p_path)
         #invaders
         for _ in range(self.sc.INVADER_NUM):
-            i_dot, = self.ax.plot([], [], 'o', color='#1f77b4', label='Invader', markersize=self.drone_in_pixels)
+            i_dot, = self.ax.plot([], [], 'o', color='#d62728', label='Invader', markersize=self.drone_in_pixels)
             self.i_dots.append(i_dot)
             #i_path, = self.ax.plot([], [], '--', color='#1f77b4', alpha=0.6, linewidth=1.5)
             #self.i_paths.append(i_path)
@@ -175,7 +175,7 @@ class MatplotlibVisualizer:
                 else:
                     p_dot.set_color("#C300CE")
             else:
-                p_dot.set_color('#d62728')
+                p_dot.set_color(color='#1f77b4')
                 
         #invaders
         for i, i_pos in enumerate(state['invaders']):

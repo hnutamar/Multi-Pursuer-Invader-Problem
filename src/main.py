@@ -61,7 +61,7 @@ def main():
         world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 3.0), inv_acc=np.full(30, 2.5), prime_acc=1.3, purs_speed=np.full(30, 7.0), inv_speed=np.full(30, 5.5), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True,
                                 kamikadze=kam)
         #visualization
-        SHOW_VISUALIZATION = False
+        SHOW_VISUALIZATION = True
         vis = None
         if SHOW_VISUALIZATION:
             if PYBULLET:

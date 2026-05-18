@@ -1048,7 +1048,7 @@ class Pursuer(Agent):
             prime_obs,      # 8
             density_obs,    # 1
             pursuers_obs,   # 42
-            invaders_obs,   # 36
+            invaders_obs,   # 32
             density_obs_inv,# 1
             obstacles_obs   # 20
         ]).astype(np.float32)
@@ -1237,7 +1237,7 @@ class Pursuer(Agent):
                     obstacles_obs[start+4] = np.linalg.norm(obs_pos)
         #final vector
         final_obs = np.concatenate([
-            state_obs,      # 6
+            state_obs,      # 5
             my_obs,         # 11
             prime_obs,      # 8
             density_obs,    # 1

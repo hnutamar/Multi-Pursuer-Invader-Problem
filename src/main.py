@@ -61,7 +61,7 @@ def main():
         world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 3.0), inv_acc=np.full(30, 2.5), prime_acc=1.3, purs_speed=np.full(30, 7.0), inv_speed=np.full(30, 5.5), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True,
                                 kamikadze=kam)
         #visualization
-        SHOW_VISUALIZATION = True
+        SHOW_VISUALIZATION = False
         vis = None
         if SHOW_VISUALIZATION:
             if PYBULLET:
@@ -174,49 +174,84 @@ def main():
 
 def plot_tracks(history_p, history_i, history_u):
     plt.ioff()
-    #post-processing
     print("Generating graph of trajectories")
-    fig = plt.figure(figsize=(10, 8))
+
+    plt.rcParams.update({
+        "font.family": "serif",
+        "mathtext.fontset": "cm",
+        "axes.labelsize": 12,
+        "font.size": 11,
+        "legend.fontsize": 10
+    })
+
+    # Set high DPI for crisp rendering in the thesis
+    fig = plt.figure(figsize=(10, 8), dpi=150)
     ax = fig.add_subplot(111, projection='3d')
-    #matrixes
+
+    # 2. Remove the default grey background of 3D plot walls for a cleaner look
+    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+    ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+    
+    # Soften the grid lines
+    ax.xaxis._axinfo["grid"].update({"color": (0.9, 0.9, 0.9, 1)})
+    ax.yaxis._axinfo["grid"].update({"color": (0.9, 0.9, 0.9, 1)})
+    ax.zaxis._axinfo["grid"].update({"color": (0.9, 0.9, 0.9, 1)})
+
     hist_p = np.array(history_p)
     hist_i = np.array(history_i)
     hist_u = np.array(history_u)
-    #2D or 3D
+
+    # Helper function to extract X, Y, Z coordinates
     def get_xyz(arr_2d_or_3d):
         x = arr_2d_or_3d[:, 0]
         y = arr_2d_or_3d[:, 1]
         z = arr_2d_or_3d[:, 2] if arr_2d_or_3d.shape[1] >= 3 else np.full_like(x, 2.0)
         return x, y, z
-    #red pursuers
+
+    # 3. Pursuers (BLUE, representing the defensive swarm)
     for i in range(hist_p.shape[1]):
         x, y, z = get_xyz(hist_p[:, i, :])
-        ax.plot(x, y, z, color='red', alpha=0.5, linewidth=1.0)
-    #blue invaders
-    if hist_i.shape[1] > 0:
+        # Plot historical trajectory (dashed and slightly transparent)
+        ax.plot(x, y, z, color='#1f77b4', alpha=0.5, linewidth=1.5, linestyle='--')
+        # Plot current position marker (with a black edge for visibility)
+        ax.scatter(x[-1], y[-1], z[-1], color='#1f77b4', s=60, marker='o', edgecolors='black', zorder=5)
+
+    # 4. Invaders (RED, representing threats)
+    if len(hist_i.shape) > 1 and hist_i.shape[1] > 0:
         for i in range(hist_i.shape[1]):
             x, y, z = get_xyz(hist_i[:, i, :])
-            ax.plot(x, y, z, color='blue', alpha=0.5, linewidth=1.0)
-    #green prime
+            ax.plot(x, y, z, color='#d62728', alpha=0.5, linewidth=1.5)
+            ax.scatter(x[-1], y[-1], z[-1], color='#d62728', s=60, marker='X', edgecolors='black', zorder=5)
+
+    # 5. Prime (GREEN, the protected unit)
     x, y, z = get_xyz(hist_u)
-    ax.plot(x, y, z, color='green', linewidth=2.5, label='Prime Drone')
-    #set legend
-    ax.set_xlabel('X [m]')
-    ax.set_ylabel('Y [m]')
-    ax.set_zlabel('Z [m]')
-    ax.set_title('Swarm Trajectories')
-    ax.legend()
-    #fixing the aspect ration
+    ax.plot(x, y, z, color='#2ca02c', linewidth=2.5, label='Prime Path')
+    ax.scatter(x[-1], y[-1], z[-1], color='#2ca02c', s=80, marker='D', edgecolors='black', label='Prime Current', zorder=6)
+
+    # Axis labels
+    ax.set_xlabel(r'$X$ [m]', labelpad=10)
+    ax.set_ylabel(r'$Y$ [m]', labelpad=10)
+    ax.set_zlabel(r'$Z$ [m]', labelpad=10)
+    
+    # Legend
+    ax.legend(loc='upper right')
+
+    # 6. Fix the physical aspect ratio so the sphere formations aren't distorted
     x_limits = ax.get_xlim3d()
     y_limits = ax.get_ylim3d()
     z_limits = ax.get_zlim3d()
-    #ranges
     x_range = abs(x_limits[1] - x_limits[0])
     y_range = abs(y_limits[1] - y_limits[0])
     z_range = abs(z_limits[1] - z_limits[0])
-    #right physical aspect
     ax.set_box_aspect((x_range, y_range, z_range))
-    plt.show()
+
+    # 7. Set initial camera angle for an isometric 3D view
+    ax.view_init(elev=25, azim=-45)
+
+    plt.tight_layout()
+    fig.savefig("formation_diagram")
+    plt.close()
 
 if __name__ == "__main__":
     main()

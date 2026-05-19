@@ -10,12 +10,6 @@ from sim_config3D import Sim3DConfig
 from train_env import HerdingEnv
 from train_env import FastWorldEnv
 import random
-# Čistý, minimalistický základ
-# plt.style.use('default')
-# mpl.rcParams['font.family'] = 'sans-serif'
-# mpl.rcParams['font.size'] = 10
-# mpl.rcParams['axes.titlesize'] = 13
-# mpl.rcParams['figure.dpi'] = 300
 import torch
 
 def lock_all_seeds(seed_value=42):

@@ -21,7 +21,7 @@ def lock_all_seeds(seed_value=42):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed_value)
 
-def main():
+def test_defense():
     win_rates = []
     coll_rates = []
     mean_dists = []
@@ -30,8 +30,17 @@ def main():
     model_name = "Variant 1"
     seed_num = 640
     _3d = True
+    #visualization
+    SHOW_VISUALIZATION = False
+    vis = None
     PYBULLET = False
     MANUAL_CONTROL = False
+    if PYBULLET:
+        RENDER_EVERY = 1
+        EPISODE_NUM = 1
+    else:
+        RENDER_EVERY = 5
+        EPISODE_NUM = 200
     obses = [6, 6, 0, 0]
     INV_NUM = [1, 8, 1, 8]
     PUR_NUM = [5, 20, 5, 20]
@@ -60,9 +69,6 @@ def main():
         inv_pos = np.array([[25.24, 20.15, 15.58]])
         world = SimulationWorld(sc, _3d=_3d, purs_acc=np.full(30, 3.0), inv_acc=np.full(30, 2.5), prime_acc=1.3, purs_speed=np.full(30, 7.0), inv_speed=np.full(30, 5.5), prime_speed=3.5, pursue_model=(model, model2), def_model=def_model, not_testing=True,
                                 kamikadze=kam)
-        #visualization
-        SHOW_VISUALIZATION = False
-        vis = None
         if SHOW_VISUALIZATION:
             if PYBULLET:
                 #vis = PyBulletVisualizer(sc_config=sc, _3d=_3d)
@@ -70,12 +76,6 @@ def main():
                 vis = TorontoVisualizer(sc_config=sc, _3d=_3d, init_state=initial_state)
             else:
                 vis = MatplotlibVisualizer(sc_config=sc, _3d=_3d, quiver=False)
-        if PYBULLET:
-            RENDER_EVERY = 1
-            EPISODE_NUM = 1
-        else:
-            RENDER_EVERY = 5
-            EPISODE_NUM = 200
         step_counter = 1
         current_episode = 1
         SYNC_INTERVAL = 20
@@ -254,4 +254,4 @@ def plot_tracks(history_p, history_i, history_u):
     plt.close()
 
 if __name__ == "__main__":
-    main()
+    test_defense()

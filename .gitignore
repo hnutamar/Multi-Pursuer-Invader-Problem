@@ -16,6 +16,7 @@ __pycache__/
 ppo_drone_tensorboard/
 #models
 models_checkpoints/
-models/
+history/
+history_def/
 #final MLP
-*.zip
+/*.zip

@@ -22,7 +22,7 @@ class Prime_unit(Agent):
     def fly(self, way_point, invaders, pursuers, mode, obstacles):
         self.obs_centers, self.obs_radii = obstacles
         if pursuers:
-            self.biggest_poss_speed = 0.4 * pursuers[0].max_form_speed
+            self.biggest_poss_speed = 0.2 * pursuers[0].max_form_speed
         #finished, stay on this point
         if np.sum((self.position - way_point)**2) < 0.25 or self.finished:
             self.finished = True
@@ -34,7 +34,7 @@ class Prime_unit(Agent):
         obs_vel = self.repulsive_force_obs(self.coll_obs)
         ground_vel = self.repulsive_force_ground(self.coll_gr)
         if pursuers:
-            rep_vel_p = self.repulsive_force(pursuers, 3.0, True)
+            rep_vel_p = self.repulsive_force(pursuers, 0.5, True)
         #direction of the goal
         # if mode == Modes.CIRCLE:
         #     goal_vel = self.vortex_circle(way_point)

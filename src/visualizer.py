@@ -66,7 +66,7 @@ class MatplotlibVisualizer:
             #i_path, = self.ax.plot([], [], '--', color='#1f77b4', alpha=0.6, linewidth=1.5)
             #self.i_paths.append(i_path)
         #prime
-        self.u_dot, = self.ax.plot([], [], 'o', color="#10ec22", label='Prime Unit', markersize=self.sc.prime_marker_size)
+        self.u_dot, = self.ax.plot([], [], 'o', color="#006d09", label='Prime Unit', markersize=self.sc.prime_marker_size)
         #self.u_path, = self.ax.plot([], [], '--', color="#77cc70", alpha=0.6, linewidth=3.0)
         #obstacle
         if self.sc.obstacle:
@@ -119,7 +119,7 @@ class MatplotlibVisualizer:
             #i_path, = self.ax.plot([], [], '--', color='#1f77b4', alpha=0.6, linewidth=1.5)
             #self.i_paths.append(i_path)
         #prime
-        self.u_dot, = self.ax.plot([], [], 'o', color="#10ec22", label='Prime Unit', markersize=self.prime_in_pixels)
+        self.u_dot, = self.ax.plot([], [], 'o', color="#006d09", label='Prime Unit', markersize=self.prime_in_pixels)
         #self.u_path, = self.ax.plot([], [], '--', color="#77cc70", alpha=0.6, linewidth=3.0)
         #obstacle
         if self.sc.obstacle:
@@ -173,7 +173,7 @@ class MatplotlibVisualizer:
                     p_dot.set_color("#714900")
                 #pure pursuit
                 else:
-                    p_dot.set_color("#C300CE")
+                    p_dot.set_color("#93009B")
             else:
                 p_dot.set_color(color='#1f77b4')
                 

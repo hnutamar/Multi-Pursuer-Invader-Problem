@@ -11,6 +11,7 @@ from train_env import HerdingEnv
 from train_env import FastWorldEnv
 import random
 import torch
+from matplotlib.animation import FFMpegWriter
 
 def lock_all_seeds(seed_value=42):
     random.seed(seed_value)
@@ -132,7 +133,7 @@ def test_herding_model():
     win_rates = []
     coll_rates = []
     mean_dists = []
-    inv_rates = [0.5, 0.75, 1.0, 0.5, 0.75, 1.0]
+    inv_rates = [0.75, 0.75, 1.0, 0.5, 0.75, 1.0]
     obses = [False, False, False, True, True, True]
     #model identification
     #MODEL A
@@ -145,7 +146,7 @@ def test_herding_model():
     #six graphs
     fig_dists, axs_dists = plt.subplots(2, 3, figsize=(14, 8), sharey=True, dpi=300)
     axs_dists_flat = axs_dists.flatten() 
-    render_every = 5
+    render_every = 1
     for i in range(1):
         inv_rate = inv_rates[i]
         obstacles = obses[i]
@@ -175,38 +176,42 @@ def test_herding_model():
         ep_len = 0
         #visualizer
         vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
-        
-        while running:
-            ep_len += 1
-            action, _states = model.predict(obs, deterministic=True)
-            obs, reward, terminated, truncated, info = env.step(action)
-            whole_reward += reward
-            world = env.world
-            state = world.get_state()
-            #controlling visualizer window
-            if hasattr(vis, 'is_open') and not vis.is_open:
-                print("Window closed, ending...")
-                running = False
-                break
-            #rendering
-            if ep_len % render_every == 0:
-                vis.render(state, world_instance=world)
-            
-            if terminated or truncated:
-                whole_reward = 0
-                ep_len = 0
-                episode_num += 1
-                lock_all_seeds(seed_num + episode_num)
-                if episode_num % 25 == 0:
-                    print("Episode: " + str(episode_num))
-                if episode_num == 200:
-                    break
-                plt.pause(1.0)
-                obs, info = env.reset()
+        metadata = dict(title='UAV Defense Simulation', artist='Marek Hnuta')
+        writer = FFMpegWriter(fps=50, metadata=metadata, bitrate=2500)
+        with writer.saving(plt.gcf(), "obrana_simulace.mp4", dpi=200):
+            while running:
+                ep_len += 1
+                action, _states = model.predict(obs, deterministic=True)
+                obs, reward, terminated, truncated, info = env.step(action)
+                whole_reward += reward
+                world = env.world
+                state = world.get_state()
+                #controlling visualizer window
                 if hasattr(vis, 'is_open') and not vis.is_open:
-                    vis.is_open = False
-                #visualizer
-                vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
+                    print("Window closed, ending...")
+                    running = False
+                    break
+                #rendering
+                if ep_len % render_every == 0:
+                    vis.render(state, world_instance=world)
+                    writer.grab_frame()
+                
+                if terminated or truncated:
+                    running = False
+                    whole_reward = 0
+                    ep_len = 0
+                    episode_num += 1
+                    lock_all_seeds(seed_num + episode_num)
+                    if episode_num % 25 == 0:
+                        print("Episode: " + str(episode_num))
+                    if episode_num == 1:
+                        break
+                    plt.pause(1.0)
+                    obs, info = env.reset()
+                    if hasattr(vis, 'is_open') and not vis.is_open:
+                        vis.is_open = False
+                    #visualizer
+                    vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
                 
         purs_purs_crash = world.purs_purs_coll
         purs_obs_crash = world.purs_obs_coll
@@ -228,11 +233,11 @@ def test_herding_model():
         
         clean_name = model_name.replace(" ", "_").replace("(", "").replace(")", "")
         filename = f"fails_{clean_name}_rate_{inv_rate}_obs_{obstacles}.npy"
-        
+        return
         #np array
         np.save(filename, np.array(env.step_fail))
         print(f"Data saved to {filename}")
-        return
+
         
         if len(all_distances) > 0:
             dist_matrix = np.array(all_distances)

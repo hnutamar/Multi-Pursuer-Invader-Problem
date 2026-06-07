@@ -28,10 +28,10 @@ def test_defense():
     cap_rates = []
     kill_rates = []
     model_name = "Variant 1"
-    seed_num = 640
+    seed_num = 240
     _3d = True
     #visualization
-    SHOW_VISUALIZATION = False
+    SHOW_VISUALIZATION = True
     vis = None
     PYBULLET = False
     MANUAL_CONTROL = False
@@ -39,23 +39,23 @@ def test_defense():
         RENDER_EVERY = 1
         EPISODE_NUM = 1
     else:
-        RENDER_EVERY = 5
-        EPISODE_NUM = 200
-    obses = [6, 6, 0, 0]
-    INV_NUM = [1, 8, 1, 8]
-    PUR_NUM = [5, 20, 5, 20]
-    kamikadze = [True, True, True, True]
+        RENDER_EVERY = 2
+        EPISODE_NUM = 1
+    obses = [0, 6, 0, 0]
+    INV_NUM = [3, 8, 1, 8]
+    PUR_NUM = [12, 20, 5, 20]
+    kamikadze = [False, True, True, True]
     #MODEL C
     model = PPO.load("./models/herding_modelC_0")
     model2 = PPO.load("./models/herding_modelC_0")
     #VARIANT 1
-    #def_model = PPO.load("./models/def_final_restrictive")
+    def_model = PPO.load("./models/def_final_restrictive")
     #VARIANT 2
     #def_model = PPO.load("./models/def_B_final")
     #HARDCODED
-    def_model = None
+    #def_model = None
     print("def model: " + str(def_model))
-    for i in range(len(INV_NUM)):
+    for i in range(1):#len(INV_NUM)):
         obstacles = obses[i]
         kam = kamikadze[i]
         lock_all_seeds(seed_num)
@@ -76,6 +76,10 @@ def test_defense():
                 vis = TorontoVisualizer(sc_config=sc, _3d=_3d, init_state=initial_state)
             else:
                 vis = MatplotlibVisualizer(sc_config=sc, _3d=_3d, quiver=False)
+                
+        from matplotlib.animation import FFMpegWriter
+        metadata = dict(title='UAV Defense Simulation', artist='Marek Hnuta')
+        writer = FFMpegWriter(fps=50, metadata=metadata, bitrate=2500)
         step_counter = 1
         current_episode = 1
         SYNC_INTERVAL = 20
@@ -86,54 +90,57 @@ def test_defense():
         history_p = []
         history_i = []
         history_u = []
-        while running:
-            #manual control of invader
-            manual_action = None
-            if vis and MANUAL_CONTROL:
-                manual_action = vis.manual_vel
-            #physics step
-            state, done = world.step(manual_invader_vel=manual_action)
-            #for graph
-            history_p.append(np.array(state['pursuers']))
-            history_i.append(np.array(state['invaders']))
-            history_u.append(np.array(state['prime']))
-            step_counter += 1
-            #graphics
-            if vis and step_counter % RENDER_EVERY == 0:
-                if PYBULLET:
-                    sync_counter += 1
-                    success, real_state = vis.render(state, world_instance=world)
-                    if not success or not vis.is_open:
-                        print("Simulation ends!")
+        with writer.saving(plt.gcf(), "variant1_v2.0.mp4", dpi=200):
+            while running:
+                #manual control of invader
+                manual_action = None
+                if vis and MANUAL_CONTROL:
+                    manual_action = vis.manual_vel
+                #physics step
+                state, done = world.step(manual_invader_vel=manual_action)
+                #for graph
+                history_p.append(np.array(state['pursuers']))
+                history_i.append(np.array(state['invaders']))
+                history_u.append(np.array(state['prime']))
+                step_counter += 1
+                #graphics
+                if vis and step_counter % RENDER_EVERY == 0:
+                    if PYBULLET:
+                        sync_counter += 1
+                        success, real_state = vis.render(state, world_instance=world)
+                        if not success or not vis.is_open:
+                            print("Simulation ends!")
+                            running = False
+                            break
+                        #synchronizing reality with virtual world
+                        if sync_counter >= SYNC_INTERVAL:
+                            world.synchronize_with_reality(real_state)
+                            sync_counter = 0
+                    else:
+                        if not vis.is_open:
+                            print("Simulation ends!")
+                            running = False
+                            break
+                        vis.render(state, world_instance=world)
+                        plt.pause(0.001)
+                        writer.grab_frame()
+                #end of episode check
+                if done:
+                    if current_episode % 25 == 0:
+                        print("Episode: " + str(current_episode))
+                    if EPISODE_NUM == current_episode:
+                        print("End of sim, " + str(world.episodes_won) + " won")
                         running = False
                         break
-                    #synchronizing reality with virtual world
-                    if sync_counter >= SYNC_INTERVAL:
-                        world.synchronize_with_reality(real_state)
-                        sync_counter = 0
-                else:
-                    if not vis.is_open:
-                        print("Simulation ends!")
-                        running = False
-                        break
-                    vis.render(state, world_instance=world)
-                    plt.pause(0.001)
-            #end of episode check
-            if done:
-                if current_episode % 25 == 0:
-                    print("Episode: " + str(current_episode))
-                if EPISODE_NUM == current_episode:
-                    print("End of sim, " + str(world.episodes_won) + " won")
-                    running = False
-                    break
-                lock_all_seeds(seed_num + current_episode)
-                world.reset()
-                if vis:
-                    vis.reset()
-                step_counter = 1
-                current_episode += 1
-        if vis and PYBULLET:
-            vis.close()
+                    lock_all_seeds(seed_num + current_episode)
+                    world.reset()
+                    if vis:
+                        vis.reset()
+                    step_counter = 1
+                    current_episode += 1
+            if vis and PYBULLET:
+                vis.close()
+            return
         #data for plots    
         purs_purs_crash = world.purs_purs_coll
         purs_obs_crash = world.purs_obs_coll

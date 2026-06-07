@@ -358,7 +358,7 @@ class SimulationWorld:
                 free_purs[idx].crashed = True
         #ending check
         capture_check = self.captured_count == self.sc.INVADER_NUM
-        done = self.step_count == 1500 or self.prime.crashed #or capture_check #or self.prime.finished 
+        done = self.prime.crashed or self.prime.finished or capture_check #or self.step_count == 1500
         if capture_check:
             self.capture_time.append(self.step_count)
         #FOR RL HERDING TEST

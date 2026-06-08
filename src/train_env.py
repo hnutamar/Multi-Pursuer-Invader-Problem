@@ -401,7 +401,7 @@ class HerdingEnv(gym.Env):
         super().reset(seed=seed)
         #num of purs in episode
         #new_purs_num = np.random.randint(4, 21)
-        new_purs_num = 1 #np.random.randint(1, 5)
+        new_purs_num = 4 #np.random.randint(1, 5)
         self.pursuing_purs = new_purs_num
         #self.pursuing_purs = np.random.randint(1, new_purs_num // 2) #new_purs_num // 2 
         #pursuers
@@ -510,6 +510,7 @@ class HerdingEnv(gym.Env):
         prime_pos = np.array([3.0, 3.0, 7.0])
         dist = np.random.uniform(17.0, 25.0)
         dir = np.random.randn(3)
+        dir = np.array([0.0, 1.0, 1.0])
         dir[2] = abs(dir[2]) 
         dir = dir / np.linalg.norm(dir)
         new_inv_pos = prime_pos + (dir * dist)

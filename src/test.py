@@ -142,7 +142,7 @@ def test_herding_model():
     #model_path = "./models/herding_modelB_2.0" 
     #MODEL C
     model_path = "./models/herding_modelC_0"
-    model_name = "Model C (1 vs 1)"
+    model_name = "Model B (1 vs 1)"
     #six graphs
     fig_dists, axs_dists = plt.subplots(2, 3, figsize=(14, 8), sharey=True, dpi=300)
     axs_dists_flat = axs_dists.flatten() 
@@ -150,7 +150,7 @@ def test_herding_model():
     for i in range(1):
         inv_rate = inv_rates[i]
         obstacles = obses[i]
-        seed_num = 420
+        seed_num = 325
         lock_all_seeds(seed_num)
         print("Creating world for testing...")
         
@@ -178,7 +178,7 @@ def test_herding_model():
         vis = MatplotlibVisualizer(sc_config=env.sc, _3d=True, quiver=False)
         metadata = dict(title='UAV Defense Simulation', artist='Marek Hnuta')
         writer = FFMpegWriter(fps=50, metadata=metadata, bitrate=2500)
-        with writer.saving(plt.gcf(), "obrana_simulace.mp4", dpi=200):
+        with writer.saving(plt.gcf(), "modelC_V3.0.mp4", dpi=200):
             while running:
                 ep_len += 1
                 action, _states = model.predict(obs, deterministic=True)
